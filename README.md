@@ -18,8 +18,8 @@ actually *do* things for you by voice or text:
   and your pending tasks + next reminder.
 
 It **speaks its answers aloud** and **listens for your voice** — including a
-hands-free **"Hey Jarvis" wake word** and **barge-in** (talk over it to
-interrupt) — all inside a **Tony-Stark-style HUD** with a live audio-reactive arc
+hands-free **"Hey Jarvis" wake word** (click the core or press Esc to interrupt)
+— all inside a **Tony-Stark-style HUD** with a live audio-reactive arc
 reactor, a real-time waveform, and system telemetry. A text box is always there
 as a fallback.
 
@@ -121,17 +121,18 @@ subject, and body back to you and waits for an explicit "yes, send it."
 - **Streaming replies.** Jarvis speaks each sentence the moment it's ready
   instead of waiting for the whole answer, so it feels like a conversation, not a
   request/response. The reply also types out on screen as it's spoken.
-- **Barge-in.** Talk over Jarvis while it's speaking and it stops mid-sentence
-  and listens to you — like interrupting a real assistant. (It uses a raised
-  detection threshold while speaking so its own voice doesn't trigger it.)
+- **Interrupt.** Click the arc-reactor core (or the mic), or press **Esc**, to
+  stop Jarvis mid-sentence. The mic stays fully closed while he speaks — browser
+  echo-cancellation can't remove OS text-to-speech, so an open mic would hear and
+  answer his own voice; closing it is the reliable fix.
 - **Push-to-talk.** Click the mic — or the arc-reactor core — to speak a command
   immediately, no wake word needed.
 - **Text-to-speech + voice picker.** Jarvis auto-selects a deep, movie-Jarvis
   voice — a British male if your system has one (e.g. "Microsoft George"),
   otherwise a US male like "Microsoft David" — and speaks at a slightly lowered
   pitch. Use the **VOICE** dropdown (bottom-left) to switch voices and the **▶**
-  button to preview; your choice is remembered. While Jarvis is talking, the mic
-  guards against hearing itself, except for a genuine interruption.
+  button to preview; your choice is remembered. The mic reopens a fraction of a
+  second after he finishes, so it never catches the tail of his own reply.
 - **Reliability.** Transcription runs through a cloud speech-to-text API (Whisper
   / gpt-4o-transcribe by default), so it works consistently across machines —
   the key stays in the main process, never in the UI. Point `STT_BASE_URL` at any

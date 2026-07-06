@@ -270,7 +270,10 @@ async function handleCommand(text: string): Promise<void> {
   const speaker = new SpeechStreamer();
   speaker.onSpeakingStart = () => {
     setVisual("speaking");
-    setListen("guard"); // allow barge-in while Jarvis talks
+    // Keep the mic fully closed while Jarvis talks — browser echo-cancellation
+    // can't remove OS text-to-speech, so an open mic would hear (and reply to)
+    // his own voice. Interrupt by clicking the core/mic or pressing Esc.
+    setListen("off");
   };
   let acc = "";
   const toolLabels: string[] = [];
@@ -347,6 +350,15 @@ function backToStandby(): void {
   updateHint();
 }
 
+// Reopen the mic after a short settle delay, so the speaker audio (and any room
+// echo of Jarvis's own voice) has fully died away before we start listening.
+const SPEECH_TAIL_MS = 600;
+function armMicSoon(): void {
+  window.setTimeout(() => {
+    if (mode !== "idle") setListen("listen");
+  }, SPEECH_TAIL_MS);
+}
+
 function openFollowupWindow(): void {
   if (!wakeToggle.checked && !forceNextAsCommand) {
     stopListening();
@@ -354,7 +366,8 @@ function openFollowupWindow(): void {
     return;
   }
   mode = "command";
-  setListen("listen");
+  setListen("off"); // stay closed through the settle delay
+  armMicSoon();
   setVisual("standby");
   setHint("Still listening — keep talking, or stay quiet to stop.");
   clearFollowup();
@@ -396,8 +409,9 @@ async function onUtterance(text: string): Promise<void> {
   } else {
     mode = "command";
     setHint("Yes? I'm listening…");
+    setListen("off"); // closed while the "Yes?" cue plays
     await speakOnce("Yes?");
-    setListen("listen");
+    armMicSoon();
     clearFollowup();
     followupTimer = window.setTimeout(() => {
       if (mode === "command") {
@@ -663,6 +677,17 @@ async function pushToTalk(): Promise<void> {
 }
 
 micBtn.addEventListener("click", () => void pushToTalk());
+
+// Press Esc to close the settings panel, or to stop Jarvis mid-sentence.
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!settingsModal.classList.contains("hidden")) {
+    closeSettings();
+    return;
+  }
+  window.speechSynthesis?.cancel();
+  activeSpeaker?.cancel();
+});
 
 // ── Controls ──────────────────────────────────────────────────────────
 wakeToggle.addEventListener("change", async () => {
