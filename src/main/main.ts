@@ -1,11 +1,12 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import * as path from "path";
+import * as os from "os";
 import * as dotenv from "dotenv";
 
 // Load .env from wherever it might live: the project root (dev), next to the
-// packaged executable, or the current working directory. First value wins;
-// dotenv won't overwrite variables already set.
-for (const dir of [app.getAppPath(), path.dirname(app.getPath("exe")), process.cwd()]) {
+// packaged executable, the home directory, or the current working directory.
+// First value wins; dotenv won't overwrite variables already set.
+for (const dir of [app.getAppPath(), path.dirname(app.getPath("exe")), os.homedir(), process.cwd()]) {
   dotenv.config({ path: path.join(dir, ".env") });
 }
 
@@ -13,7 +14,22 @@ import { Brain } from "./brain";
 import { startReminderScheduler } from "./tools/reminders";
 import * as google from "./google";
 import * as stt from "./stt";
+import * as store from "./store";
 import { sample as sampleTelemetry } from "./telemetry";
+
+interface Settings {
+  anthropicApiKey?: string;
+  openaiApiKey?: string;
+}
+
+// Keys entered in the app's Settings panel are saved locally and applied here,
+// so users never have to hand-place a .env file. Env vars take precedence.
+function applyStoredKeys(): void {
+  const s = store.read<Settings>("settings", {});
+  if (!process.env.ANTHROPIC_API_KEY && s.anthropicApiKey) process.env.ANTHROPIC_API_KEY = s.anthropicApiKey;
+  if (!process.env.OPENAI_API_KEY && !process.env.STT_API_KEY && s.openaiApiKey)
+    process.env.OPENAI_API_KEY = s.openaiApiKey;
+}
 
 // Windows: give the app a stable identity so desktop notifications show
 // "Jarvis" (and land in the Action Center) instead of "electron.app.Electron".
@@ -76,6 +92,18 @@ function registerIpc(): void {
       return { text: "", error: err?.message ?? String(err) };
     }
   });
+
+  ipcMain.handle("jarvis:save-keys", async (_e, keys: { anthropic?: string; openai?: string }) => {
+    const s = store.read<Settings>("settings", {});
+    if (keys.anthropic !== undefined) s.anthropicApiKey = keys.anthropic.trim() || undefined;
+    if (keys.openai !== undefined) s.openaiApiKey = keys.openai.trim() || undefined;
+    store.write("settings", s);
+    // Apply immediately so no restart is needed.
+    if (s.anthropicApiKey) process.env.ANTHROPIC_API_KEY = s.anthropicApiKey;
+    if (s.openaiApiKey && !process.env.STT_API_KEY) process.env.OPENAI_API_KEY = s.openaiApiKey;
+    brain = null; // rebuild the Anthropic client with the new key on next ask
+    return { hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY), sttConfigured: stt.isConfigured() };
+  });
 }
 
 app.whenReady().then(() => {
@@ -85,6 +113,7 @@ app.whenReady().then(() => {
     callback(permission === "media");
   });
 
+  applyStoredKeys();
   registerIpc();
   createWindow();
 

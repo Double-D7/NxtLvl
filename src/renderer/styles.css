@@ -103,6 +103,112 @@ body {
     opacity: 0.35;
   }
 }
+.settings-btn {
+  margin-left: 10px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--cyan);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 0.3s, box-shadow 0.2s;
+}
+.settings-btn:hover {
+  transform: rotate(60deg);
+  box-shadow: var(--glow);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 5, 10, 0.8);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+.modal-card {
+  width: min(520px, 92vw);
+  background: linear-gradient(180deg, #0a1420, #060c16);
+  border: 1px solid var(--cyan);
+  border-radius: 10px;
+  padding: 22px;
+  box-shadow: 0 0 40px rgba(53, 230, 255, 0.25);
+}
+.field {
+  display: block;
+  margin: 14px 0;
+}
+.field span {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.field span em {
+  color: var(--cyan);
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: rgba(4, 7, 13, 0.9);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.field input:focus {
+  border-color: var(--cyan);
+  box-shadow: var(--glow);
+}
+.field-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.settings-status {
+  min-height: 16px;
+  font-size: 12px;
+  color: var(--green);
+  margin-top: 8px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+.modal-actions button {
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.modal-actions .primary {
+  border-color: var(--cyan);
+  background: rgba(53, 230, 255, 0.14);
+  color: var(--cyan);
+  font-weight: 700;
+}
+.modal-actions .primary:hover {
+  background: rgba(53, 230, 255, 0.24);
+  box-shadow: var(--glow);
+}
+
 .clock {
   text-align: right;
 }

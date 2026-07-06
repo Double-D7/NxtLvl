@@ -179,10 +179,13 @@ automatically:
 - `CSC_LINK` — your code-signing certificate (`.pfx`) as base64
 - `CSC_KEY_PASSWORD` — the certificate password
 
-**Where does the packaged app read your keys?** It looks for a `.env` file next
-to the executable, then in the working directory. So after installing, place your
-`.env` beside the app (or launch it from a folder that has one). Your keys are
-never bundled into the installer.
+**Where do the keys go in the installed app?** Easiest: launch it and click the
+**⚙ button** (top of the window) — paste your Anthropic key (and an OpenAI key
+for voice) and hit **Save & apply**. Keys are stored locally on your device and
+applied instantly, no restart or file editing. On first launch with no key, the
+panel opens automatically. (Advanced: a `.env` next to the executable, in your
+home folder, or the working directory still works too.) Keys are never bundled
+into the installer.
 
 ## Running on Windows
 

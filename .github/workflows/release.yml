@@ -34,6 +34,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Read app version
+        id: ver
+        shell: bash
+        run: echo "v=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Compile
         run: npm run build
 
@@ -60,15 +65,17 @@ jobs:
       - name: Publish installer to a GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # Use the pushed tag's name when triggered by a tag, else v0.1.0.
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.1.0' }}
-          name: Jarvis ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.1.0' }}
+          # Use the pushed tag's name when triggered by a tag, else the version
+          # from package.json (e.g. v0.1.1).
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.ver.outputs.v }}
+          name: Jarvis ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.ver.outputs.v }}
           body: |
             Jarvis desktop assistant — Windows installer.
 
-            **Install:** download `Jarvis.Setup.0.1.0.exe` below and run it. Windows
-            SmartScreen may warn (unsigned build) — click **More info → Run anyway**.
-            After installing, put a `.env` with your API keys next to `Jarvis.exe`.
+            **Install:** download the `.exe` below and run it. Windows SmartScreen
+            may warn (unsigned build) — click **More info → Run anyway**. On first
+            launch, click the ⚙ button and paste your Anthropic API key (and an
+            OpenAI key for voice). No file editing required.
           files: |
             release/*.exe
             release/latest.yml

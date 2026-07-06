@@ -18,7 +18,10 @@
           <div class="brand-main">J.A.R.V.I.S.</div>
           <div class="brand-sub" id="subtitle">Just A Rather Very Intelligent System</div>
         </div>
-        <div class="sys-status"><span class="dot"></span><span id="sys-status">SYSTEM ONLINE</span></div>
+        <div class="sys-status">
+          <span class="dot"></span><span id="sys-status">SYSTEM ONLINE</span>
+          <button id="settings-btn" class="settings-btn" type="button" title="Settings / API keys">⚙</button>
+        </div>
         <div class="clock">
           <div id="clock-time" class="clock-time">--:--:--</div>
           <div id="clock-date" class="clock-date">—</div>
@@ -86,6 +89,30 @@
           <button id="send" type="submit">SEND</button>
         </form>
       </footer>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-card">
+        <h2 class="panel-title">Configuration</h2>
+        <label class="field">
+          <span>Anthropic API key <em>· required</em></span>
+          <input id="key-anthropic" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>OpenAI API key <em>· optional — enables the mic &amp; “Hey Jarvis”</em></span>
+          <input id="key-openai" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+        </label>
+        <p class="field-note">
+          Keys are stored locally on this device only and never leave it except to
+          call the Anthropic / OpenAI APIs. Get an Anthropic key at
+          console.anthropic.com and an OpenAI key at platform.openai.com.
+        </p>
+        <div id="settings-status" class="settings-status"></div>
+        <div class="modal-actions">
+          <button id="settings-cancel" type="button">Close</button>
+          <button id="settings-save" type="button" class="primary">Save &amp; apply</button>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="renderer.js"></script>

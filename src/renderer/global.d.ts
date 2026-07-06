@@ -39,6 +39,7 @@ interface JarvisBridge {
   reset(): Promise<void>;
   getStatus(): Promise<JarvisStatus>;
   transcribe(bytes: ArrayBuffer, mimeType: string): Promise<TranscriptResult>;
+  saveKeys(keys: { anthropic?: string; openai?: string }): Promise<{ hasApiKey: boolean; sttConfigured: boolean }>;
   onSpeak(cb: (text: string) => void): void;
   onStats(cb: (stats: Telemetry) => void): void;
 }

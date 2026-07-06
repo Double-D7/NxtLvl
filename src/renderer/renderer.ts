@@ -16,6 +16,13 @@ const reactorWrap = document.querySelector(".reactor-wrap") as HTMLElement;
 const stateLabel = document.getElementById("visual-state") as HTMLElement;
 const voiceSelect = document.getElementById("voice-select") as HTMLSelectElement;
 const voiceTest = document.getElementById("voice-test") as HTMLButtonElement;
+const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
+const settingsModal = document.getElementById("settings-modal") as HTMLElement;
+const keyAnthropic = document.getElementById("key-anthropic") as HTMLInputElement;
+const keyOpenai = document.getElementById("key-openai") as HTMLInputElement;
+const settingsSave = document.getElementById("settings-save") as HTMLButtonElement;
+const settingsCancel = document.getElementById("settings-cancel") as HTMLButtonElement;
+const settingsStatus = document.getElementById("settings-status") as HTMLElement;
 
 const FOLLOWUP_MS = 9000;
 
@@ -674,6 +681,79 @@ wakeToggle.addEventListener("change", async () => {
   }
 });
 
+// ── Settings / API keys ───────────────────────────────────────────────
+// Reflects current configuration in the banner + control availability.
+function reflectConfig(hasApiKey: boolean, sttConfigured: boolean): void {
+  sttReady = sttConfigured;
+  micBtn.disabled = !sttReady;
+  wakeToggle.disabled = !sttReady;
+  if (!hasApiKey) {
+    banner.classList.remove("hidden", "subtle");
+    banner.textContent = "No Anthropic API key set. Click the ⚙ button (top) and paste your key to begin.";
+  } else if (!sttReady) {
+    banner.classList.remove("hidden");
+    banner.classList.add("subtle");
+    banner.textContent = "Voice input is off — add an OpenAI key in ⚙ Settings to enable the mic and “Hey Jarvis”.";
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
+function openSettings(): void {
+  settingsStatus.textContent = "";
+  settingsModal.classList.remove("hidden");
+  keyAnthropic.focus();
+}
+function closeSettings(): void {
+  settingsModal.classList.add("hidden");
+}
+
+settingsBtn.addEventListener("click", openSettings);
+settingsCancel.addEventListener("click", closeSettings);
+settingsModal.addEventListener("click", (e) => {
+  if (e.target === settingsModal) closeSettings();
+});
+
+settingsSave.addEventListener("click", async () => {
+  const anthropic = keyAnthropic.value.trim();
+  const openai = keyOpenai.value.trim();
+  if (!anthropic && !openai) {
+    settingsStatus.style.color = "var(--amber)";
+    settingsStatus.textContent = "Enter at least one key.";
+    return;
+  }
+  settingsSave.disabled = true;
+  settingsStatus.style.color = "";
+  settingsStatus.textContent = "Saving…";
+  try {
+    const res = await window.jarvis.saveKeys({
+      anthropic: anthropic || undefined,
+      openai: openai || undefined,
+    });
+    reflectConfig(res.hasApiKey, res.sttConfigured);
+    keyAnthropic.value = "";
+    keyOpenai.value = "";
+    settingsStatus.textContent = res.hasApiKey ? "Saved. Jarvis is ready." : "Saved — still need an Anthropic key.";
+    // If voice just became available, arm the wake word.
+    if (res.sttConfigured && !wakeToggle.checked) {
+      wakeToggle.checked = true;
+      if (await ensureListener()) {
+        mode = "armed";
+        setListen("listen");
+      } else {
+        wakeToggle.checked = false;
+      }
+    }
+    updateHint();
+    setTimeout(closeSettings, 900);
+  } catch {
+    settingsStatus.style.color = "var(--amber)";
+    settingsStatus.textContent = "Couldn't save. Please try again.";
+  } finally {
+    settingsSave.disabled = false;
+  }
+});
+
 // ── Live clock ────────────────────────────────────────────────────────
 const clockTime = document.getElementById("clock-time") as HTMLElement;
 const clockDate = document.getElementById("clock-date") as HTMLElement;
@@ -990,21 +1070,11 @@ const wave = new Wave(document.getElementById("wave") as HTMLCanvasElement);
 
 (async () => {
   const status = await window.jarvis.getStatus();
-  sttReady = status.sttConfigured;
   if (status.userName) subtitle.textContent = `Online · assistant to ${status.userName}`;
 
-  if (!status.hasApiKey) {
-    banner.classList.remove("hidden");
-    banner.textContent =
-      "No Anthropic API key found. Copy .env.example to .env and add ANTHROPIC_API_KEY, then restart.";
-  } else if (!sttReady) {
-    banner.classList.remove("hidden");
-    banner.classList.add("subtle");
-    banner.textContent =
-      "Voice input is off — add OPENAI_API_KEY to .env to enable the mic and “Hey Jarvis”. Typing and voice replies work now.";
-    micBtn.disabled = true;
-    wakeToggle.disabled = true;
-  }
+  reflectConfig(status.hasApiKey, status.sttConfigured);
+  // First run with no key: pop the settings panel so setup is obvious.
+  if (!status.hasApiKey) openSettings();
 
   // Give the canvases a beat to get their laid-out size, then start drawing.
   requestAnimationFrame(() => {

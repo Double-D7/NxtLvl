@@ -1,6 +1,6 @@
 {
   "name": "nxtlvl-jarvis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Jarvis — a voice-controlled personal assistant powered by Claude",
   "main": "dist/main/main.js",
   "author": "David Devitt",

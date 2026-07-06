@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("jarvis", {
   // Send recorded audio bytes to the main process for transcription.
   transcribe: (bytes: ArrayBuffer, mimeType: string): Promise<TranscriptResult> =>
     ipcRenderer.invoke("jarvis:transcribe", bytes, mimeType),
+  saveKeys: (keys: { anthropic?: string; openai?: string }): Promise<{ hasApiKey: boolean; sttConfigured: boolean }> =>
+    ipcRenderer.invoke("jarvis:save-keys", keys),
   // Fires when a reminder comes due and should be spoken aloud.
   onSpeak: (cb: (text: string) => void) => {
     ipcRenderer.on("jarvis:speak", (_e, text: string) => cb(text));
