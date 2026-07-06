@@ -15,6 +15,11 @@ import * as google from "./google";
 import * as stt from "./stt";
 import { sample as sampleTelemetry } from "./telemetry";
 
+// Windows: give the app a stable identity so desktop notifications show
+// "Jarvis" (and land in the Action Center) instead of "electron.app.Electron".
+// No-op on macOS/Linux.
+if (process.platform === "win32") app.setAppUserModelId("com.nxtlvl.jarvis");
+
 let mainWindow: BrowserWindow | null = null;
 let brain: Brain | null = null;
 let stopScheduler: (() => void) | null = null;
@@ -32,6 +37,10 @@ function createWindow(): void {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Keep the mic loop, wake word, and visualizers running when the window
+      // isn't focused — Windows throttles background renderers by default,
+      // which would freeze an always-listening assistant.
+      backgroundThrottling: false,
     },
   });
 

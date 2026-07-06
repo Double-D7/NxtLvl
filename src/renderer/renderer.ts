@@ -365,6 +365,10 @@ class MicListener {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     this.ctx = new AudioContext();
+    // The context can start "suspended" under Chromium's autoplay policy (we
+    // auto-arm without a click); resume it or the analyser reads only silence
+    // and the wake word never triggers.
+    if (this.ctx.state === "suspended") await this.ctx.resume();
     const src = this.ctx.createMediaStreamSource(this.stream);
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 1024;

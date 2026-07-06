@@ -160,6 +160,27 @@ to the executable, then in the working directory. So after installing, place you
 `.env` beside the app (or launch it from a folder that has one). Your keys are
 never bundled into the installer.
 
+## Running on Windows
+
+Jarvis is built to run great on Windows — its built-in voices ("Microsoft David")
+sound genuinely Jarvis-like. A few Windows notes:
+
+- **Microphone privacy.** Turn on **Settings → Privacy & security → Microphone →
+  "Let desktop apps access your microphone."** If this is off, Windows blocks the
+  mic even though Jarvis has permission, and the app will tell you the mic is
+  unavailable.
+- **Background listening.** The app keeps the wake word and visualizers alive
+  even when the window isn't focused (background throttling is disabled), so
+  "Hey Jarvis" works while you're in another app.
+- **Notifications** show as **Jarvis** in the Action Center (the app sets a
+  Windows App User Model ID).
+- **Installer warning.** The `.exe` from `npm run dist:win` is unsigned, so
+  SmartScreen shows "Windows protected your PC" the first time — click **More
+  info → Run anyway**. Code-signing (an EV/OV certificate) removes this; wire the
+  cert into electron-builder when you're ready to distribute.
+- **Build on Windows.** Run `npm run dist:win` on a Windows machine (or in CI) to
+  produce the NSIS installer.
+
 ## Configuration reference
 
 All settings live in `.env` (see `.env.example`):
