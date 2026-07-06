@@ -137,6 +137,30 @@ const D = (p) => path.join(__dirname, "..", "dist", p);
   const dt = JSON.parse(await datetimeTool.run());
   check("returns iso + timezone + weekday", !!dt.iso && !!dt.timezone && !!dt.weekday, JSON.stringify(dt));
 
+  console.log("\n▶ Outlook email tool");
+  const outlookMod = require(D("main/tools/outlook.js"));
+  const msMod = require(D("main/microsoft.js"));
+  const store = require(D("main/store.js"));
+  // Unconfigured → guides the user to Settings, never throws.
+  const unconfigured = await outlookMod.searchEmailTool.run({});
+  check("guides user to set up Outlook when unconfigured", /settings/i.test(unconfigured), unconfigured);
+  // Simulate configured + connected, stub Graph, verify formatting.
+  store.write("settings", { msClientId: "client-123", msTenantId: "tenant-abc" });
+  store.write("ms-tokens", { access_token: "a", refresh_token: "r", expiry: Date.now() + 3600e3, account: "david@fortressds.com" });
+  check("reports configured + connected from stored state", msMod.isConfigured() && msMod.isConnected());
+  const origFetch = msMod.graphFetch;
+  msMod.graphFetch = async () => ({ value: [
+    { subject: "Q3 budget review", isRead: false, receivedDateTime: new Date().toISOString(),
+      from: { emailAddress: { name: "Sarah Lee", address: "sarah@acme.com" } }, bodyPreview: "Can you send the numbers by Friday?" },
+    { subject: "Lunch?", isRead: true, receivedDateTime: new Date().toISOString(),
+      from: { emailAddress: { name: "Tom", address: "tom@acme.com" } }, bodyPreview: "Free at noon?" },
+  ] });
+  const formatted = await outlookMod.searchEmailTool.run({ unread_only: false });
+  msMod.graphFetch = origFetch;
+  check("formats email results (sender, subject, unread)",
+    /Sarah Lee/.test(formatted) && /Q3 budget review/.test(formatted) && /UNREAD/.test(formatted), formatted);
+  store.write("ms-tokens", null); // reset
+
   console.log("\n▶ STT guard (unconfigured)");
   const stt = require(D("main/stt.js"));
   delete process.env.OPENAI_API_KEY; delete process.env.STT_API_KEY;

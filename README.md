@@ -8,10 +8,9 @@ actually *do* things for you by voice or text:
 - 🗒️ **Reminders & tasks** — "remind me to call the dentist tomorrow at 3" →
   it's saved, and a desktop notification fires when it's due. _(Works out of the
   box, no setup beyond an API key.)_
-- 📅 **Calendar** — "what's on my calendar Friday?" / "book a meeting with Sam at
-  2pm" _(needs Google credentials — see below)_
-- 📧 **Email** — "any new email from my boss?" / "email Alex that I'm running
-  late" _(needs Google credentials — always confirms before sending)_
+- 📧 **Outlook email** — "any new email from my boss?", "summarize my unread
+  messages." Reads and summarizes your Microsoft 365 inbox _(one-time sign-in —
+  see "Connecting Outlook" below)_.
 - 💬 **General chat & Q&A** — ask it anything.
 - 📟 **Live dashboard** — an arc-reactor core that reacts to your voice, a
   waveform strip, a diagnostics panel (CPU, memory, uptime, host), a live clock,
@@ -58,13 +57,12 @@ src/
   main/                 ← Electron main process (Node) — the secure side
     main.ts             ← app window, IPC, reminder scheduler
     brain.ts            ← the Claude agent loop (tool-calling)
-    google.ts           ← Google OAuth + REST helpers (optional)
+    microsoft.ts        ← Microsoft Graph OAuth (PKCE) + fetch helper
     store.ts            ← simple JSON persistence (per-user data dir)
     tools/              ← what Jarvis can DO
       datetime.ts       ← knows "now" so it can handle "tomorrow at 3"
       reminders.ts      ← local reminders + due-time notifications
-      calendar.ts       ← Google Calendar (list / create events)
-      email.ts          ← Gmail (search / send)
+      outlook.ts        ← Outlook / Microsoft 365 email (read / search)
     stt.ts              ← cloud speech-to-text (key stays server-side)
     telemetry.ts        ← live CPU / memory / uptime for the dashboard
   renderer/             ← the UI (Chromium) — the HUD + voice side
@@ -84,24 +82,37 @@ repeats until Claude has a final spoken answer.
 
 ---
 
-## Enabling Calendar & Email (optional)
+## Connecting Outlook (Microsoft 365 email)
 
-Jarvis is fully useful without this — but here's how to unlock Google:
+Jarvis reads and summarizes your Outlook email via **Microsoft Graph**. It's
+optional — everything else works without it. One-time setup: register a small app
+in your Microsoft directory, then sign in from Jarvis's ⚙ Settings.
 
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a project and enable the **Google Calendar API** and **Gmail API**.
-3. Create an **OAuth 2.0 Client ID** of type **Desktop app**.
-4. Put the client ID and secret in your `.env`:
-   ```
-   GOOGLE_CLIENT_ID=...
-   GOOGLE_CLIENT_SECRET=...
-   ```
-5. Restart Jarvis. The first time you use a calendar/email command it opens a
-   browser to authorize; after that it just works. Tokens are stored locally and
-   refreshed automatically.
+**1. Register an app** (once) at [entra.microsoft.com](https://entra.microsoft.com)
+→ **Applications → App registrations → New registration**:
 
-Sending email is treated as irreversible — Jarvis always reads the recipient,
-subject, and body back to you and waits for an explicit "yes, send it."
+- **Name:** `Jarvis Assistant`
+- **Supported account types:** "Accounts in this organizational directory only".
+- Click **Register**.
+
+**2. Add the redirect + enable public client** — in the app's **Authentication**:
+
+- **Add a platform → Mobile and desktop applications**, check `http://localhost`.
+- Scroll to **Advanced settings → Allow public client flows → Yes**. Save.
+
+**3. Grant permissions** — in **API permissions → Add a permission → Microsoft
+Graph → Delegated permissions**, add: **`Mail.Read`**, **`User.Read`**,
+**`offline_access`**. Then click **Grant admin consent**.
+
+**4. Connect Jarvis** — copy the **Application (client) ID** and **Directory
+(tenant) ID** from the app's Overview page, open Jarvis's **⚙ Settings → Outlook /
+Microsoft 365**, paste them in, and click **Connect Outlook**. A Microsoft
+sign-in opens in your browser; approve it once. Done.
+
+No passwords or client secrets are stored — sign-in uses OAuth with PKCE, and only
+a refreshable token is kept locally on your PC. Jarvis has **read-only** email
+access (`Mail.Read`); it can't send or delete anything. Sending mail, calendar,
+and more are the natural next additions.
 
 ---
 
@@ -222,9 +233,10 @@ All settings live in `.env` (see `.env.example`):
 | `OPENAI_API_KEY` | — | Enables voice input + "Hey Jarvis" |
 | `STT_MODEL` | — | Transcription model (default `gpt-4o-mini-transcribe`) |
 | `STT_BASE_URL` / `STT_API_KEY` | — | Use any OpenAI-compatible STT endpoint |
-| `GOOGLE_CLIENT_ID` | — | Enables Calendar + Email |
-| `GOOGLE_CLIENT_SECRET` | — | Enables Calendar + Email |
+| `MS_CLIENT_ID` | — | Outlook: your Microsoft app (client) ID |
+| `MS_TENANT_ID` | — | Outlook: your directory (tenant) ID |
 
-Your data (reminders, Google tokens) is stored locally in Electron's per-user
-`userData` directory — nothing is sent anywhere except the Anthropic and (if
-enabled) Google APIs.
+Most people set these in the in-app ⚙ Settings panel instead of a `.env`. Your
+data (reminders, keys, Microsoft token) is stored locally in Electron's per-user
+`userData` directory — nothing is sent anywhere except the Anthropic, OpenAI, and
+(if connected) Microsoft Graph APIs.

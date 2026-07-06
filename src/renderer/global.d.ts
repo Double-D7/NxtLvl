@@ -8,8 +8,12 @@ interface JarvisReply {
 
 interface JarvisStatus {
   hasApiKey: boolean;
-  googleConfigured: boolean;
   sttConfigured: boolean;
+  outlookConfigured: boolean;
+  outlookConnected: boolean;
+  outlookAccount: string;
+  msClientId: string;
+  msTenantId: string;
   userName: string;
 }
 
@@ -40,6 +44,9 @@ interface JarvisBridge {
   getStatus(): Promise<JarvisStatus>;
   transcribe(bytes: ArrayBuffer, mimeType: string): Promise<TranscriptResult>;
   saveKeys(keys: { anthropic?: string; openai?: string }): Promise<{ hasApiKey: boolean; sttConfigured: boolean }>;
+  saveMsConfig(cfg: { clientId?: string; tenantId?: string }): Promise<{ outlookConfigured: boolean }>;
+  connectOutlook(): Promise<{ connected: boolean; account?: string; error?: string }>;
+  disconnectOutlook(): Promise<{ outlookConnected: boolean }>;
   onSpeak(cb: (text: string) => void): void;
   onStats(cb: (stats: Telemetry) => void): void;
 }

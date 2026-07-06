@@ -12,7 +12,7 @@ for (const dir of [app.getAppPath(), path.dirname(app.getPath("exe")), os.homedi
 
 import { Brain } from "./brain";
 import { startReminderScheduler } from "./tools/reminders";
-import * as google from "./google";
+import * as ms from "./microsoft";
 import * as stt from "./stt";
 import * as store from "./store";
 import { sample as sampleTelemetry } from "./telemetry";
@@ -20,6 +20,8 @@ import { sample as sampleTelemetry } from "./telemetry";
 interface Settings {
   anthropicApiKey?: string;
   openaiApiKey?: string;
+  msClientId?: string;
+  msTenantId?: string;
 }
 
 // Keys entered in the app's Settings panel are saved locally and applied here,
@@ -78,12 +80,19 @@ function registerIpc(): void {
     brain?.reset();
   });
 
-  ipcMain.handle("jarvis:status", async () => ({
-    hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
-    googleConfigured: google.isConfigured(),
-    sttConfigured: stt.isConfigured(),
-    userName: process.env.JARVIS_USER_NAME || "",
-  }));
+  ipcMain.handle("jarvis:status", async () => {
+    const s = store.read<Settings>("settings", {});
+    return {
+      hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
+      sttConfigured: stt.isConfigured(),
+      outlookConfigured: ms.isConfigured(),
+      outlookConnected: ms.isConnected(),
+      outlookAccount: ms.account() || "",
+      msClientId: process.env.MS_CLIENT_ID || s.msClientId || "",
+      msTenantId: process.env.MS_TENANT_ID || s.msTenantId || "",
+      userName: process.env.JARVIS_USER_NAME || "",
+    };
+  });
 
   ipcMain.handle("jarvis:transcribe", async (_e, bytes: ArrayBuffer, mimeType: string) => {
     try {
@@ -103,6 +112,27 @@ function registerIpc(): void {
     if (s.openaiApiKey && !process.env.STT_API_KEY) process.env.OPENAI_API_KEY = s.openaiApiKey;
     brain = null; // rebuild the Anthropic client with the new key on next ask
     return { hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY), sttConfigured: stt.isConfigured() };
+  });
+
+  ipcMain.handle("jarvis:save-ms-config", async (_e, cfg: { clientId?: string; tenantId?: string }) => {
+    const s = store.read<Settings>("settings", {});
+    if (cfg.clientId !== undefined) s.msClientId = cfg.clientId.trim() || undefined;
+    if (cfg.tenantId !== undefined) s.msTenantId = cfg.tenantId.trim() || undefined;
+    store.write("settings", s);
+    brain = null; // refresh the system prompt's Outlook status
+    return { outlookConfigured: ms.isConfigured() };
+  });
+
+  ipcMain.handle("jarvis:connect-outlook", async () => {
+    const result = await ms.connect();
+    brain = null;
+    return result;
+  });
+
+  ipcMain.handle("jarvis:disconnect-outlook", async () => {
+    ms.disconnect();
+    brain = null;
+    return { outlookConnected: false };
   });
 }
 

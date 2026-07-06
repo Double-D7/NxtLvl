@@ -3,8 +3,12 @@ import type { JarvisReply } from "../shared/types";
 
 export interface JarvisStatus {
   hasApiKey: boolean;
-  googleConfigured: boolean;
   sttConfigured: boolean;
+  outlookConfigured: boolean;
+  outlookConnected: boolean;
+  outlookAccount: string;
+  msClientId: string;
+  msTenantId: string;
   userName: string;
 }
 
@@ -42,6 +46,12 @@ contextBridge.exposeInMainWorld("jarvis", {
     ipcRenderer.invoke("jarvis:transcribe", bytes, mimeType),
   saveKeys: (keys: { anthropic?: string; openai?: string }): Promise<{ hasApiKey: boolean; sttConfigured: boolean }> =>
     ipcRenderer.invoke("jarvis:save-keys", keys),
+  saveMsConfig: (cfg: { clientId?: string; tenantId?: string }): Promise<{ outlookConfigured: boolean }> =>
+    ipcRenderer.invoke("jarvis:save-ms-config", cfg),
+  connectOutlook: (): Promise<{ connected: boolean; account?: string; error?: string }> =>
+    ipcRenderer.invoke("jarvis:connect-outlook"),
+  disconnectOutlook: (): Promise<{ outlookConnected: boolean }> =>
+    ipcRenderer.invoke("jarvis:disconnect-outlook"),
   // Fires when a reminder comes due and should be spoken aloud.
   onSpeak: (cb: (text: string) => void) => {
     ipcRenderer.on("jarvis:speak", (_e, text: string) => cb(text));

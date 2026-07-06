@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { allTools, toolByName } from "./tools";
-import * as google from "./google";
+import * as ms from "./microsoft";
 import type { JarvisReply } from "../shared/types";
 
 /** Streaming callbacks so the UI can speak/print the reply as it arrives. */
@@ -14,10 +14,14 @@ const EFFORT = (process.env.JARVIS_EFFORT || "medium") as "low" | "medium" | "hi
 const USER_NAME = process.env.JARVIS_USER_NAME || "";
 
 function systemPrompt(): string {
-  const googleStatus = google.isConfigured()
-    ? "Google Calendar and Gmail are connected — use the calendar and email tools freely."
-    : "Google Calendar and Gmail are NOT connected. If asked about calendar or " +
-      "email, briefly tell the user those features need Google credentials in .env.";
+  const outlookStatus = ms.isConnected()
+    ? `Outlook (Microsoft 365) email is connected${ms.account() ? ` as ${ms.account()}` : ""} — ` +
+      "use the search_email tool to read and summarize the user's mail."
+    : ms.isConfigured()
+      ? "Outlook is set up but not signed in yet. If asked about email, tell the " +
+        "user to open Settings and click Connect Outlook."
+      : "Outlook email is NOT set up yet. If asked about email, tell the user to " +
+        "add their Microsoft app details in Settings and connect Outlook.";
 
   return [
     "You are Jarvis, a warm, concise, and capable voice assistant" +
@@ -27,14 +31,13 @@ function systemPrompt(): string {
     "sentences is usually right. Spell things out the way you'd say them.",
     "",
     "You can manage reminders and tasks, check the date and time, and (when",
-    "connected) read the calendar, create events, and read and send email.",
+    "connected) read and summarize the user's Outlook email with search_email.",
+    "When summarizing email, lead with what matters: who it's from and what they",
+    "need. Group or count routine mail rather than listing every message.",
     "Always resolve relative times (today, tomorrow, 'in an hour') by calling",
-    "get_current_datetime before creating a reminder or event.",
+    "get_current_datetime before creating a reminder.",
     "",
-    "Sending email is irreversible: read the recipient, subject, and body back",
-    "to the user and get an explicit yes before calling send_email.",
-    "",
-    googleStatus,
+    outlookStatus,
     "",
     "If a request is ambiguous, ask one short clarifying question rather than",
     "guessing. If you don't know something and have no tool for it, say so plainly.",

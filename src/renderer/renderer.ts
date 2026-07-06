@@ -23,6 +23,11 @@ const keyOpenai = document.getElementById("key-openai") as HTMLInputElement;
 const settingsSave = document.getElementById("settings-save") as HTMLButtonElement;
 const settingsCancel = document.getElementById("settings-cancel") as HTMLButtonElement;
 const settingsStatus = document.getElementById("settings-status") as HTMLElement;
+const msClient = document.getElementById("ms-client") as HTMLInputElement;
+const msTenant = document.getElementById("ms-tenant") as HTMLInputElement;
+const msConnect = document.getElementById("ms-connect") as HTMLButtonElement;
+const msDisconnect = document.getElementById("ms-disconnect") as HTMLButtonElement;
+const msStatusEl = document.getElementById("ms-status") as HTMLElement;
 
 const FOLLOWUP_MS = 9000;
 
@@ -724,9 +729,27 @@ function reflectConfig(hasApiKey: boolean, sttConfigured: boolean): void {
   }
 }
 
+async function refreshOutlookUi(): Promise<void> {
+  const s = await window.jarvis.getStatus();
+  if (s.msClientId && !msClient.value) msClient.value = s.msClientId;
+  if (s.msTenantId && !msTenant.value) msTenant.value = s.msTenantId;
+  if (s.outlookConnected) {
+    msStatusEl.textContent = s.outlookAccount ? `Connected as ${s.outlookAccount}` : "Connected to Outlook.";
+    msStatusEl.classList.add("connected");
+    msDisconnect.classList.remove("hidden");
+    msConnect.textContent = "Reconnect";
+  } else {
+    msStatusEl.textContent = s.outlookConfigured ? "Not signed in yet." : "Enter your app details, then connect.";
+    msStatusEl.classList.remove("connected");
+    msDisconnect.classList.add("hidden");
+    msConnect.textContent = "Connect Outlook";
+  }
+}
+
 function openSettings(): void {
   settingsStatus.textContent = "";
   settingsModal.classList.remove("hidden");
+  void refreshOutlookUi();
   keyAnthropic.focus();
 }
 function closeSettings(): void {
@@ -742,41 +765,83 @@ settingsModal.addEventListener("click", (e) => {
 settingsSave.addEventListener("click", async () => {
   const anthropic = keyAnthropic.value.trim();
   const openai = keyOpenai.value.trim();
-  if (!anthropic && !openai) {
+  const clientId = msClient.value.trim();
+  const tenantId = msTenant.value.trim();
+  if (!anthropic && !openai && !clientId && !tenantId) {
     settingsStatus.style.color = "var(--amber)";
-    settingsStatus.textContent = "Enter at least one key.";
+    settingsStatus.textContent = "Enter a key or your Outlook app details.";
     return;
   }
   settingsSave.disabled = true;
   settingsStatus.style.color = "";
   settingsStatus.textContent = "Saving…";
   try {
-    const res = await window.jarvis.saveKeys({
-      anthropic: anthropic || undefined,
-      openai: openai || undefined,
-    });
-    reflectConfig(res.hasApiKey, res.sttConfigured);
-    keyAnthropic.value = "";
-    keyOpenai.value = "";
-    settingsStatus.textContent = res.hasApiKey ? "Saved. Jarvis is ready." : "Saved — still need an Anthropic key.";
-    // If voice just became available, arm the wake word.
-    if (res.sttConfigured && !wakeToggle.checked) {
-      wakeToggle.checked = true;
-      if (await ensureListener()) {
-        mode = "armed";
-        setListen("listen");
-      } else {
-        wakeToggle.checked = false;
+    if (anthropic || openai) {
+      const res = await window.jarvis.saveKeys({
+        anthropic: anthropic || undefined,
+        openai: openai || undefined,
+      });
+      reflectConfig(res.hasApiKey, res.sttConfigured);
+      keyAnthropic.value = "";
+      keyOpenai.value = "";
+      if (res.sttConfigured && !wakeToggle.checked) {
+        wakeToggle.checked = true;
+        if (await ensureListener()) {
+          mode = "armed";
+          setListen("listen");
+        } else {
+          wakeToggle.checked = false;
+        }
       }
     }
+    if (clientId || tenantId) {
+      await window.jarvis.saveMsConfig({ clientId: clientId || undefined, tenantId: tenantId || undefined });
+    }
     updateHint();
-    setTimeout(closeSettings, 900);
+    await refreshOutlookUi();
+    settingsStatus.textContent = "Saved.";
   } catch {
     settingsStatus.style.color = "var(--amber)";
     settingsStatus.textContent = "Couldn't save. Please try again.";
   } finally {
     settingsSave.disabled = false;
   }
+});
+
+// Connect / disconnect Outlook (opens the Microsoft sign-in in the browser).
+msConnect.addEventListener("click", async () => {
+  const clientId = msClient.value.trim();
+  const tenantId = msTenant.value.trim();
+  if (!clientId) {
+    msStatusEl.classList.remove("connected");
+    msStatusEl.textContent = "Enter your Application (client) ID first.";
+    return;
+  }
+  msConnect.disabled = true;
+  msStatusEl.classList.remove("connected");
+  msStatusEl.textContent = "Saving app details…";
+  try {
+    await window.jarvis.saveMsConfig({ clientId, tenantId: tenantId || undefined });
+    msStatusEl.textContent = "Opening Microsoft sign-in — complete it in your browser…";
+    const res = await window.jarvis.connectOutlook();
+    if (res.connected) {
+      msStatusEl.classList.add("connected");
+      msStatusEl.textContent = res.account ? `Connected as ${res.account}` : "Connected to Outlook.";
+      msDisconnect.classList.remove("hidden");
+      msConnect.textContent = "Reconnect";
+    } else {
+      msStatusEl.textContent = `Couldn't connect: ${res.error || "unknown error"}`;
+    }
+  } catch {
+    msStatusEl.textContent = "Couldn't connect. Please try again.";
+  } finally {
+    msConnect.disabled = false;
+  }
+});
+
+msDisconnect.addEventListener("click", async () => {
+  await window.jarvis.disconnectOutlook();
+  await refreshOutlookUi();
 });
 
 // ── Live clock ────────────────────────────────────────────────────────

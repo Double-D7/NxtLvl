@@ -107,6 +107,23 @@
           call the Anthropic / OpenAI APIs. Get an Anthropic key at
           console.anthropic.com and an OpenAI key at platform.openai.com.
         </p>
+
+        <div class="group-divider"></div>
+        <div class="group-title">Outlook / Microsoft 365 <em>· optional — email</em></div>
+        <label class="field">
+          <span>Application (client) ID</span>
+          <input id="ms-client" type="text" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Directory (tenant) ID</span>
+          <input id="ms-tenant" type="text" placeholder="your tenant ID (or domain)" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="ms-row">
+          <button id="ms-connect" type="button" class="ms-btn">Connect Outlook</button>
+          <button id="ms-disconnect" type="button" class="ms-btn subtle hidden">Disconnect</button>
+          <span id="ms-status" class="ms-conn-status"></span>
+        </div>
+
         <div id="settings-status" class="settings-status"></div>
         <div class="modal-actions">
           <button id="settings-cancel" type="button">Close</button>

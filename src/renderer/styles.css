@@ -176,6 +176,57 @@ body {
   line-height: 1.5;
   color: var(--muted);
 }
+.group-divider {
+  height: 1px;
+  background: rgba(53, 230, 255, 0.15);
+  margin: 18px 0 12px;
+}
+.group-title {
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 4px;
+}
+.group-title em {
+  color: var(--muted);
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ms-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.ms-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--cyan);
+  background: rgba(53, 230, 255, 0.12);
+  color: var(--cyan);
+  font-family: inherit;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.ms-btn:hover {
+  background: rgba(53, 230, 255, 0.22);
+}
+.ms-btn.subtle {
+  border-color: var(--panel-border);
+  background: transparent;
+  color: var(--muted);
+}
+.ms-conn-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ms-conn-status.connected {
+  color: var(--green);
+}
+
 .settings-status {
   min-height: 16px;
   font-size: 12px;

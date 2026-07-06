@@ -1,15 +1,14 @@
 import type { JarvisTool } from "./types";
 import { datetimeTool } from "./datetime";
 import { reminderTools } from "./reminders";
-import { calendarTools } from "./calendar";
-import { emailTools } from "./email";
+import { outlookTools } from "./outlook";
 
 // The full set of tools Jarvis can call. Order is cosmetic.
+// (Google Calendar/Gmail tools were retired in favour of Outlook/Microsoft 365.)
 export const allTools: JarvisTool[] = [
   datetimeTool,
   ...reminderTools,
-  ...calendarTools,
-  ...emailTools,
+  ...outlookTools,
 ];
 
 export const toolByName = new Map<string, JarvisTool>(
