@@ -44,4 +44,8 @@ contextBridge.exposeInMainWorld("jarvis", {
   onSpeak: (cb: (text: string) => void) => {
     ipcRenderer.on("jarvis:speak", (_e, text: string) => cb(text));
   },
+  // Live system telemetry for the dashboard.
+  onStats: (cb: (stats: unknown) => void) => {
+    ipcRenderer.on("jarvis:stats", (_e, stats: unknown) => cb(stats));
+  },
 });

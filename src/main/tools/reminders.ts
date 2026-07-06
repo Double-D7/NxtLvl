@@ -167,6 +167,20 @@ export const reminderTools: JarvisTool[] = [
   deleteReminderTool,
 ];
 
+/** A compact snapshot for the dashboard: pending count and the next due item. */
+export function summary(): { pending: number; next: string | null; nextAt: string | null } {
+  const pending = load().filter((r) => !r.done);
+  const dated = pending
+    .filter((r) => r.dueAt)
+    .sort((a, b) => (a.dueAt as string).localeCompare(b.dueAt as string));
+  const next = dated[0] ?? pending[0] ?? null;
+  return {
+    pending: pending.length,
+    next: next ? next.text : null,
+    nextAt: next?.dueAt ?? null,
+  };
+}
+
 /**
  * Polls for due reminders and fires a native desktop notification for each.
  * `onDue` lets the app also speak the reminder aloud. Returns a stop function.

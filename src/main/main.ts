@@ -2,27 +2,32 @@ import { app, BrowserWindow, ipcMain, session } from "electron";
 import * as path from "path";
 import * as dotenv from "dotenv";
 
-// Load .env from the project root (works in dev; in a packaged app the user
-// can place a .env next to the executable).
-dotenv.config({ path: path.join(app.getAppPath(), ".env") });
+// Load .env from wherever it might live: the project root (dev), next to the
+// packaged executable, or the current working directory. First value wins;
+// dotenv won't overwrite variables already set.
+for (const dir of [app.getAppPath(), path.dirname(app.getPath("exe")), process.cwd()]) {
+  dotenv.config({ path: path.join(dir, ".env") });
+}
 
 import { Brain } from "./brain";
 import { startReminderScheduler } from "./tools/reminders";
 import * as google from "./google";
 import * as stt from "./stt";
+import { sample as sampleTelemetry } from "./telemetry";
 
 let mainWindow: BrowserWindow | null = null;
 let brain: Brain | null = null;
 let stopScheduler: (() => void) | null = null;
+let telemetryTimer: NodeJS.Timeout | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 460,
+    width: 1040,
     height: 720,
-    minWidth: 380,
-    minHeight: 560,
-    title: "Jarvis",
-    backgroundColor: "#0b0f1a",
+    minWidth: 760,
+    minHeight: 600,
+    title: "JARVIS",
+    backgroundColor: "#04070d",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -79,6 +84,11 @@ app.whenReady().then(() => {
     mainWindow?.webContents.send("jarvis:speak", `Reminder: ${r.text}`);
   });
 
+  // Push live telemetry to the dashboard every couple of seconds.
+  const pushStats = () => mainWindow?.webContents.send("jarvis:stats", sampleTelemetry());
+  telemetryTimer = setInterval(pushStats, 2000);
+  setTimeout(pushStats, 400); // one quick sample after the UI loads
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -86,5 +96,6 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   stopScheduler?.();
+  if (telemetryTimer) clearInterval(telemetryTimer);
   if (process.platform !== "darwin") app.quit();
 });

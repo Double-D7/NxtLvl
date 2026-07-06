@@ -13,9 +13,20 @@ actually *do* things for you by voice or text:
 - 📧 **Email** — "any new email from my boss?" / "email Alex that I'm running
   late" _(needs Google credentials — always confirms before sending)_
 - 💬 **General chat & Q&A** — ask it anything.
+- 📟 **Live dashboard** — an arc-reactor core that reacts to your voice, a
+  waveform strip, a diagnostics panel (CPU, memory, uptime, host), a live clock,
+  and your pending tasks + next reminder.
 
 It **speaks its answers aloud** and **listens for your voice** — including a
-hands-free **"Hey Jarvis" wake word** — with a text box as a reliable fallback.
+hands-free **"Hey Jarvis" wake word** and **barge-in** (talk over it to
+interrupt) — all inside a **Tony-Stark-style HUD** with a live audio-reactive arc
+reactor, a real-time waveform, and system telemetry. A text box is always there
+as a fallback.
+
+> The HUD: a glowing arc-reactor core in the center that pulses and spins with
+> your voice, a **Diagnostics** panel on the left (CPU, memory, uptime, host,
+> pending tasks, next reminder), a **Transcript** panel on the right, a live
+> clock up top, and a reactive waveform under the core.
 
 ---
 
@@ -55,9 +66,11 @@ src/
       calendar.ts       ← Google Calendar (list / create events)
       email.ts          ← Gmail (search / send)
     stt.ts              ← cloud speech-to-text (key stays server-side)
-  renderer/             ← the UI (Chromium) — the voice side
-    renderer.ts         ← mic capture + VAD, "Hey Jarvis" wake word, TTS, chat
-    index.html / styles.css
+    telemetry.ts        ← live CPU / memory / uptime for the dashboard
+  renderer/             ← the UI (Chromium) — the HUD + voice side
+    renderer.ts         ← mic + VAD + barge-in, wake word, streaming TTS,
+                          arc-reactor + waveform visualizers, telemetry binding
+    index.html / styles.css  ← the JARVIS HUD
   shared/types.ts       ← types shared across both processes
 ```
 
@@ -108,10 +121,13 @@ subject, and body back to you and waits for an explicit "yes, send it."
 - **Streaming replies.** Jarvis speaks each sentence the moment it's ready
   instead of waiting for the whole answer, so it feels like a conversation, not a
   request/response. The reply also types out on screen as it's spoken.
-- **Push-to-talk.** Click the mic to speak a command immediately, no wake word
-  needed.
-- **Text-to-speech.** While Jarvis is talking, the mic pauses so it doesn't hear
-  itself.
+- **Barge-in.** Talk over Jarvis while it's speaking and it stops mid-sentence
+  and listens to you — like interrupting a real assistant. (It uses a raised
+  detection threshold while speaking so its own voice doesn't trigger it.)
+- **Push-to-talk.** Click the mic — or the arc-reactor core — to speak a command
+  immediately, no wake word needed.
+- **Text-to-speech.** While Jarvis is talking, the mic guards against hearing
+  itself, except for a genuine interruption.
 - **Reliability.** Transcription runs through a cloud speech-to-text API (Whisper
   / gpt-4o-transcribe by default), so it works consistently across machines —
   the key stays in the main process, never in the UI. Point `STT_BASE_URL` at any
@@ -121,6 +137,28 @@ If no OpenAI key is set, voice input is simply disabled and Jarvis tells you so 
 typing and spoken replies still work.
 
 ---
+
+## Building a real installer
+
+Jarvis is packaged with [electron-builder](https://www.electron.build/). Build a
+double-clickable app for your platform:
+
+```bash
+npm run pack        # quick unpacked build in release/ (fastest, for testing)
+npm run dist        # installer for your current OS
+npm run dist:mac    # .dmg + .zip   (run on macOS)
+npm run dist:win    # .exe (NSIS installer)  (run on Windows)
+npm run dist:linux  # .AppImage    (run on Linux)
+```
+
+Output lands in `release/`. Each OS's installer must be built on that OS (or via
+CI). A default icon is used; drop your own at `build/icon.png` (1024×1024) to
+brand it.
+
+**Where does the packaged app read your keys?** It looks for a `.env` file next
+to the executable, then in the working directory. So after installing, place your
+`.env` beside the app (or launch it from a folder that has one). Your keys are
+never bundled into the installer.
 
 ## Configuration reference
 

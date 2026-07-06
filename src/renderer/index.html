@@ -5,41 +5,81 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     />
-    <title>Jarvis</title>
+    <title>JARVIS</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
-      <h1>Jarvis</h1>
-      <span id="subtitle">your assistant</span>
-    </header>
+    <div class="scanlines"></div>
+    <div id="app">
+      <header class="hud-header">
+        <div class="brand">
+          <div class="brand-main">J.A.R.V.I.S.</div>
+          <div class="brand-sub" id="subtitle">Just A Rather Very Intelligent System</div>
+        </div>
+        <div class="sys-status"><span class="dot"></span><span id="sys-status">SYSTEM ONLINE</span></div>
+        <div class="clock">
+          <div id="clock-time" class="clock-time">--:--:--</div>
+          <div id="clock-date" class="clock-date">—</div>
+        </div>
+      </header>
 
-    <div id="banner" class="banner hidden"></div>
+      <div id="banner" class="banner hidden"></div>
 
-    <main id="conversation" aria-live="polite"></main>
+      <main class="hud-grid">
+        <!-- LEFT: diagnostics -->
+        <section class="panel telemetry">
+          <h2 class="panel-title">Diagnostics</h2>
+          <div class="stat">
+            <div class="stat-head"><span>CPU LOAD</span><span id="cpu-val">–</span></div>
+            <div class="meter"><div id="cpu-bar" class="meter-fill"></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-head"><span>MEMORY</span><span id="mem-val">–</span></div>
+            <div class="meter"><div id="mem-bar" class="meter-fill"></div></div>
+          </div>
+          <div class="kv"><span>UPTIME</span><span id="uptime-val">–</span></div>
+          <div class="kv"><span>HOST</span><span id="host-val">–</span></div>
+          <div class="kv"><span>PLATFORM</span><span id="platform-val">–</span></div>
+          <div class="divider"></div>
+          <div class="kv"><span>TASKS PENDING</span><span id="rem-count" class="accent">–</span></div>
+          <div class="next-reminder">
+            <div class="next-label">NEXT DIRECTIVE</div>
+            <div id="next-reminder" class="next-text">— none scheduled —</div>
+          </div>
+        </section>
 
-    <footer>
-      <label id="wake-row" class="wake-row" title="Listen for 'Hey Jarvis' hands-free">
-        <input type="checkbox" id="wake-toggle" />
-        <span class="wake-label">“Hey Jarvis” wake word</span>
-        <span id="wake-dot" class="wake-dot"></span>
-      </label>
-      <button id="mic" class="mic" title="Click and speak a command">
-        <span class="mic-icon">🎙️</span>
-      </button>
-      <form id="text-form">
-        <input
-          id="text-input"
-          type="text"
-          placeholder="Type to Jarvis…"
-          autocomplete="off"
-        />
-        <button id="send" type="submit">Send</button>
-      </form>
-      <div id="hint">Click the mic and speak, or type below.</div>
-    </footer>
+        <!-- CENTER: arc reactor + waveform -->
+        <section class="reactor-wrap">
+          <canvas id="reactor" title="Click to speak"></canvas>
+          <div class="reactor-status">
+            <div id="visual-state" class="visual-state">STANDBY</div>
+            <div id="hint" class="hint">Say “Hey Jarvis” or click the core.</div>
+          </div>
+          <canvas id="wave" class="wave"></canvas>
+        </section>
+
+        <!-- RIGHT: transcript -->
+        <section class="panel transcript">
+          <h2 class="panel-title">Transcript</h2>
+          <div id="conversation" class="log" aria-live="polite"></div>
+        </section>
+      </main>
+
+      <footer class="hud-footer">
+        <label id="wake-row" class="wake-row" title="Listen for 'Hey Jarvis' hands-free">
+          <input type="checkbox" id="wake-toggle" />
+          <span class="wake-label">“Hey Jarvis” wake word</span>
+          <span id="wake-dot" class="wake-dot"></span>
+        </label>
+        <button id="mic" class="mic" title="Click and speak a command"><span>🎙️</span></button>
+        <form id="text-form">
+          <input id="text-input" type="text" placeholder="Type a command…" autocomplete="off" />
+          <button id="send" type="submit">SEND</button>
+        </form>
+      </footer>
+    </div>
 
     <script type="module" src="renderer.js"></script>
   </body>

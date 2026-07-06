@@ -18,6 +18,18 @@ interface TranscriptResult {
   error?: string;
 }
 
+interface Telemetry {
+  cpu: number;
+  memUsed: number;
+  memGb: number;
+  memTotalGb: number;
+  uptime: number;
+  hostname: string;
+  platform: string;
+  time: string;
+  reminders: { pending: number; next: string | null; nextAt: string | null };
+}
+
 interface JarvisBridge {
   ask(
     text: string,
@@ -28,6 +40,7 @@ interface JarvisBridge {
   getStatus(): Promise<JarvisStatus>;
   transcribe(bytes: ArrayBuffer, mimeType: string): Promise<TranscriptResult>;
   onSpeak(cb: (text: string) => void): void;
+  onStats(cb: (stats: Telemetry) => void): void;
 }
 
 interface Window {
