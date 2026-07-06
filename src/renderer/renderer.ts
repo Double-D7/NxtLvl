@@ -14,6 +14,8 @@ const wakeToggle = document.getElementById("wake-toggle") as HTMLInputElement;
 const wakeDot = document.getElementById("wake-dot") as HTMLElement;
 const reactorWrap = document.querySelector(".reactor-wrap") as HTMLElement;
 const stateLabel = document.getElementById("visual-state") as HTMLElement;
+const voiceSelect = document.getElementById("voice-select") as HTMLSelectElement;
+const voiceTest = document.getElementById("voice-test") as HTMLButtonElement;
 
 const FOLLOWUP_MS = 9000;
 
@@ -58,6 +60,97 @@ function setToolsUsed(bubble: HTMLElement, tools: string[]): void {
 function setHint(text: string): void {
   hint.textContent = text;
 }
+
+// ── Voice selection ───────────────────────────────────────────────────
+// Picks a deep, Jarvis-like voice by default (British male if available, e.g.
+// "Microsoft George" / "Daniel"; otherwise a US male like "Microsoft David"),
+// and lets the user switch. Applied to every utterance with a lowered pitch.
+function loadVoices(): Promise<SpeechSynthesisVoice[]> {
+  return new Promise((resolve) => {
+    if (!("speechSynthesis" in window)) return resolve([]);
+    const ready = window.speechSynthesis.getVoices();
+    if (ready.length) return resolve(ready);
+    window.speechSynthesis.onvoiceschanged = () => resolve(window.speechSynthesis.getVoices());
+    setTimeout(() => resolve(window.speechSynthesis.getVoices()), 1800);
+  });
+}
+
+class VoiceManager {
+  voices: SpeechSynthesisVoice[] = [];
+  current: SpeechSynthesisVoice | null = null;
+  pitch = 0.9; // slightly deeper for the Jarvis feel
+  rate = 1.02;
+
+  async init(): Promise<void> {
+    this.voices = await loadVoices();
+    const saved = localStorage.getItem("jarvis-voice");
+    this.current = (saved ? this.voices.find((v) => v.name === saved) : null) ?? this.pickBest();
+    this.populate();
+  }
+
+  private score(v: SpeechSynthesisVoice): number {
+    const n = v.name.toLowerCase();
+    const l = (v.lang || "").toLowerCase();
+    const male = /(david|mark|guy|george|ryan|arthur|daniel|james|thomas|william|brian|matthew|alex|oliver|aaron)/;
+    let s = 0;
+    if (male.test(n)) s += 5;
+    if (l.startsWith("en-gb")) s += 3;
+    else if (l.startsWith("en-us")) s += 2;
+    else if (l.startsWith("en")) s += 1;
+    if (/microsoft/.test(n)) s += 0.5; // native Windows SAPI voices are reliable
+    return s;
+  }
+
+  pickBest(): SpeechSynthesisVoice | null {
+    if (!this.voices.length) return null;
+    return [...this.voices].sort((a, b) => this.score(b) - this.score(a))[0];
+  }
+
+  private populate(): void {
+    voiceSelect.innerHTML = "";
+    const sorted = [...this.voices].sort((a, b) => {
+      const ae = (a.lang || "").startsWith("en") ? 0 : 1;
+      const be = (b.lang || "").startsWith("en") ? 0 : 1;
+      return ae - be || a.name.localeCompare(b.name);
+    });
+    if (sorted.length === 0) {
+      const opt = document.createElement("option");
+      opt.textContent = "System default";
+      voiceSelect.appendChild(opt);
+      voiceSelect.disabled = true;
+      return;
+    }
+    for (const v of sorted) {
+      const opt = document.createElement("option");
+      opt.value = v.name;
+      opt.textContent = `${v.name} · ${v.lang}`;
+      if (this.current && v.name === this.current.name) opt.selected = true;
+      voiceSelect.appendChild(opt);
+    }
+  }
+
+  set(name: string): void {
+    const v = this.voices.find((x) => x.name === name);
+    if (v) {
+      this.current = v;
+      localStorage.setItem("jarvis-voice", name);
+    }
+  }
+
+  apply(utter: SpeechSynthesisUtterance): void {
+    if (this.current) utter.voice = this.current;
+    utter.pitch = this.pitch;
+    utter.rate = this.rate;
+  }
+}
+
+const voiceManager = new VoiceManager();
+
+voiceSelect.addEventListener("change", () => voiceManager.set(voiceSelect.value));
+voiceTest.addEventListener("click", () => {
+  window.speechSynthesis?.cancel();
+  void speakOnce("Systems online. All functions nominal. How can I help?");
+});
 
 // ── Streaming text-to-speech ──────────────────────────────────────────
 let activeSpeaker: SpeechStreamer | null = null;
@@ -124,7 +217,7 @@ class SpeechStreamer {
     }
     this.speaking = true;
     const utter = new SpeechSynthesisUtterance(next);
-    utter.rate = 1.03;
+    voiceManager.apply(utter);
     const step = () => {
       this.speaking = false;
       this.pump();
@@ -147,7 +240,7 @@ function speakOnce(text: string): Promise<void> {
     if (!("speechSynthesis" in window) || !text) return resolve();
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 1.03;
+    voiceManager.apply(utter);
     const done = () => resolve();
     utter.onend = done;
     utter.onerror = done;
@@ -921,6 +1014,8 @@ const wave = new Wave(document.getElementById("wave") as HTMLCanvasElement);
   });
 
   updateHint();
+
+  await voiceManager.init(); // load voices + pick a Jarvis-like default first
 
   const greeting = status.userName
     ? `Systems online. Good to see you, ${status.userName}. Say “Hey Jarvis” or click the core.`

@@ -68,11 +68,18 @@
       </main>
 
       <footer class="hud-footer">
-        <label id="wake-row" class="wake-row" title="Listen for 'Hey Jarvis' hands-free">
-          <input type="checkbox" id="wake-toggle" />
-          <span class="wake-label">“Hey Jarvis” wake word</span>
-          <span id="wake-dot" class="wake-dot"></span>
-        </label>
+        <div class="footer-left">
+          <label id="wake-row" class="wake-row" title="Listen for 'Hey Jarvis' hands-free">
+            <input type="checkbox" id="wake-toggle" />
+            <span class="wake-label">“Hey Jarvis” wake word</span>
+            <span id="wake-dot" class="wake-dot"></span>
+          </label>
+          <div class="voice-row">
+            <span class="voice-label">VOICE</span>
+            <select id="voice-select" class="voice-select" title="Jarvis's speaking voice"></select>
+            <button id="voice-test" class="voice-test" type="button" title="Preview voice">▶</button>
+          </div>
+        </div>
         <button id="mic" class="mic" title="Click and speak a command"><span>🎙️</span></button>
         <form id="text-form">
           <input id="text-input" type="text" placeholder="Type a command…" autocomplete="off" />

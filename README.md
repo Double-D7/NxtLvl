@@ -126,8 +126,12 @@ subject, and body back to you and waits for an explicit "yes, send it."
   detection threshold while speaking so its own voice doesn't trigger it.)
 - **Push-to-talk.** Click the mic — or the arc-reactor core — to speak a command
   immediately, no wake word needed.
-- **Text-to-speech.** While Jarvis is talking, the mic guards against hearing
-  itself, except for a genuine interruption.
+- **Text-to-speech + voice picker.** Jarvis auto-selects a deep, movie-Jarvis
+  voice — a British male if your system has one (e.g. "Microsoft George"),
+  otherwise a US male like "Microsoft David" — and speaks at a slightly lowered
+  pitch. Use the **VOICE** dropdown (bottom-left) to switch voices and the **▶**
+  button to preview; your choice is remembered. While Jarvis is talking, the mic
+  guards against hearing itself, except for a genuine interruption.
 - **Reliability.** Transcription runs through a cloud speech-to-text API (Whisper
   / gpt-4o-transcribe by default), so it works consistently across machines —
   the key stays in the main process, never in the UI. Point `STT_BASE_URL` at any
@@ -154,6 +158,26 @@ npm run dist:linux  # .AppImage    (run on Linux)
 Output lands in `release/`. Each OS's installer must be built on that OS (or via
 CI). A default icon is used; drop your own at `build/icon.png` (1024×1024) to
 brand it.
+
+### Automated Windows releases (GitHub Actions)
+
+A workflow at `.github/workflows/release.yml` builds the Windows installer
+automatically. To cut a release:
+
+```bash
+# bump the version in package.json first (e.g. 0.1.0 → 0.2.0), then:
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+On a `v*` tag push (or a manual run from the **Actions** tab), it builds on
+`windows-latest`, uploads the `.exe` as a build artifact, and — for tag pushes —
+attaches it to the matching GitHub Release. To ship a **signed** installer with
+no SmartScreen warning, add two repo secrets and the workflow picks them up
+automatically:
+
+- `CSC_LINK` — your code-signing certificate (`.pfx`) as base64
+- `CSC_KEY_PASSWORD` — the certificate password
 
 **Where does the packaged app read your keys?** It looks for a `.env` file next
 to the executable, then in the working directory. So after installing, place your

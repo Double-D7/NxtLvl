@@ -411,6 +411,11 @@ body {
   padding-top: 10px;
   border-top: 1px solid var(--panel-border);
 }
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .wake-row {
   display: flex;
   align-items: center;
@@ -420,6 +425,45 @@ body {
   color: var(--muted);
   cursor: pointer;
   text-transform: uppercase;
+}
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.voice-select {
+  background: rgba(4, 7, 13, 0.8);
+  color: var(--cyan);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 3px 6px;
+  max-width: 190px;
+  outline: none;
+  cursor: pointer;
+}
+.voice-select:focus {
+  border-color: var(--cyan);
+}
+.voice-test {
+  background: rgba(53, 230, 255, 0.1);
+  color: var(--cyan);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+.voice-test:hover {
+  background: rgba(53, 230, 255, 0.22);
 }
 .wake-row input {
   accent-color: var(--cyan);

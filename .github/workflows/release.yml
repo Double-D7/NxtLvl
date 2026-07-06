@@ -1,0 +1,59 @@
+name: Build Windows installer
+
+# Builds the Jarvis Windows installer (.exe) whenever you push a version tag
+# like v0.1.0, and attaches it to the matching GitHub Release. Also runnable
+# on demand from the Actions tab.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to attach the installer to the release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile
+        run: npm run build
+
+      - name: Package Windows installer
+        # --publish never: build only; the release-attach step below handles upload.
+        run: npx electron-builder --win --publish never
+        env:
+          # Code signing (optional): add repo secrets CSC_LINK (base64 .pfx) and
+          # CSC_KEY_PASSWORD to produce a signed installer with no SmartScreen
+          # warning. Left unset here → unsigned build.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Upload installer as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-windows-installer
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+
+      - name: Attach installer to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.exe
+            release/latest.yml
