@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && npm run copy-assets",
     "copy-assets": "node scripts/copy-assets.js",
+    "test": "npm run build && node test/selftest.js",
     "start": "npm run build && electron .",
     "dev": "npm run build && electron .",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",

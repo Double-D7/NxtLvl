@@ -31,6 +31,9 @@ jobs:
       - name: Compile
         run: npm run build
 
+      - name: Run tests
+        run: node test/selftest.js
+
       - name: Package Windows installer
         # --publish never: build only; the release-attach step below handles upload.
         run: npx electron-builder --win --publish never
