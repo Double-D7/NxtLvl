@@ -1,16 +1,22 @@
 name: Build Windows installer
 
-# Builds the Jarvis Windows installer (.exe) whenever you push a version tag
-# like v0.1.0, and attaches it to the matching GitHub Release. Also runnable
-# on demand from the Actions tab.
+# Builds the Jarvis Windows installer (.exe) and publishes it to a GitHub
+# Release you can download from the repo's "Releases" page.
+#
+# Triggers:
+#   - push of a version tag (v0.1.0, …)  → release named after the tag
+#   - push to the development branch      → release named "v0.1.0"
+#   - manual run from the Actions tab
 on:
   push:
+    branches:
+      - "claude/jarvis-voice-assistant-w93mca"
     tags:
       - "v*"
   workflow_dispatch:
 
 permissions:
-  contents: write # needed to attach the installer to the release
+  contents: write # needed to publish the installer to a Release
 
 jobs:
   windows:
@@ -35,12 +41,10 @@ jobs:
         run: node test/selftest.js
 
       - name: Package Windows installer
-        # --publish never: build only; the release-attach step below handles upload.
         run: npx electron-builder --win --publish never
         env:
           # Code signing (optional): add repo secrets CSC_LINK (base64 .pfx) and
-          # CSC_KEY_PASSWORD to produce a signed installer with no SmartScreen
-          # warning. Left unset here → unsigned build.
+          # CSC_KEY_PASSWORD for a signed installer with no SmartScreen warning.
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
@@ -53,10 +57,18 @@ jobs:
             release/*.blockmap
             release/latest.yml
 
-      - name: Attach installer to the GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish installer to a GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          # Use the pushed tag's name when triggered by a tag, else v0.1.0.
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.1.0' }}
+          name: Jarvis ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.1.0' }}
+          body: |
+            Jarvis desktop assistant — Windows installer.
+
+            **Install:** download `Jarvis.Setup.0.1.0.exe` below and run it. Windows
+            SmartScreen may warn (unsigned build) — click **More info → Run anyway**.
+            After installing, put a `.env` with your API keys next to `Jarvis.exe`.
           files: |
             release/*.exe
             release/latest.yml
