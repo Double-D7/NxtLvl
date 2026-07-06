@@ -3,6 +3,12 @@ import { allTools, toolByName } from "./tools";
 import * as google from "./google";
 import type { JarvisReply } from "../shared/types";
 
+/** Streaming callbacks so the UI can speak/print the reply as it arrives. */
+export interface AskCallbacks {
+  onDelta?: (textDelta: string) => void;
+  onTool?: (label: string) => void;
+}
+
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 const EFFORT = (process.env.JARVIS_EFFORT || "medium") as "low" | "medium" | "high";
 const USER_NAME = process.env.JARVIS_USER_NAME || "";
@@ -48,8 +54,8 @@ export class Brain {
     this.history = [];
   }
 
-  /** Process one user utterance and return Jarvis's spoken reply. */
-  async ask(userText: string): Promise<JarvisReply> {
+  /** Process one user utterance and stream Jarvis's spoken reply. */
+  async ask(userText: string, cbs: AskCallbacks = {}): Promise<JarvisReply> {
     const toolsUsed: string[] = [];
     this.history.push({ role: "user", content: userText });
 
@@ -60,7 +66,7 @@ export class Brain {
       for (let step = 0; step < 8; step++) {
         // `thinking: adaptive` and `output_config.effort` are valid for the
         // configured model but newer than the pinned SDK's types, so the params
-        // object is cast when passed to messages.create.
+        // object is cast when passed to the streaming call.
         const params = {
           model: MODEL,
           max_tokens: 1024,
@@ -70,9 +76,12 @@ export class Brain {
           tools: toolDefs,
           messages: this.history,
         };
-        const response = (await this.client.messages.create(
-          params as unknown as Anthropic.MessageCreateParamsNonStreaming,
-        )) as Anthropic.Message;
+        // Stream so the UI can start speaking before the full reply lands.
+        const stream = this.client.messages.stream(
+          params as unknown as Anthropic.MessageStreamParams,
+        );
+        stream.on("text", (delta: string) => cbs.onDelta?.(delta));
+        const response = await stream.finalMessage();
 
         this.history.push({ role: "assistant", content: response.content });
 
@@ -81,7 +90,10 @@ export class Brain {
           for (const block of response.content) {
             if (block.type !== "tool_use") continue;
             const tool = toolByName.get(block.name);
-            if (tool) toolsUsed.push(tool.label);
+            if (tool) {
+              toolsUsed.push(tool.label);
+              cbs.onTool?.(tool.label);
+            }
             let output: string;
             try {
               output = tool

@@ -35,9 +35,13 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
-  ipcMain.handle("jarvis:ask", async (_e, text: string) => {
+  ipcMain.handle("jarvis:ask", async (e, payload: { id: string; text: string }) => {
     if (!brain) brain = new Brain();
-    return brain.ask(text);
+    const channel = `jarvis:stream:${payload.id}`;
+    return brain.ask(payload.text, {
+      onDelta: (delta) => e.sender.send(channel, { type: "delta", text: delta }),
+      onTool: (label) => e.sender.send(channel, { type: "tool", label }),
+    });
   });
 
   ipcMain.handle("jarvis:reset", async () => {

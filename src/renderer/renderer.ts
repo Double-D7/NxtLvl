@@ -1,6 +1,7 @@
 // Renderer: microphone capture with voice-activity detection, a "Hey Jarvis"
-// wake-word state machine, on-screen conversation, and text-to-speech. All
-// "thinking" and transcription happen in the main process via window.jarvis.
+// wake word, streaming speech (Jarvis starts talking as words arrive), and a
+// conversational follow-up window so you can keep talking without repeating the
+// wake word. All "thinking" and transcription happen in the main process.
 
 const conversation = document.getElementById("conversation") as HTMLElement;
 const micBtn = document.getElementById("mic") as HTMLButtonElement;
@@ -11,6 +12,8 @@ const hint = document.getElementById("hint") as HTMLElement;
 const subtitle = document.getElementById("subtitle") as HTMLElement;
 const wakeToggle = document.getElementById("wake-toggle") as HTMLInputElement;
 const wakeDot = document.getElementById("wake-dot") as HTMLElement;
+
+const FOLLOWUP_MS = 9000; // how long to keep listening for a follow-up
 
 let busy = false;
 let sttReady = false;
@@ -37,16 +40,96 @@ function setHint(text: string): void {
   hint.textContent = text;
 }
 
-// ── Text-to-speech (with mic suspension to avoid self-hearing) ────────
-function speak(text: string): Promise<void> {
+// ── Streaming text-to-speech ──────────────────────────────────────────
+// Buffers incoming text and speaks it one sentence at a time, so Jarvis starts
+// talking almost immediately instead of waiting for the whole reply. Suspends
+// the mic while speaking so it never hears itself.
+class SpeechStreamer {
+  private buffer = "";
+  private queue: string[] = [];
+  private speaking = false;
+  private producing = true; // true until finish() is called
+  private drained: () => void = () => {};
+  readonly done: Promise<void>;
+
+  constructor() {
+    this.done = new Promise((resolve) => (this.drained = resolve));
+    listener?.suspend();
+  }
+
+  push(delta: string): void {
+    this.buffer += delta;
+    // Flush everything up to the last sentence terminator; keep the remainder.
+    const m = this.buffer.match(/^[\s\S]*[.!?\n](?=\s|$)/);
+    if (!m) return;
+    const chunk = m[0].trim();
+    this.buffer = this.buffer.slice(m[0].length);
+    if (chunk) this.enqueue(chunk);
+  }
+
+  finish(): void {
+    this.producing = false;
+    const rest = this.buffer.trim();
+    this.buffer = "";
+    if (rest) this.enqueue(rest);
+    this.pump();
+  }
+
+  cancel(): void {
+    this.producing = false;
+    this.queue = [];
+    window.speechSynthesis?.cancel();
+    this.finalize();
+  }
+
+  private enqueue(sentence: string): void {
+    this.queue.push(sentence);
+    this.pump();
+  }
+
+  private pump(): void {
+    if (this.speaking) return;
+    const next = this.queue.shift();
+    if (!next) {
+      if (!this.producing) this.finalize();
+      return;
+    }
+    if (!("speechSynthesis" in window)) {
+      // No TTS available — just drain.
+      this.pump();
+      return;
+    }
+    this.speaking = true;
+    const utter = new SpeechSynthesisUtterance(next);
+    utter.rate = 1.03;
+    const step = () => {
+      this.speaking = false;
+      this.pump();
+    };
+    utter.onend = step;
+    utter.onerror = step;
+    window.speechSynthesis.speak(utter);
+  }
+
+  private finalized = false;
+  private finalize(): void {
+    if (this.finalized) return;
+    this.finalized = true;
+    // Small tail so the speaker audio drains before the mic resumes.
+    setTimeout(() => listener?.resume(), 250);
+    this.drained();
+  }
+}
+
+// A one-shot speak for short cues (greeting, "Yes?", reminders).
+function speakOnce(text: string): Promise<void> {
   return new Promise((resolve) => {
     if (!("speechSynthesis" in window) || !text) return resolve();
     window.speechSynthesis.cancel();
+    listener?.suspend();
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = 1.03;
-    listener?.suspend(); // don't transcribe Jarvis's own voice
     const done = () => {
-      // Small tail so the speaker audio fully drains before we listen again.
       setTimeout(() => listener?.resume(), 250);
       resolve();
     };
@@ -56,32 +139,52 @@ function speak(text: string): Promise<void> {
   });
 }
 
-// ── Talking to Jarvis's brain ─────────────────────────────────────────
+// ── Talking to Jarvis's brain (streaming) ─────────────────────────────
 async function handleCommand(text: string): Promise<void> {
   const clean = text.trim();
   if (!clean || busy) return;
   busy = true;
-  listener?.suspend(); // pause listening while we think + reply
+  clearFollowup();
   addBubble("user", clean);
 
-  const thinking = addBubble("jarvis", "…");
-  thinking.classList.add("thinking");
+  const bubble = addBubble("jarvis", "…");
+  bubble.classList.add("thinking");
+  const speaker = new SpeechStreamer();
+  let acc = "";
+  const toolLabels: string[] = [];
 
   try {
-    const reply = await window.jarvis.ask(clean);
-    thinking.classList.remove("thinking");
-    thinking.textContent = reply.text;
-    if (reply.error) thinking.classList.add("error");
-    setToolsUsed(thinking, reply.toolsUsed);
-    await speak(reply.text);
+    const reply = await window.jarvis.ask(
+      clean,
+      (delta) => {
+        acc += delta;
+        bubble.classList.remove("thinking");
+        bubble.textContent = acc;
+        conversation.scrollTop = conversation.scrollHeight;
+        speaker.push(delta);
+      },
+      (label) => {
+        if (!toolLabels.includes(label)) toolLabels.push(label);
+      },
+    );
+
+    // Fallback if streaming produced nothing (e.g. very short reply).
+    if (!acc && reply.text) {
+      bubble.classList.remove("thinking");
+      bubble.textContent = reply.text;
+      speaker.push(reply.text);
+    }
+    if (reply.error) bubble.classList.add("error");
+    setToolsUsed(bubble, reply.toolsUsed.length ? reply.toolsUsed : toolLabels);
+    speaker.finish();
+    await speaker.done;
   } catch {
-    thinking.classList.remove("thinking");
-    thinking.textContent = "Something went wrong talking to Jarvis.";
-    thinking.classList.add("error");
+    speaker.cancel();
+    bubble.classList.remove("thinking");
+    bubble.textContent = "Something went wrong talking to Jarvis.";
+    bubble.classList.add("error");
   } finally {
     busy = false;
-    listener?.resume();
-    updateHint();
   }
 }
 
@@ -89,65 +192,92 @@ textForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = textInput.value;
   textInput.value = "";
-  void handleCommand(text);
+  void runCommand(text);
 });
 
-// ── Wake-word detection ───────────────────────────────────────────────
-// Match "jarvis" / "hey jarvis" / "hey, jarvis" at/near the start and return
-// whatever the user said AFTER it (e.g. "hey jarvis what's next" → "what's next").
+// ── Wake word + conversational state machine ──────────────────────────
 const WAKE_RE = /(?:^|\b)(?:hey[,\s]+|ok[,\s]+|hi[,\s]+)?jarvis\b[\s,.!?]*/i;
 
 function stripWake(text: string): { matched: boolean; rest: string } {
   const m = text.match(WAKE_RE);
   if (!m) return { matched: false, rest: "" };
-  const rest = text.slice((m.index ?? 0) + m[0].length).trim();
-  return { matched: true, rest };
+  return { matched: true, rest: text.slice((m.index ?? 0) + m[0].length).trim() };
 }
 
 function isMeaningful(text: string): boolean {
   return text.replace(/[^a-z0-9]/gi, "").length >= 3;
 }
 
-// Mode: 'idle' = not listening, 'armed' = waiting for wake word,
-// 'command' = the next utterance is a command (post-wake or manual mic).
 type Mode = "idle" | "armed" | "command";
 let mode: Mode = "idle";
-// Set by the mic button: force the next captured utterance to be a command,
-// bypassing the wake word.
 let forceNextAsCommand = false;
+let followupTimer = 0;
+
+function clearFollowup(): void {
+  if (followupTimer) {
+    clearTimeout(followupTimer);
+    followupTimer = 0;
+  }
+}
+
+// After a reply, keep listening briefly so the user can keep the conversation
+// going without saying "Hey Jarvis" again.
+function openFollowupWindow(): void {
+  if (!wakeToggle.checked) {
+    stopListening(); // pure push-to-talk: stop after one command
+    return;
+  }
+  mode = "command";
+  setHint("Still listening — just keep talking, or stay quiet to stop.");
+  clearFollowup();
+  followupTimer = window.setTimeout(() => {
+    if (mode === "command") {
+      mode = "armed";
+      updateHint();
+    }
+  }, FOLLOWUP_MS);
+}
+
+// Runs a command end-to-end, then opens the follow-up window.
+async function runCommand(text: string): Promise<void> {
+  clearFollowup();
+  await handleCommand(text);
+  openFollowupWindow();
+}
 
 async function onUtterance(text: string): Promise<void> {
   if (!text) return;
 
   if (forceNextAsCommand || mode === "command") {
     forceNextAsCommand = false;
-    if (mode === "command") mode = wakeToggle.checked ? "armed" : "idle";
-    await handleCommand(text);
-    if (!wakeToggle.checked) stopListening();
+    await runCommand(text);
     return;
   }
 
-  // Armed: only react if the wake word is present.
+  // Armed: only react to the wake word.
   const { matched, rest } = stripWake(text);
   if (!matched) {
     updateHint();
     return;
   }
   if (isMeaningful(rest)) {
-    // "Hey Jarvis, what's on my calendar" — command came with the wake word.
-    await handleCommand(rest);
+    await runCommand(rest); // "Hey Jarvis, <command>" in one breath
   } else {
-    // Just "Hey Jarvis" — acknowledge and capture the next utterance.
+    // Bare "Hey Jarvis" — acknowledge and wait for the command.
     mode = "command";
     setHint("Yes? I'm listening…");
-    await speak("Yes?");
+    await speakOnce("Yes?");
+    clearFollowup();
+    followupTimer = window.setTimeout(() => {
+      if (mode === "command") {
+        mode = "armed";
+        updateHint();
+      }
+    }, FOLLOWUP_MS);
   }
 }
 
 // ── Microphone capture + voice-activity detection ─────────────────────
-// Energy-gated: we start recording when you begin speaking and stop after a
-// short silence, then send just that clip to be transcribed. Nothing is sent
-// while you're silent.
 class MicListener {
   private stream: MediaStream | null = null;
   private ctx: AudioContext | null = null;
@@ -161,7 +291,6 @@ class MicListener {
   private speechStart = 0;
   private raf = 0;
 
-  // Tunables (RMS is 0..1).
   private readonly startThreshold = 0.025;
   private readonly stopThreshold = 0.018;
   private readonly silenceHangMs = 750;
@@ -201,6 +330,7 @@ class MicListener {
     this.suspended = true;
     if (this.recorder && this.recorder.state === "recording") this.recorder.stop();
     this.speaking = false;
+    this.silenceStart = 0;
   }
 
   resume(): void {
@@ -229,7 +359,7 @@ class MicListener {
     this.recorder.ondataavailable = (e) => {
       if (e.data.size > 0) this.chunks.push(e.data);
     };
-    this.recorder.onstop = () => this.finishSegment();
+    this.recorder.onstop = () => void this.finishSegment();
     this.recorder.start();
     this.speechStart = performance.now();
   }
@@ -297,9 +427,8 @@ async function ensureListener(): Promise<boolean> {
   try {
     await listener.start();
     return true;
-  } catch (err: any) {
+  } catch {
     setHint("Microphone unavailable. Check mic permissions. You can still type.");
-    wakeToggle.checked = false;
     return false;
   }
 }
@@ -308,6 +437,7 @@ function stopListening(): void {
   listener?.stop();
   wakeDot.classList.remove("live");
   mode = "idle";
+  clearFollowup();
 }
 
 function updateHint(): void {
@@ -341,21 +471,13 @@ micBtn.addEventListener("click", async () => {
   if (!ok) return;
   forceNextAsCommand = true;
   if (mode === "idle") mode = "command";
-  micBtn.classList.add("listening");
   setHint("Listening… speak your command.");
-  // Visual reset once we start processing/replying.
-  const clear = setInterval(() => {
-    if (busy) {
-      micBtn.classList.remove("listening");
-      clearInterval(clear);
-    }
-  }, 200);
 });
 
 // ── Reminders spoken proactively ──────────────────────────────────────
 window.jarvis.onSpeak((text) => {
   addBubble("jarvis", text);
-  void speak(text);
+  void speakOnce(text);
 });
 
 // ── Startup ───────────────────────────────────────────────────────────
@@ -384,7 +506,7 @@ window.jarvis.onSpeak((text) => {
     : "Hello. Say “Hey Jarvis” or click the mic when you need me.";
   addBubble("jarvis", greeting);
 
-  // Auto-arm the wake word if voice is ready, so it's hands-free out of the box.
+  // Auto-arm the wake word so it's hands-free out of the box.
   if (sttReady) {
     wakeToggle.checked = true;
     const ok = await ensureListener();

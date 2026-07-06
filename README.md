@@ -101,10 +101,17 @@ subject, and body back to you and waits for an explicit "yes, send it."
   treated as your command. Say _"Hey Jarvis, what's on my calendar"_ and it just
   answers; say _"Hey Jarvis"_ alone and it replies "Yes?" and waits for you.
   Toggle it off anytime with the **"Hey Jarvis" wake word** switch.
+- **Keep talking — no repeating the wake word.** After Jarvis replies it stays
+  listening for a few seconds, so you can go back and forth naturally: _"Hey
+  Jarvis, what's on my calendar?"_ … _"move the 2pm to 3"_ … _"and remind me an
+  hour before."_ Stay quiet and it quietly returns to waiting for the wake word.
+- **Streaming replies.** Jarvis speaks each sentence the moment it's ready
+  instead of waiting for the whole answer, so it feels like a conversation, not a
+  request/response. The reply also types out on screen as it's spoken.
 - **Push-to-talk.** Click the mic to speak a command immediately, no wake word
   needed.
-- **Text-to-speech.** Jarvis speaks replies aloud. While it's talking, the mic
-  pauses so it doesn't hear itself.
+- **Text-to-speech.** While Jarvis is talking, the mic pauses so it doesn't hear
+  itself.
 - **Reliability.** Transcription runs through a cloud speech-to-text API (Whisper
   / gpt-4o-transcribe by default), so it works consistently across machines —
   the key stays in the main process, never in the UI. Point `STT_BASE_URL` at any

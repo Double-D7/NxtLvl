@@ -19,7 +19,11 @@ interface TranscriptResult {
 }
 
 interface JarvisBridge {
-  ask(text: string): Promise<JarvisReply>;
+  ask(
+    text: string,
+    onDelta?: (delta: string) => void,
+    onTool?: (label: string) => void,
+  ): Promise<JarvisReply>;
   reset(): Promise<void>;
   getStatus(): Promise<JarvisStatus>;
   transcribe(bytes: ArrayBuffer, mimeType: string): Promise<TranscriptResult>;
