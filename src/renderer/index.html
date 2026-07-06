@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+    />
+    <title>Jarvis</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Jarvis</h1>
+      <span id="subtitle">your assistant</span>
+    </header>
+
+    <div id="banner" class="banner hidden"></div>
+
+    <main id="conversation" aria-live="polite"></main>
+
+    <footer>
+      <button id="mic" class="mic" title="Hold to talk, or click to toggle listening">
+        <span class="mic-icon">🎙️</span>
+      </button>
+      <form id="text-form">
+        <input
+          id="text-input"
+          type="text"
+          placeholder="Type to Jarvis…"
+          autocomplete="off"
+        />
+        <button id="send" type="submit">Send</button>
+      </form>
+      <div id="hint">Click the mic and speak, or type below.</div>
+    </footer>
+
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>

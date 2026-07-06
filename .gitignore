@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Jarvis runtime data (stored in the OS userData dir at runtime, but ignore any local copies)
+jarvis-data/

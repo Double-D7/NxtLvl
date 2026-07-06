@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "outDir": "dist/renderer",
+    "rootDir": "src/renderer",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": false
+  },
+  "include": ["src/renderer/**/*.ts"]
+}

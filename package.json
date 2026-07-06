@@ -1,0 +1,24 @@
+{
+  "name": "nxtlvl-jarvis",
+  "version": "0.1.0",
+  "description": "Jarvis — a voice-controlled personal assistant powered by Claude",
+  "main": "dist/main/main.js",
+  "author": "David Devitt",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && npm run copy-assets",
+    "copy-assets": "node scripts/copy-assets.js",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron .",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^33.2.0",
+    "typescript": "^5.7.2"
+  }
+}
