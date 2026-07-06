@@ -292,7 +292,8 @@ async function handleCommand(text: string): Promise<void> {
     setToolsUsed(bubble, reply.toolsUsed.length ? reply.toolsUsed : toolLabels);
     speaker.finish();
     await speaker.done;
-  } catch {
+  } catch (e) {
+    console.error("handleCommand failed:", e);
     speaker.cancel();
     bubble.classList.remove("thinking");
     bubble.textContent = "Something went wrong talking to Jarvis.";
