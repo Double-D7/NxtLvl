@@ -133,6 +133,46 @@ footer {
   gap: 10px;
 }
 
+.wake-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.wake-row input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.wake-label {
+  letter-spacing: 0.3px;
+}
+.wake-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #33415a;
+  transition: background 0.2s;
+}
+.wake-dot.live {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: breathe 2s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .mic {
   width: 66px;
   height: 66px;

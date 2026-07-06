@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, session } from "electron";
 import * as path from "path";
 import * as dotenv from "dotenv";
 
@@ -9,6 +9,7 @@ dotenv.config({ path: path.join(app.getAppPath(), ".env") });
 import { Brain } from "./brain";
 import { startReminderScheduler } from "./tools/reminders";
 import * as google from "./google";
+import * as stt from "./stt";
 
 let mainWindow: BrowserWindow | null = null;
 let brain: Brain | null = null;
@@ -46,11 +47,26 @@ function registerIpc(): void {
   ipcMain.handle("jarvis:status", async () => ({
     hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
     googleConfigured: google.isConfigured(),
+    sttConfigured: stt.isConfigured(),
     userName: process.env.JARVIS_USER_NAME || "",
   }));
+
+  ipcMain.handle("jarvis:transcribe", async (_e, bytes: ArrayBuffer, mimeType: string) => {
+    try {
+      return { text: await stt.transcribe(bytes, mimeType) };
+    } catch (err: any) {
+      return { text: "", error: err?.message ?? String(err) };
+    }
+  });
 }
 
 app.whenReady().then(() => {
+  // Allow the renderer to use the microphone (getUserMedia). Only 'media' is
+  // granted; everything else is denied.
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === "media");
+  });
+
   registerIpc();
   createWindow();
 

@@ -21,7 +21,12 @@
     <main id="conversation" aria-live="polite"></main>
 
     <footer>
-      <button id="mic" class="mic" title="Hold to talk, or click to toggle listening">
+      <label id="wake-row" class="wake-row" title="Listen for 'Hey Jarvis' hands-free">
+        <input type="checkbox" id="wake-toggle" />
+        <span class="wake-label">“Hey Jarvis” wake word</span>
+        <span id="wake-dot" class="wake-dot"></span>
+      </label>
+      <button id="mic" class="mic" title="Click and speak a command">
         <span class="mic-icon">🎙️</span>
       </button>
       <form id="text-form">

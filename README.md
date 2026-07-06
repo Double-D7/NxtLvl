@@ -14,8 +14,8 @@ actually *do* things for you by voice or text:
   late" _(needs Google credentials — always confirms before sending)_
 - 💬 **General chat & Q&A** — ask it anything.
 
-It **speaks its answers aloud** and **listens for your voice**, with a text box
-as a reliable fallback.
+It **speaks its answers aloud** and **listens for your voice** — including a
+hands-free **"Hey Jarvis" wake word** — with a text box as a reliable fallback.
 
 ---
 
@@ -25,16 +25,18 @@ as a reliable fallback.
 # 1. Install dependencies
 npm install
 
-# 2. Configure your API key
+# 2. Configure your keys
 cp .env.example .env
-#    then edit .env and paste your Anthropic API key
-#    (get one at https://console.anthropic.com/)
+#    then edit .env and add:
+#      ANTHROPIC_API_KEY  (required — https://console.anthropic.com/)
+#      OPENAI_API_KEY     (for voice input + wake word — https://platform.openai.com/)
 
 # 3. Run Jarvis
 npm start
 ```
 
-That's it. Reminders, chat, and voice output work immediately.
+Reminders, chat, and voice **output** work with just the Anthropic key. Add the
+OpenAI key to unlock voice **input** and "Hey Jarvis".
 
 ---
 
@@ -52,8 +54,9 @@ src/
       reminders.ts      ← local reminders + due-time notifications
       calendar.ts       ← Google Calendar (list / create events)
       email.ts          ← Gmail (search / send)
+    stt.ts              ← cloud speech-to-text (key stays server-side)
   renderer/             ← the UI (Chromium) — the voice side
-    renderer.ts         ← mic (speech-to-text), speaker (text-to-speech), chat
+    renderer.ts         ← mic capture + VAD, "Hey Jarvis" wake word, TTS, chat
     index.html / styles.css
   shared/types.ts       ← types shared across both processes
 ```
@@ -89,17 +92,26 @@ subject, and body back to you and waits for an explicit "yes, send it."
 
 ---
 
-## A note on voice input
+## How the voice works
 
-**Text-to-speech (Jarvis talking) works everywhere.** Speech-to-text uses the
-browser's built-in Web Speech API. In some Electron builds this recognizer isn't
-available (Electron's Chromium doesn't always ship Google's speech backend). If
-the mic doesn't work on your machine, everything still works by **typing**, and
-the app tells you so.
+- **"Hey Jarvis" wake word (hands-free).** When voice is enabled the mic listens
+  in the background. It only records when it hears you speaking (local
+  voice-activity detection — silence is never sent anywhere), then transcribes
+  that clip. If the clip starts with "Hey Jarvis" (or just "Jarvis"), the rest is
+  treated as your command. Say _"Hey Jarvis, what's on my calendar"_ and it just
+  answers; say _"Hey Jarvis"_ alone and it replies "Yes?" and waits for you.
+  Toggle it off anytime with the **"Hey Jarvis" wake word** switch.
+- **Push-to-talk.** Click the mic to speak a command immediately, no wake word
+  needed.
+- **Text-to-speech.** Jarvis speaks replies aloud. While it's talking, the mic
+  pauses so it doesn't hear itself.
+- **Reliability.** Transcription runs through a cloud speech-to-text API (Whisper
+  / gpt-4o-transcribe by default), so it works consistently across machines —
+  the key stays in the main process, never in the UI. Point `STT_BASE_URL` at any
+  OpenAI-compatible endpoint (a local Whisper server, Groq, etc.) if you prefer.
 
-For rock-solid, always-available voice input, the next step is wiring in a cloud
-speech-to-text engine (e.g. OpenAI Whisper) — the tool/brain architecture is
-ready for it. That's the natural v2 upgrade.
+If no OpenAI key is set, voice input is simply disabled and Jarvis tells you so —
+typing and spoken replies still work.
 
 ---
 
@@ -113,6 +125,9 @@ All settings live in `.env` (see `.env.example`):
 | `ANTHROPIC_MODEL` | — | Which Claude model to use |
 | `JARVIS_EFFORT` | — | `low` / `medium` / `high` reasoning depth |
 | `JARVIS_USER_NAME` | — | What Jarvis calls you |
+| `OPENAI_API_KEY` | — | Enables voice input + "Hey Jarvis" |
+| `STT_MODEL` | — | Transcription model (default `gpt-4o-mini-transcribe`) |
+| `STT_BASE_URL` / `STT_API_KEY` | — | Use any OpenAI-compatible STT endpoint |
 | `GOOGLE_CLIENT_ID` | — | Enables Calendar + Email |
 | `GOOGLE_CLIENT_SECRET` | — | Enables Calendar + Email |
 
