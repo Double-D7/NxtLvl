@@ -341,67 +341,68 @@ const TARGETS = { cal:3100, protein:250, carbs:300, fat:85, waterGal:1.5, steps:
 const R = { g:"g", y:"y", r:"r" };
 const RTXT = { g:"Green · excellent choice", y:"Yellow · brace & control", r:"Red · avoid" };
 
+// Built around David's home gym: adjustable benches, Olympic barbell + bench station,
+// dumbbells, plate-loaded lat tower, preacher/leg-developer, power tower, treadmill.
+// No hack/leg-press/sled/cables — every movement below uses what's on hand.
 const SPLIT = [
-  { key:"mon", d:"Mon", title:"Push", sub:"Chest · Shoulders · Triceps", cardio:"20 min incline walk", ex:[
+  { key:"mon", d:"Mon", title:"Push", sub:"Chest · Shoulders · Triceps", cardio:"20 min incline treadmill", ex:[
     ["Incline DB Press","4 × 8–10",R.g],
-    ["Flat DB Press","4 × 10",R.g],
-    ["Machine Chest Press","3 × 12",R.g],
-    ["Cable Fly","3 × 15",R.g],
-    ["Machine Shoulder Press","4 × 10",R.g],
-    ["Lateral Raise","5 × 15–20",R.g],
-    ["Rear Delt Fly","4 × 15",R.g],
-    ["Rope Pushdown","4 × 12",R.g],
-    ["Overhead Rope Extension","3 × 15",R.g],
+    ["Flat Barbell Bench Press","4 × 8",R.g],
+    ["Flat DB Fly","3 × 15",R.g],
+    ["Seated DB Shoulder Press","4 × 10",R.g],
+    ["DB Lateral Raise","5 × 15–20",R.g],
+    ["Chest-Supported Rear Delt Fly","4 × 15",R.g],
+    ["Dips (power tower)","4 × 10–12",R.g],
+    ["Overhead DB Extension","3 × 15",R.g],
   ]},
-  { key:"tue", d:"Tue", title:"Pull", sub:"Back · Biceps", cardio:"20 min", ex:[
-    ["Chest-Supported Row","4 × 10",R.g],
-    ["Wide-Grip Lat Pulldown","4 × 12",R.g],
-    ["Seated Cable Row","4 × 12",R.g],
-    ["Single-Arm Machine Row","3 × 12",R.g],
+  { key:"tue", d:"Tue", title:"Pull", sub:"Back · Biceps", cardio:"20 min treadmill", ex:[
+    ["Lat Pulldown","4 × 12",R.g],
+    ["Chest-Supported DB Row","4 × 10",R.g],
+    ["One-Arm DB Row","3 × 12",R.g],
     ["Straight-Arm Pulldown","3 × 15",R.g],
-    ["EZ Bar Curl","4 × 10",R.y],
-    ["Hammer Curl","3 × 12",R.y],
-    ["Preacher Curl","3 × 15",R.g],
-    ["Farmer Carries","5 × 40 yd",R.y],
+    ["Preacher Curl","3 × 12",R.g],
+    ["Incline DB Curl","3 × 12",R.g],
+    ["DB Hammer Curl","3 × 12",R.y],
+    ["DB Farmer Carry","4 × 40 yd",R.y],
   ]},
-  { key:"wed", d:"Wed", title:"Legs + Core", sub:"Lower Body", cardio:"20 min", ex:[
-    ["Hack Squat","4 × 10",R.g],
-    ["Leg Press","4 × 15",R.g],
-    ["Bulgarian Split Squat","3 × 12",R.y],
-    ["Lying Ham Curl","4 × 12",R.g],
+  { key:"wed", d:"Wed", title:"Legs + Core", sub:"Lower Body", cardio:"20 min treadmill", ex:[
+    ["Goblet Squat","4 × 10",R.y],
+    ["DB Bulgarian Split Squat","3 × 12",R.y],
+    ["DB Reverse Lunge","3 × 20 steps",R.y],
     ["Leg Extension","4 × 15",R.g],
-    ["Standing Calf Raise","5 × 15",R.g],
+    ["Lying Leg Curl","4 × 12",R.g],
+    ["DB Calf Raise","5 × 15",R.g],
     ["Bird Dogs","3 × 10 / side",R.g],
     ["McGill Curl-Ups","3 × 8",R.g],
     ["Side Planks","3 × 30 s",R.g],
-    ["Pallof Press","3 × 12 / side",R.g],
+    ["Dead Bug","3 × 10 / side",R.g],
   ]},
-  { key:"thu", d:"Thu", title:"Recovery", sub:"Mobility · Walk", cardio:"45 min walk", ex:[
-    ["45-Minute Walk","—",R.g],
+  { key:"thu", d:"Thu", title:"Recovery", sub:"Mobility · Walk", cardio:"45 min treadmill walk", ex:[
+    ["45-Minute Treadmill Walk","—",R.g],
     ["Hip Mobility Flow","8–10 min",R.g],
     ["Thoracic Mobility","8–10 min",R.g],
     ["McGill Big 3 (Core)","1 round",R.g],
     ["Full-Body Stretch","10 min",R.g],
   ]},
   { key:"fri", d:"Fri", title:"Grizzly Day", sub:"Upper Power", cardio:"15 min after lifting", ex:[
-    ["Incline Bench","5 × 5",R.y],
+    ["Barbell Bench Press","5 × 5",R.g],
     ["Weighted Pull-Ups","5 × 6–8",R.y],
-    ["Chest-Supported Row","4 × 8",R.g],
-    ["Machine Shoulder Press","4 × 8",R.g],
-    ["Heavy Shrugs","5 × 12",R.y],
-    ["Farmer Carries","Heavy",R.y],
-    ["Sled Push","10 trips",R.g],
-    ["Battle Ropes","10 × 30 s",R.g],
+    ["Chest-Supported DB Row","4 × 8",R.g],
+    ["Seated DB Shoulder Press","4 × 8",R.g],
+    ["DB Shrugs","5 × 12",R.y],
+    ["Dips (power tower)","4 × AMRAP",R.g],
+    ["DB Farmer Carry","5 × heavy",R.y],
+    ["Treadmill Incline Intervals","10 × 30 s",R.g],
   ]},
   { key:"sat", d:"Sat", title:"Legs + Strongman", sub:"Conditioning", cardio:"Strongman conditioning", ex:[
-    ["Belt Squat","5 × 10",R.g],
-    ["Walking Lunges","4 × 20 steps",R.y],
-    ["Hack Squat","3 × 15",R.g],
-    ["Seated Ham Curl","4 × 15",R.g],
-    ["Calf Raise","5 × 20",R.g],
-    ["Sled Push","conditioning",R.g],
-    ["Sandbag Carry","conditioning",R.y],
-    ["Prowler / Rope Work","conditioning",R.g],
+    ["Goblet Squat","5 × 10",R.y],
+    ["DB Walking Lunge","4 × 20 steps",R.y],
+    ["Leg Extension","3 × 15",R.g],
+    ["Seated Leg Curl","4 × 15",R.g],
+    ["DB Calf Raise","5 × 20",R.g],
+    ["DB Farmer Carry","conditioning",R.y],
+    ["DB Suitcase Carry","conditioning",R.y],
+    ["Treadmill Incline Push","conditioning",R.g],
   ]},
   { key:"sun", d:"Sun", title:"Rest", sub:"Recover · Family", cardio:"Easy walk optional", ex:[
     ["Rest Day","Take the kids somewhere. Walk the pigs. Recover.",R.g],
@@ -454,7 +455,8 @@ const MEASURE_FIELDS = [
   ["calfR","R Calf"],["calfL","L Calf"],
 ];
 const PHOTO_LIST = ["Front","Front relaxed","Back","Back relaxed","Left side","Right side","Front double biceps","Back double biceps","Most muscular"];
-const BENCHMARKS = ["Incline DB Press","Machine Shoulder Press","Chest-Supported Row","Hack Squat","Leg Press","Wide-Grip Lat Pulldown","Farmer Carries"];
+const BENCHMARKS = ["Incline DB Press","Barbell Bench Press","Seated DB Shoulder Press","Chest-Supported DB Row","Lat Pulldown","Goblet Squat","Leg Extension","Weighted Pull-Ups","DB Farmer Carry"];
+const EQUIPMENT = ["Adjustable FID benches","Olympic barbell + bench station","Full dumbbell rack","Plate-loaded lat tower","Preacher / leg developer","Power tower (pull-ups · dips)","Treadmill"];
 
 /* ---------- store ---------- */
 const KEY = "projectGrizzly.v1";
@@ -959,8 +961,16 @@ function VIEW_book(){
   </div>
 
   <div class="card book">
+    <div class="eyebrow">Your Gym</div>
+    <p style="margin-top:6px">Every workout is built around the equipment in your shop — nothing here needs a machine you don't own.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+      ${EQUIPMENT.map(e=>`<span class="badge" style="background:rgba(45,212,191,.12);color:#8be7db;border-color:rgba(45,212,191,.3)">${e}</span>`).join("")}
+    </div>
+  </div>
+
+  <div class="card book">
     <div class="eyebrow">Section 05 · Back-Safe Exercise Library</div>
-    <p style="margin-top:6px">Every movement rated for a repaired L3–L5 spine. When in doubt, choose green. Toughness is protecting the back, not ignoring it.</p>
+    <p style="margin-top:6px">Every movement rated for a repaired L3–L5 spine and matched to your gym. When in doubt, choose green. With no safety rack, barbell back squats and deadlifts are out on <em>both</em> counts — we build legs from goblet squats, split squats and the leg developer instead.</p>
     <div class="rat-legend" style="margin:10px 0 4px">
       <span><span class="dot g"></span> ${RTXT.g}</span>
       <span><span class="dot y"></span> ${RTXT.y}</span>
@@ -1023,7 +1033,7 @@ function VIEW_book(){
 function exLibrary(){
   const seen={}; const out=[];
   SPLIT.forEach(s=>s.ex.forEach(e=>{ if(!seen[e[0]] && e[1]!=="—" && !e[0].includes("Rest")){ seen[e[0]]=1; out.push(e);} }));
-  const extra=[["Conventional Deadlift","axial load",R.r],["Barbell Back Squat","axial load",R.r],["Barbell Bent-Over Row","spinal flexion",R.r],["Good Mornings","spinal load",R.r],["Standing Barbell OHP (heavy)","axial load",R.y]];
+  const extra=[["Conventional Deadlift","axial load · avoid",R.r],["Barbell Back Squat","axial load · no rack",R.r],["Barbell Bent-Over Row","spinal flexion",R.r],["Good Mornings","spinal load",R.r],["Barbell RDL (heavy)","hinge under load",R.r],["Standing Barbell OHP (heavy)","axial load",R.y]];
   extra.forEach(e=>{ if(!seen[e[0]]){seen[e[0]]=1;out.push(e);} });
   const order={g:0,y:1,r:2};
   out.sort((a,b)=>order[a[2]]-order[b[2]]);
