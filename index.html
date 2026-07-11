@@ -379,6 +379,20 @@ input[type=range]::-moz-range-track{height:5px;border-radius:999px;background:va
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:linear-gradient(180deg,var(--purple),var(--purple-dim));margin-top:-9px;border:2px solid #fff2}
 input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--purple);border:2px solid #fff2}
 
+/* cookbook */
+.recipe{border-top:1px solid var(--line-soft);padding:11px 2px}
+.recipe:first-child{border-top:0}
+.rhead{display:flex;align-items:center;gap:10px;cursor:pointer}
+.rhead .rn{font-weight:700;font-size:14.5px}
+.rhead .rc{font-size:11px;color:var(--mute);margin-top:2px}
+.rhead .rmac{margin-left:auto;font-family:var(--disp);font-weight:700;color:var(--teal);font-size:14px;white-space:nowrap}
+.rhead .rchev{color:var(--mute);font-size:18px;font-weight:400;width:16px;text-align:center}
+.rbody{margin-top:10px;padding-left:2px}
+.rmacfull{font-size:11px;color:var(--teal);font-weight:700;letter-spacing:.02em;margin-bottom:6px}
+.r-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);font-weight:700;margin:8px 0 4px}
+.r-ul{margin:0;padding-left:18px;color:var(--ink-2);font-size:13px;line-height:1.7}
+.rmethod{color:var(--ink-2);font-size:13px;line-height:1.5;margin:2px 0 0}
+
 /* dock scales to 7 items */
 nav.dock button{font-size:9px;letter-spacing:.03em}
 nav.dock button svg{width:22px;height:22px}
@@ -493,6 +507,320 @@ const GROCERIES = {
   "Supplements":["Whey protein","Creatine","Fish oil","Vitamin D3","Magnesium","Electrolyte packets"],
 };
 
+// Meal slots are the same 7 daily anchors every week; foods rotate so you never get bored.
+// Each week targets ~3,100 kcal · 250P / 300C / 85F.
+const SLOTS=[["m1","Meal 1","5:30–6:00 AM"],["m2","Meal 2","9:00 AM"],["m3","Meal 3","Noon"],
+  ["pre","Pre-Workout","2–3 PM"],["post","Post-Workout","After training"],["din","Dinner","Evening"],["bed","Before Bed","Pre-sleep"]];
+function mk(theme,prep,rows,grocery){
+  return { theme, prep, grocery, meals: SLOTS.map((s,i)=>({id:s[0],t:s[1],time:s[2],items:rows[i][0],macro:rows[i][1],extra:rows[i][2]||""})) };
+}
+const MEALPLANS=[
+  mk("Classic","Sunday: grill 3 lb chicken, bake 6 potatoes, cook 5 cups rice. Portion into containers.",
+    [["6 whole eggs · 1 cup egg whites · 100 g oats · blueberries · coffee","P55 · C80 · F30","+ Creatine 5 g, Fish Oil, Vitamin D3"],
+     ["8 oz grilled chicken · 250 g jasmine rice · green vegetables","P60 · C70 · F6"],
+     ["8 oz 93/7 ground beef · 300 g baked potato · vegetables","P48 · C55 · F20"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · fast carb (Rice Krispies) 50–70 g","P50 · C60 · F2"],
+     ["8 oz steak/chicken/turkey/pork · 250 g sweet potato · large salad","P55 · C50 · F18"],
+     ["2 cups low-fat cottage cheese OR plain Greek yogurt","P46 · C18 · F5"]],
+    {"Produce":["Bananas","Blueberries","Broccoli","Baking potatoes","Sweet potatoes","Salad greens"],
+     "Meat & Eggs":["Chicken breast (3 lb)","93/7 ground beef (2 lb)","Steak","Eggs (2 dozen)","Egg whites"],
+     "Dairy":["Low-fat cottage cheese","Greek yogurt"],
+     "Pantry":["Jasmine rice","Cream of Rice","Oats","Rice Krispies","Olive oil"]}),
+  mk("Tex-Mex","Batch-cook fajita chicken and turkey chili Sunday; warm and top through the week.",
+    [["4 whole eggs · 1 cup egg whites scramble · black beans · 2 corn tortillas · salsa · coffee","P52 · C70 · F26","+ Creatine, Fish Oil, D3"],
+     ["Fajita chicken bowl — 8 oz chicken · 250 g rice · peppers & onions · salsa","P60 · C72 · F8"],
+     ["Beef taco bowl — 8 oz 93/7 · 200 g potato · lettuce · pico","P48 · C50 · F20"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · pretzels 60 g","P50 · C55 · F3"],
+     ["Turkey chili · 200 g rice · side salad","P55 · C55 · F16"],
+     ["Greek yogurt · cinnamon · drizzle of honey","P46 · C22 · F4"]],
+    {"Produce":["Bell peppers","Onions","Roma tomatoes","Lettuce","Limes","Bananas"],
+     "Meat & Eggs":["Chicken breast","93/7 ground beef","Ground turkey","Eggs","Egg whites"],
+     "Dairy":["Greek yogurt"],
+     "Pantry":["Black beans","Corn tortillas","Salsa","Jasmine rice","Pretzels","Cream of Rice"]}),
+  mk("Mediterranean","Make a big Greek salad and tzatziki; grill chicken and kofta for the week.",
+    [["Shakshuka (5 eggs, tomato) · 80 g oats · orange · coffee","P50 · C70 · F28","+ Creatine, Fish Oil, D3"],
+     ["Grilled chicken · 250 g couscous · cucumber-tomato salad · olive oil","P58 · C68 · F12"],
+     ["Lean beef kofta · pita · Greek salad · tzatziki","P48 · C55 · F20"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · 4 rice cakes · honey","P50 · C58 · F3"],
+     ["Grilled fish or chicken · 250 g lemon potatoes · greens","P55 · C50 · F16"],
+     ["Cottage cheese · handful of walnuts","P44 · C16 · F8"]],
+    {"Produce":["Cucumbers","Tomatoes","Red onion","Lemons","Oranges","Greens"],
+     "Meat & Eggs":["Chicken breast","Lean ground beef","White fish","Eggs"],
+     "Dairy":["Greek yogurt (tzatziki)","Cottage cheese","Feta"],
+     "Pantry":["Couscous","Pita","Rice cakes","Walnuts","Olive oil","Cream of Rice"]}),
+  mk("Asian","Cook extra rice for day-after fried rice; batch teriyaki chicken and beef & broccoli.",
+    [["Egg + egg white fried rice (150 g day-old rice) · scallions · coffee","P50 · C78 · F22","+ Creatine, Fish Oil, D3"],
+     ["Teriyaki chicken · 250 g jasmine rice · broccoli","P60 · C74 · F8"],
+     ["Beef & broccoli · 200 g rice","P50 · C55 · F18"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · sticky rice 60 g","P50 · C60 · F2"],
+     ["Salmon or chicken · 200 g sushi rice · edamame · slaw","P55 · C52 · F16"],
+     ["Greek yogurt · mango","P46 · C22 · F4"]],
+    {"Produce":["Broccoli","Scallions","Cabbage slaw","Mango","Bananas"],
+     "Meat & Eggs":["Chicken breast","Flank/lean beef","Salmon","Eggs"],
+     "Dairy":["Greek yogurt"],
+     "Pantry":["Jasmine rice","Low-sodium teriyaki","Soy sauce","Edamame","Cream of Rice"]}),
+  mk("Steakhouse","Portion sirloin and potatoes; pre-bake sweet potato fries for quick sides.",
+    [["Steak & eggs (4 oz sirloin, 4 eggs) · 200 g potato hash · coffee","P52 · C58 · F30","+ Creatine, Fish Oil, D3"],
+     ["Chicken · 300 g baked potato · green beans","P58 · C60 · F10"],
+     ["8 oz 93/7 burger (no bun) · 250 g sweet potato fries · salad","P50 · C55 · F22"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · white rice 60 g","P50 · C60 · F2"],
+     ["8 oz sirloin · light loaded potato · asparagus","P55 · C50 · F20"],
+     ["2 cups cottage cheese","P46 · C14 · F5"]],
+    {"Produce":["Baking potatoes","Sweet potatoes","Green beans","Asparagus","Salad greens"],
+     "Meat & Eggs":["Sirloin steak","Chicken breast","93/7 ground beef","Eggs"],
+     "Dairy":["Cottage cheese","Light sour cream"],
+     "Pantry":["Jasmine rice","Cream of Rice","Steak seasoning","Olive oil"]}),
+  mk("Comfort","Make protein pancakes batter and a turkey meatloaf Sunday; reheat all week.",
+    [["Protein pancakes (see cookbook) · blueberries · coffee","P52 · C74 · F16","+ Creatine, Fish Oil, D3"],
+     ["Chicken & rice casserole (250 g rice) · vegetables","P60 · C70 · F10"],
+     ["Turkey meatloaf · 300 g mashed potato · corn","P50 · C58 · F16"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · pretzels 60 g","P50 · C55 · F3"],
+     ["Pork loin · 250 g sweet potato · slaw","P55 · C50 · F16"],
+     ["Greek yogurt · 20 g granola","P44 · C24 · F5"]],
+    {"Produce":["Blueberries","Potatoes","Sweet potatoes","Corn","Cabbage slaw"],
+     "Meat & Eggs":["Ground turkey","Chicken breast","Pork loin","Eggs"],
+     "Dairy":["Greek yogurt","Milk"],
+     "Pantry":["Oat flour","Protein powder","Granola","Pretzels","Cream of Rice"]}),
+  mk("Smokehouse","Smoke a pork tenderloin and chicken Sunday (see cookbook); slice for the week.",
+    [["Egg scramble · turkey sausage · 80 g oats · coffee","P54 · C68 · F28","+ Creatine, Fish Oil, D3"],
+     ["Smoked chicken · 250 g rice · corn","P60 · C72 · F9"],
+     ["Lean brisket-style beef · 250 g potato · pickles & slaw","P50 · C52 · F20"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · light cornbread muffin","P48 · C58 · F5"],
+     ["Smoked pork tenderloin · 250 g sweet potato · greens","P55 · C50 · F14"],
+     ["Cottage cheese · pineapple","P44 · C20 · F5"]],
+    {"Produce":["Corn","Potatoes","Sweet potatoes","Cabbage slaw","Pineapple"],
+     "Meat & Eggs":["Pork tenderloin","Chicken","Lean beef","Turkey sausage","Eggs"],
+     "Dairy":["Cottage cheese"],
+     "Pantry":["Oats","BBQ rub","Cornbread mix","Pickles","Cream of Rice"]}),
+  mk("Italian","Cook protein pasta and turkey bolognese in bulk; portion with marinara.",
+    [["Egg-white veg frittata + 2 whole eggs · 2 slices sourdough · coffee","P50 · C66 · F24","+ Creatine, Fish Oil, D3"],
+     ["Chicken · 250 g cooked penne · marinara · side salad","P58 · C74 · F10"],
+     ["Turkey bolognese · 200 g rice","P50 · C55 · F16"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · rice cakes · jam","P50 · C58 · F3"],
+     ["Power pasta (cookbook) — chicken · protein pasta · marinara","P58 · C55 · F14"],
+     ["Greek yogurt","P46 · C16 · F4"]],
+    {"Produce":["Zucchini","Onion","Garlic","Basil","Salad greens"],
+     "Meat & Eggs":["Chicken breast","Ground turkey","Eggs"],
+     "Dairy":["Part-skim mozzarella","Greek yogurt","Parmesan"],
+     "Pantry":["Protein pasta","Penne","Marinara","Sourdough","Rice cakes"]}),
+  mk("Breakfast-for-Dinner","Prep overnight oats in jars; keep eggs and turkey on hand for fast dinners.",
+    [["Overnight oats 100 g · 1 scoop whey · berries","P50 · C80 · F16","+ Creatine, Fish Oil, D3"],
+     ["Chicken · 250 g rice · vegetables","P60 · C72 · F8"],
+     ["93/7 beef · 300 g potato · vegetables","P48 · C55 · F20"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · Rice Krispies 60 g","P50 · C60 · F2"],
+     ["Egg-white omelet (6 white/2 whole) · turkey · 250 g potatoes · fruit","P54 · C55 · F18"],
+     ["2 cups cottage cheese","P46 · C14 · F5"]],
+    {"Produce":["Mixed berries","Potatoes","Broccoli","Banana"],
+     "Meat & Eggs":["Chicken breast","93/7 ground beef","Deli turkey","Eggs","Egg whites"],
+     "Dairy":["Cottage cheese","Milk"],
+     "Pantry":["Oats","Chia seeds","Jasmine rice","Rice Krispies","Cream of Rice"]}),
+  mk("Grill","Fire the grill Sunday: chicken thighs (trimmed), skewers, and shrimp for the week.",
+    [["Eggs · 100 g oats · banana · coffee","P52 · C82 · F26","+ Creatine, Fish Oil, D3"],
+     ["Grilled trimmed chicken thigh · 250 g rice · grilled vegetables","P58 · C70 · F14"],
+     ["Grilled lean beef skewers · 250 g potato · salad","P50 · C52 · F18"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · white rice 60 g","P50 · C60 · F2"],
+     ["Grilled shrimp or chicken · 250 g sweet potato · slaw","P55 · C50 · F12"],
+     ["Greek yogurt · honey","P46 · C22 · F4"]],
+    {"Produce":["Zucchini","Peppers","Onions","Sweet potatoes","Cabbage slaw","Bananas"],
+     "Meat & Eggs":["Chicken thighs","Lean beef (skewers)","Shrimp","Eggs"],
+     "Dairy":["Greek yogurt"],
+     "Pantry":["Oats","Jasmine rice","Marinade","Cream of Rice"]}),
+  mk("Bowls","Assembly week — cook rice and buffalo chicken; build bowls in minutes.",
+    [["Greek yogurt bowl (2 cups) · 40 g granola · berries · 1 scoop whey","P58 · C78 · F14","+ Creatine, Fish Oil, D3"],
+     ["Buffalo chicken rice bowl (cookbook)","P60 · C68 · F12"],
+     ["Beef burrito bowl — 93/7 · 200 g rice · beans · salsa","P50 · C58 · F18"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · pretzels 60 g","P50 · C55 · F3"],
+     ["Salmon poke-style bowl · 200 g rice · edamame","P55 · C52 · F16"],
+     ["2 cups cottage cheese","P46 · C14 · F5"]],
+    {"Produce":["Romaine","Green onion","Avocado (light)","Berries","Banana"],
+     "Meat & Eggs":["Chicken breast","93/7 ground beef","Salmon"],
+     "Dairy":["Greek yogurt","Cottage cheese"],
+     "Pantry":["Jasmine rice","Black beans","Buffalo sauce","Granola","Edamame"]}),
+  mk("Farmhouse","Roast a chicken and a pork loin Sunday; slow-cook a lean pot roast.",
+    [["6 eggs · turkey bacon · 80 g oats · coffee","P54 · C66 · F30","+ Creatine, Fish Oil, D3"],
+     ["Roast chicken · 300 g potato · green beans","P60 · C60 · F12"],
+     ["Lean pot roast · carrots & 250 g potato","P50 · C52 · F20"],
+     ["1 cup Cream of Rice · 2 scoops whey · 1 banana","P52 · C75 · F4"],
+     ["2 scoops whey · 4 rice cakes","P50 · C58 · F2"],
+     ["Pork loin · 250 g squash or sweet potato · salad","P55 · C50 · F14"],
+     ["Greek yogurt · apple · cinnamon","P46 · C22 · F4"]],
+    {"Produce":["Carrots","Potatoes","Squash","Green beans","Apples"],
+     "Meat & Eggs":["Whole chicken","Pork loin","Lean chuck roast","Turkey bacon","Eggs"],
+     "Dairy":["Greek yogurt"],
+     "Pantry":["Oats","Rice cakes","Beef broth","Cream of Rice"]}),
+];
+function activeWeek(){ const i=Math.min(11,Math.max(0,S.mealWeek||0)); return MEALPLANS[i]; }
+
+/* ---------- The Grizzly Cookbook ---------- */
+const COOK_CATS=["Breakfast","Bowls & Mains","Meal Prep","Snacks & Treats"];
+function rc(n,c,s,m,i,d){ return {n,c,s,m,i,d}; }
+const COOKBOOK=[
+  // Breakfast
+  rc("Protein Pancakes","Breakfast",1,"430 kcal · 40P/55C/8F",
+    ["60 g oat flour","1 scoop vanilla whey","1 whole egg + 3 whites","1 tsp baking powder","Splash of milk","Blueberries"],
+    "Blend everything to a batter. Cook on a nonstick griddle over medium heat, ~2 min a side. Top with blueberries and sugar-free syrup."),
+  rc("Grizzly Breakfast Burrito","Breakfast",1,"520 kcal · 45P/50C/14F",
+    ["3 whole eggs + 3 whites","3 oz lean turkey sausage","1 low-carb tortilla","2 tbsp salsa","¼ cup black beans"],
+    "Scramble eggs with cooked sausage. Fill tortilla with eggs, beans and salsa, roll tight and sear seam-side down in a dry pan."),
+  rc("Egg White & Turkey Scramble","Breakfast",1,"340 kcal · 45P/12C/12F",
+    ["1 cup egg whites + 2 whole eggs","3 oz ground turkey","Spinach","Peppers","Hot sauce"],
+    "Brown turkey, add peppers and spinach, pour in eggs and scramble soft. Finish with hot sauce."),
+  rc("Overnight Protein Oats","Breakfast",1,"500 kcal · 40P/70C/10F",
+    ["100 g rolled oats","1 scoop whey","1 cup milk","1 tbsp chia","Berries","Cinnamon"],
+    "Stir everything in a jar, refrigerate overnight. Eat cold or warm; top with berries."),
+  rc("Shakshuka","Breakfast",1,"380 kcal · 30P/22C/20F",
+    ["5 eggs","1 cup crushed tomatoes","½ onion","Garlic","Paprika, cumin","Spinach"],
+    "Simmer onion, garlic, spices and tomatoes 8 min. Make wells, crack in eggs, cover and poach to taste."),
+  rc("Cottage Cheese Berry Bowl","Breakfast",1,"330 kcal · 40P/30C/6F",
+    ["2 cups low-fat cottage cheese","Mixed berries","20 g granola","Drizzle of honey"],
+    "Spoon cottage cheese into a bowl, top with berries, granola and honey. Thirty seconds, done."),
+  rc("Banana Protein Waffles","Breakfast",1,"450 kcal · 38P/58C/9F",
+    ["1 ripe banana","1 scoop whey","2 whole eggs","40 g oat flour","½ tsp baking powder"],
+    "Blend, pour into a hot waffle iron, cook until crisp. Great batch-cooked and frozen."),
+  rc("Sweet Potato Breakfast Hash","Breakfast",1,"470 kcal · 40P/45C/16F",
+    ["200 g sweet potato, diced","4 oz lean ground beef or turkey","3 eggs","Onion, peppers"],
+    "Crisp sweet potato in a pan, add meat and veg, make wells and fry eggs on top."),
+  rc("Greek Yogurt Parfait","Breakfast",1,"410 kcal · 45P/50C/6F",
+    ["2 cups plain Greek yogurt","40 g granola","Berries","1 tbsp honey"],
+    "Layer yogurt, granola and berries in a jar. Portable morning protein."),
+  rc("Breakfast Fried Rice","Breakfast",1,"480 kcal · 40P/62C/12F",
+    ["150 g day-old rice","2 eggs + ½ cup whites","3 oz diced ham or chicken","Scallions","Soy sauce"],
+    "Stir-fry rice in a hot pan, push aside and scramble eggs, combine with protein, scallions and a splash of soy."),
+  // Bowls & Mains
+  rc("Buffalo Chicken Rice Bowl","Bowls & Mains",1,"560 kcal · 60P/68C/12F",
+    ["8 oz chicken breast","250 g cooked rice","2 tbsp buffalo sauce","Celery","Light ranch","Green onion"],
+    "Toss cooked chicken in buffalo sauce. Serve over rice with celery, a drizzle of light ranch and green onion."),
+  rc("Beef Burrito Bowl","Bowls & Mains",1,"580 kcal · 50P/60C/18F",
+    ["8 oz 93/7 ground beef","200 g rice","¼ cup black beans","Salsa","Lettuce","Lime"],
+    "Brown beef with taco seasoning. Build over rice with beans, salsa, lettuce and a squeeze of lime."),
+  rc("Teriyaki Chicken & Rice","Bowls & Mains",1,"550 kcal · 60P/74C/8F",
+    ["8 oz chicken","250 g jasmine rice","Broccoli","2 tbsp low-sodium teriyaki","Sesame seeds"],
+    "Sear chicken, glaze with teriyaki, steam broccoli. Plate over rice, top with sesame."),
+  rc("Beef & Broccoli","Bowls & Mains",1,"520 kcal · 50P/45C/16F",
+    ["8 oz flank/lean beef","Broccoli","200 g rice","Soy sauce","Garlic, ginger","1 tsp cornstarch"],
+    "Stir-fry beef fast on high heat, add broccoli and garlic/ginger, thicken with soy + cornstarch slurry. Serve on rice."),
+  rc("Chicken Fajita Bowl","Bowls & Mains",1,"540 kcal · 60P/62C/10F",
+    ["8 oz chicken","Peppers & onions","250 g rice","Fajita seasoning","Salsa"],
+    "Sauté seasoned chicken with peppers and onions. Serve over rice with salsa."),
+  rc("Salmon Poke-Style Bowl","Bowls & Mains",1,"560 kcal · 45P/55C/18F",
+    ["6 oz salmon","200 g sushi rice","Edamame","Cucumber","Low-sodium soy","Sriracha"],
+    "Cube seared or baked salmon. Bowl with rice, edamame, cucumber; dress with soy and a little sriracha."),
+  rc("Turkey Chili","Bowls & Mains",4,"430 kcal · 45P/45C/10F",
+    ["2 lb 93/7 ground turkey","Kidney & black beans","Crushed tomatoes","Onion, peppers","Chili spices"],
+    "Brown turkey with onion and peppers, add beans, tomatoes and spices, simmer 30–40 min. Freezes great."),
+  rc("Smoked Pork Tenderloin","Bowls & Mains",4,"330 kcal · 45P/6C/13F",
+    ["2 pork tenderloins","BBQ dry rub","Sugar-free BBQ sauce"],
+    "Rub tenderloins, smoke at 225°F to 145°F internal (~1.5–2 hr), rest 10 min, slice. Sauce lightly."),
+  rc("Steak & Potatoes","Bowls & Mains",1,"600 kcal · 55P/50C/20F",
+    ["8 oz sirloin","250 g potatoes","Asparagus","Garlic","Olive oil"],
+    "Roast potatoes and asparagus. Sear steak 3–4 min a side, rest, slice against the grain."),
+  rc("Power Pasta","Bowls & Mains",1,"540 kcal · 58P/55C/14F",
+    ["100 g protein pasta (dry)","6 oz chicken","¾ cup marinara","Part-skim mozzarella","Basil"],
+    "Boil pasta, toss with marinara and sliced chicken, melt a little mozzarella, finish with basil."),
+  rc("Turkey Bolognese","Bowls & Mains",4,"470 kcal · 50P/55C/12F",
+    ["2 lb ground turkey","Marinara","Onion, garlic, carrot","Protein or regular pasta","Parmesan"],
+    "Brown turkey with soffritto, add marinara and simmer 20 min. Serve over pasta with parmesan."),
+  rc("High-Protein Pizza","Bowls & Mains",1,"560 kcal · 50P/55C/16F",
+    ["Protein/lavash flatbread","½ cup marinara","Part-skim mozzarella","Grilled chicken","Oregano"],
+    "Top flatbread with sauce, cheese and chicken. Bake 425°F ~10 min until bubbling."),
+  rc("Chicken Kofta Greek Bowl","Bowls & Mains",1,"540 kcal · 55P/48C/16F",
+    ["8 oz ground chicken","Greek seasoning","250 g couscous or potatoes","Cucumber-tomato salad","Tzatziki"],
+    "Form spiced kofta, grill or pan-sear. Serve with couscous, salad and tzatziki."),
+  rc("Shrimp Stir-Fry","Bowls & Mains",1,"470 kcal · 45P/55C/8F",
+    ["8 oz shrimp","Mixed stir-fry vegetables","200 g rice","Soy, garlic, ginger"],
+    "Stir-fry shrimp 2–3 min, add vegetables and aromatics, serve over rice."),
+  // Meal Prep
+  rc("Meal-Prep Chicken & Rice","Meal Prep",5,"520 kcal · 55P/65C/8F",
+    ["3 lb chicken breast","5 cups cooked rice","Broccoli","Seasoning","Olive oil"],
+    "Season and bake chicken at 400°F ~22 min. Portion 8 oz chicken + 1 cup rice + veg into 5 containers."),
+  rc("Steak Meal Prep","Meal Prep",4,"560 kcal · 50P/50C/18F",
+    ["2 lb sirloin","250 g potatoes ×4","Green beans","Steak seasoning"],
+    "Roast potatoes and beans. Sear steak to medium-rare, rest, slice. Portion into 4 containers; reheat gently."),
+  rc("Turkey Meatloaf","Meal Prep",5,"380 kcal · 42P/22C/12F",
+    ["2 lb ground turkey","1 egg","½ cup oats","Onion, garlic","Sugar-free ketchup glaze"],
+    "Mix, press into a loaf pan, glaze, bake 375°F ~45 min to 165°F. Slice and portion."),
+  rc("Chicken & Rice Casserole","Meal Prep",6,"500 kcal · 50P/60C/10F",
+    ["3 lb chicken","6 cups cooked rice","Mixed vegetables","Low-fat cream soup or broth","Seasoning"],
+    "Combine everything in a large dish, bake covered 375°F ~30 min. Portion into 6."),
+  rc("Ground Beef & Potato Bowls","Meal Prep",5,"520 kcal · 48P/50C/18F",
+    ["2.5 lb 93/7 ground beef","1.25 kg potatoes","Onion","Seasoning"],
+    "Brown seasoned beef; roast diced potatoes. Portion beef + potato + veg into 5 containers."),
+  rc("Pulled Chicken (batch)","Meal Prep",6,"210 kcal · 38P/2C/5F",
+    ["3 lb chicken breast","Broth","Seasoning","Optional sugar-free BBQ"],
+    "Slow-cook chicken in broth 4 hr on low, shred. Use across bowls, tacos, wraps all week."),
+  rc("Egg Bites (dozen)","Meal Prep",12,"90 kcal · 9P/2C/5F",
+    ["8 eggs + 1 cup whites","Diced peppers/spinach","3 oz turkey","Salt/pepper"],
+    "Whisk, pour into a greased muffin tin with fillings, bake 350°F ~20 min. Grab-and-go protein."),
+  rc("Roasted Sweet Potatoes (batch)","Meal Prep",6,"150 kcal · 3P/34C/1F",
+    ["1.5 kg sweet potatoes","Olive oil spray","Cinnamon or paprika"],
+    "Cube, toss, roast 425°F ~25 min. Perfect carb side for any container."),
+  rc("Bulk Jasmine Rice","Meal Prep",8,"200 kcal · 4P/44C/0F",
+    ["4 cups dry jasmine rice","8 cups water","Pinch of salt"],
+    "Rinse rice, cook 1:2 rice:water. Cool fast and portion — your default weekly carb."),
+  rc("Marinated Fajita Chicken","Meal Prep",5,"230 kcal · 40P/4C/6F",
+    ["3 lb chicken","Lime, garlic","Fajita spices","Olive oil"],
+    "Marinate 2+ hr, grill or sear, slice. Load into fajita and burrito bowls all week."),
+  // Snacks & Treats
+  rc("Protein Ice Cream","Snacks & Treats",1,"300 kcal · 45P/25C/3F",
+    ["1 scoop casein or whey","1 frozen banana","½ cup Greek yogurt","Splash of milk","Ice"],
+    "Blend thick, freeze 30 min for scoopable ice cream. Add cocoa or PB2 for flavor."),
+  rc("Protein Cheesecake","Snacks & Treats",6,"210 kcal · 24P/14C/7F",
+    ["2 cups fat-free cream cheese","1 cup Greek yogurt","2 scoops whey","3 eggs","Sweetener, vanilla"],
+    "Blend, pour into a springform, bake 325°F ~35 min, chill overnight. Slice into 6."),
+  rc("Protein Rice Krispie Bars","Snacks & Treats",8,"170 kcal · 12P/28C/2F",
+    ["4 cups crisp rice cereal","Protein marshmallow mix or marshmallow + whey","1 tbsp butter"],
+    "Melt marshmallow with butter, stir in cereal (and whey if using), press into a pan, cut into 8 bars."),
+  rc("Greek Yogurt Bark","Snacks & Treats",6,"120 kcal · 12P/12C/2F",
+    ["2 cups Greek yogurt","Berries","Drizzle of honey","Dark chocolate chips (few)"],
+    "Spread yogurt on parchment, top, freeze 3 hr, break into bark."),
+  rc("Protein Mug Cake","Snacks & Treats",1,"280 kcal · 30P/30C/6F",
+    ["1 scoop whey","20 g oat flour","1 egg white","½ tsp baking powder","Splash of milk"],
+    "Mix in a mug, microwave 60–75 sec. Warm, fast, single-serve dessert."),
+  rc("Peanut Butter Protein Balls","Snacks & Treats",12,"110 kcal · 7P/9C/5F",
+    ["1 cup oats","2 scoops whey","½ cup PB2 or PB","Honey","Milk to bind"],
+    "Mix, roll into 12 balls, refrigerate. Portable pre- or post-workout bite."),
+  rc("Protein Pudding","Snacks & Treats",1,"230 kcal · 30P/18C/4F",
+    ["1 scoop casein","¾ cup Greek yogurt","Milk","Cocoa or pudding mix"],
+    "Whisk until thick, chill 10 min. Casein makes it set like real pudding."),
+  rc("Chocolate Protein Shake","Snacks & Treats",1,"260 kcal · 40P/20C/4F",
+    ["2 scoops chocolate whey","1 cup milk","½ banana","Ice","1 tsp cocoa"],
+    "Blend. Your fast post-workout 50 g protein hit."),
+  rc("Rice Cakes 3 Ways","Snacks & Treats",1,"250 kcal · 20P/35C/6F",
+    ["3 rice cakes","Option A: PB2 + banana","Option B: cottage cheese + jam","Option C: turkey + mustard"],
+    "Top rice cakes to taste — a quick carb+protein snack for work or the barn."),
+  rc("Protein Hot Chocolate","Snacks & Treats",1,"200 kcal · 28P/16C/4F",
+    ["1 scoop chocolate whey","1 cup warm milk","1 tsp cocoa","Pinch of salt"],
+    "Warm milk (not boiling), whisk in cocoa then whey off the heat so it stays smooth."),
+];
+let cookCat="All", cookQuery="", cookOpen={};
+function cookbookHtml(){
+  const q=cookQuery.trim().toLowerCase();
+  const list=COOKBOOK.filter(r=>(cookCat==="All"||r.c===cookCat) && (!q || r.n.toLowerCase().includes(q) || r.i.join(" ").toLowerCase().includes(q)));
+  if(!list.length) return `<div class="empty">No recipes match “${cookQuery}”.</div>`;
+  return list.map(r=>{ const idx=COOKBOOK.indexOf(r), open=cookOpen[idx];
+    return `<div class="recipe ${open?'open':''}" data-recipe="${idx}">
+      <div class="rhead"><div style="flex:1"><div class="rn">${r.n}</div><div class="rc">${r.c} · serves ${r.s}</div></div>
+        <div class="rmac tnum">${r.m.split(' · ')[0]}</div><span class="rchev">${open?'−':'+'}</span></div>
+      ${open?`<div class="rbody">
+        <div class="rmacfull">${r.m}</div>
+        <div class="r-label">Ingredients</div><ul class="r-ul">${r.i.map(x=>`<li>${x}</li>`).join("")}</ul>
+        <div class="r-label">Method</div><p class="rmethod">${r.d}</p>
+      </div>`:''}
+    </div>`;
+  }).join("");
+}
+
 const RULES = [
   ["Protein first.","Every meal starts with protein. No exceptions."],
   ["Sleep 7.5–9 hours.","Recovery is when the work pays off."],
@@ -544,6 +872,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch(e){ S = fres
 if(!Array.isArray(S.prHistory)) S.prHistory=[];   // migrate older saves
 if(!S.targets) S.targets={cal:TARGETS.cal,protein:TARGETS.protein,carbs:TARGETS.carbs,fat:TARGETS.fat};
 if(!Array.isArray(S.adjustLog)) S.adjustLog=[];
+if(typeof S.mealWeek!=='number') S.mealWeek=0;
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast("Storage full — export soon"); } }
 
 /* ---------- dynamic targets + coaching engine ---------- */
@@ -1151,13 +1480,15 @@ function VIEW_fuel(){
   const n = S.nutrition[iso] || (S.nutrition[iso]={meals:{},supps:{},water:0,steps:0,protein:0,carbs:0,fat:0});
   const cals = Math.round(n.protein*4 + n.carbs*4 + n.fat*9);
 
-  const mealHtml = MEALS.map(m=>`
+  const wk=activeWeek();
+  const mealHtml = wk.meals.map(m=>`
     <div class="check ${n.meals[m.id]?'on':''}" data-meal="${m.id}">
       <div class="box">✓</div>
       <div class="tx"><div class="m">${m.t} <span style="color:var(--mute);font-weight:600">· ${m.time}</span></div>
         <div class="d">${m.items}</div></div>
       <div class="meta">${m.macro}</div>
     </div>`).join("");
+  const weekOpts = MEALPLANS.map((p,i)=>`<option value="${i}" ${i===(S.mealWeek||0)?'selected':''}>Week ${i+1} — ${p.theme}</option>`).join("");
 
   const suppHtml = SUPPS.map((s,i)=>`
     <button class="btn sm ${n.supps[i]?'teal':'ghost'}" data-supp="${i}" style="width:auto">${n.supps[i]?'✓ ':''}${s}</button>`).join(" ");
@@ -1180,8 +1511,19 @@ function VIEW_fuel(){
     </div>
   </div>
 
-  <div class="section-h"><h2>Meal Plan · Week 1</h2><div class="rule"></div></div>
-  <div class="card">${mealHtml}</div>
+  <div class="section-h"><h2>Meal Plan</h2><span class="badge">Week ${(S.mealWeek||0)+1} / 12</span><div class="rule"></div></div>
+  <div class="card">
+    <div class="field" style="margin-bottom:12px"><span class="label">Rotate your week — never eat the same thing for a year</span>
+      <select id="mealWeekSel">${weekOpts}</select></div>
+    <div class="mm" style="color:var(--mute);font-weight:600;margin:-4px 0 4px">🗓 ${wk.theme} · Sunday prep: ${wk.prep}</div>
+    ${mealHtml}
+  </div>
+
+  <div class="section-h"><h2>Grocery List</h2><span class="badge" style="background:rgba(45,212,191,.12);color:#8be7db;border-color:rgba(45,212,191,.3)">Week ${(S.mealWeek||0)+1}</span><div class="rule"></div></div>
+  <div class="card">
+    <p class="hint" style="margin:0 0 4px">Organized by aisle — tap to check off as you shop. Plus your weekly staples: whey, creatine, fish oil, D3, electrolytes.</p>
+    <div class="aisle">${groceryHtml(wk.grocery, S.mealWeek||0)}</div>
+  </div>
 
   <div class="section-h"><h2>Hydration &amp; Movement</h2><div class="rule"></div></div>
   <div class="card">
@@ -1204,6 +1546,13 @@ function macroTile(name,key,val,target,unit,cssvar){
     <canvas width="140" height="140"></canvas>
     <div class="c"><b class="tnum">${val||0}</b><s>/ ${target}${unit}</s></div></div>
     <div class="nm">${name}</div></div>`;
+}
+function groceryHtml(grocery, wkIdx){
+  return Object.entries(grocery).map(([aisle,items])=>`
+    <div class="a-h">${aisle}</div>
+    ${items.map(it=>{ const id=`w${wkIdx}:${aisle}:${it}`, on=S.groceryChecked[id];
+      return `<div class="groc" data-groc="${id}"><span class="dot ${on?'g':''}" style="${on?'':'background:var(--line);box-shadow:none'}"></span><span style="${on?'color:var(--mute);text-decoration:line-through':''}">${it}</span></div>`;}).join("")}
+  `).join("");
 }
 function macroValue(key){
   const n=S.nutrition[todayISO()]||{};
@@ -1463,22 +1812,25 @@ function VIEW_book(){
     ${exLibrary()}
   </div>
 
-  <div class="card book">
-    <div class="eyebrow">Section 02 · Nutrition · Week 1</div>
-    <h3 style="margin-top:6px">${TARGETS.cal} kcal · P ${TARGETS.protein} / C ${TARGETS.carbs} / F ${TARGETS.fat}</h3>
-    ${MEALS.map(m=>`<div class="meal"><div class="mh"><span class="mt">${m.t}</span><span class="mtime">${m.time}</span></div>
+  ${(()=>{ const wk=activeWeek(); return `<div class="card book">
+    <div class="eyebrow">Section 02 · 12-Week Meal Plans</div>
+    <div class="field" style="margin:8px 0 10px"><select id="bookWeekSel">${MEALPLANS.map((p,i)=>`<option value="${i}" ${i===(S.mealWeek||0)?'selected':''}>Week ${i+1} — ${p.theme}</option>`).join("")}</select></div>
+    <h3 style="margin-top:2px">${T().cal} kcal · P ${T().protein} / C ${T().carbs} / F ${T().fat}</h3>
+    <p class="hint" style="margin:2px 0 6px">Sunday prep: ${wk.prep}</p>
+    ${wk.meals.map(m=>`<div class="meal"><div class="mh"><span class="mt">${m.t}</span><span class="mtime">${m.time}</span></div>
       <div class="mi">${m.items}</div><div class="mm">${m.macro}${m.extra?" · "+m.extra:""}</div></div>`).join("")}
-    <p class="hint" style="margin-top:12px">Cheat: one meal every Saturday — not a cheat day. Hydration 1½ gal/day + electrolytes. Adjust calories every two weeks off the 7-day weight trend.</p>
-  </div>
+    <p class="hint" style="margin-top:12px">Cheat: one meal every Saturday — not a cheat day. This week's grocery list is on the Fuel tab. Adjust calories every two weeks off the 7-day trend.</p>
+  </div>`; })()}
 
   <div class="card book">
-    <div class="eyebrow">Grocery List · by aisle</div>
-    <div class="aisle">
-    ${Object.entries(GROCERIES).map(([aisle,items])=>`
-      <div class="a-h">${aisle}</div>
-      ${items.map(it=>{const id=aisle+":"+it;const on=S.groceryChecked[id];return `<div class="groc" data-groc="${id}"><span class="dot ${on?'g':''}" style="${on?'':'background:var(--line);box-shadow:none'}"></span><span style="${on?'color:var(--mute);text-decoration:line-through':''}">${it}</span></div>`;}).join("")}
-    `).join("")}
+    <div class="eyebrow">Section 03 · The Grizzly Cookbook</div>
+    <p style="margin-top:6px">${COOKBOOK.length} macro-calculated recipes. Tap any to see ingredients and method.</p>
+    <div class="chip-row" style="margin-top:8px">
+      <button class="chip ${cookCat==='All'?'on':''}" data-cook="All">All</button>
+      ${COOK_CATS.map(c=>`<button class="chip ${cookCat===c?'on':''}" data-cook="${c}">${c}</button>`).join("")}
     </div>
+    <input type="text" id="cookSearch" placeholder="Search recipes…" value="${cookQuery}" style="margin-top:10px"/>
+    <div id="cookList" style="margin-top:6px">${cookbookHtml()}</div>
   </div>
 
   <div class="card book">
@@ -1625,6 +1977,10 @@ function saveWorkout(){
 
 function bindFuel(){
   const iso=todayISO(); const n=S.nutrition[iso];
+  const wsel=document.getElementById("mealWeekSel");
+  if(wsel) wsel.onchange=()=>{ S.mealWeek=parseInt(wsel.value)||0; save(); render(); };
+  document.querySelectorAll("[data-groc]").forEach(el=>el.onclick=()=>{
+    const id=el.dataset.groc; S.groceryChecked[id]=!S.groceryChecked[id]; save(); render(); });
   document.querySelectorAll("[data-meal]").forEach(el=>el.onclick=()=>{
     const id=el.dataset.meal; n.meals[id]=!n.meals[id]; save(); render();
   });
@@ -1678,6 +2034,15 @@ function bindBook(){
   document.querySelectorAll("[data-groc]").forEach(el=>el.onclick=()=>{
     const id=el.dataset.groc; S.groceryChecked[id]=!S.groceryChecked[id]; save(); render();
   });
+  const bw=document.getElementById("bookWeekSel");
+  if(bw) bw.onchange=()=>{ S.mealWeek=parseInt(bw.value)||0; save(); render(); };
+  document.querySelectorAll("[data-cook]").forEach(b=>b.onclick=()=>{ cookCat=b.dataset.cook; render(); });
+  const wireRecipes=()=>document.querySelectorAll("[data-recipe] .rhead").forEach(h=>h.onclick=()=>{
+    const i=+h.closest("[data-recipe]").dataset.recipe; cookOpen[i]=!cookOpen[i];
+    const cl=document.getElementById("cookList"); if(cl){ cl.innerHTML=cookbookHtml(); wireRecipes(); } });
+  wireRecipes();
+  const cs=document.getElementById("cookSearch");
+  if(cs) cs.oninput=()=>{ cookQuery=cs.value; const cl=document.getElementById("cookList"); if(cl){ cl.innerHTML=cookbookHtml(); wireRecipes(); } };
   const ex=document.getElementById("exportData");
   if(ex) ex.onclick=()=>{
     const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
