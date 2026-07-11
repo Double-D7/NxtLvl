@@ -1,41 +1,70 @@
-# PROJECT GRIZZLY
+# Devitt Family Show Team
 
-**Forged. Powerful. Unbreakable.** — a personal transformation operating system.
-Operator: **David Devitt**
+**Show Livestock Management** — a polished, mobile-first app for a family show
+livestock operation to manage an unlimited number of show animals across
+species, breeds, seasons and years.
 
-A single-file, offline-capable web app that turns the Project Grizzly plan into a
-system you actually use every day — not a PDF that sits on the desktop.
+A single-page, installable **PWA**. Open it on a phone in the barn, a tablet, or
+a desktop. Add it to your home screen for an app-like, offline-capable
+experience.
 
 ## Run it
 
-Open `index.html` in any browser (phone or desktop). No build step, no server, no
-account. All data is stored locally in your browser (`localStorage`) and never
-leaves the device. Add it to your phone's home screen for an app-like experience.
+Open `index.html` in any modern browser — no build step, no server. Or use the
+deployed GitHub Pages site. On first launch you create the team account and run
+a short setup wizard (team → species → invite family → weigh-in day → optional
+demo animals).
+
+**Demo data:** the setup wizard can load a realistic show string (Batman,
+Biscuit, Spotacus and the rest) so you can explore immediately. It's clearly
+marked and removable any time from **More → Remove demo data**.
 
 ## What's inside
 
-| View | What it does |
+| Area | What it does |
 |------|--------------|
-| **Dash** | Weight hero + 30-day trend sparkline, 7-day average, Phase-1 goal progress, Navy body-fat, lean mass, waist, weekly compliance, today's mission, and a **Coach card** — auto calorie/macro guidance from your weight trend (one-tap apply) plus a blood-pressure flag. |
-| **Weigh** | One-tap morning weigh-in with a stepper; 7-day rolling average (the number that guides calorie changes, not the daily swing). |
-| **Train** | The Foundation split (Push / Pull / Legs+Core / Recovery / Grizzly Day / Legs+Strongman / Rest), **built entirely around the home-gym equipment on hand** — dumbbells, Olympic bench, lat tower, leg developer, power tower, treadmill (no machines you don't own). Log weight · reps · RPE per set with notes. **In-gym power tools:** "beat last week" targets + pre-filled placeholders on every lift, a floating **rest timer**, and a **plate calculator**. Automatic PR detection (Epley e1RM). Every movement carries a **back-safety rating** for a repaired L3–L5 spine — 🟢 spine-safe · 🟡 brace & control · 🔴 avoid. |
-| **Progress** | Real **trend charts** for weight, waist, body-fat and strength-per-lift, plus **progress photos stored privately on-device** (IndexedDB) with a **before/after wipe slider** to compare any two weeks of the same pose. |
-| **Fuel** | **12 rotating weekly meal plans** (3,100 kcal · 250P / 300C / 85F) you switch between so you never get bored, each with a **per-week grocery list by aisle** you can check off while shopping. Tappable meal checklist, live macro rings (they follow the coach's calorie adjustments), hydration + 12k step tracking, supplement log. |
-| **Check-In** | The Sunday protocol — scale weight, full circumference measurements, blood pressure, resting HR, sleep, energy/hunger/stress, **back-pain 0–10**, progress-photo checklist, and a weekly journal. Each week is logged as an **Operation**. Includes a **one-tap Sunday summary generator** that builds a clean, copyable recap to send your coach. |
-| **Book** | The handbook — mission, the 6 Rules of Project Grizzly, 365-day roadmap, back-safe exercise library, the 12-week meal-plan browser, **the Grizzly Cookbook (40+ macro-calculated recipes** with filter + search), baseline benchmarks, mindset. Plus data **export / import** backup. |
+| **Dashboard** | Active-animal & species counts, weekly weigh-in progress, next-show countdown, "Today in the Barn" tasks, attention-needed alerts, recent media & feed changes, team activity. |
+| **Animals** | Unlimited animals with rich profiles, search (name/tag/notch/breeder/sire/dam), filters, and **saved views**. Species-specific ID fields (ear notch for swine, scrapie for sheep/goats, registration/brand for cattle, RFID). |
+| **Animal profile** | Tabs: Overview · Weight · Feed · Media · Measurements · Health · Exercise · Shows · Pedigree · Expenses · Notes · History — plus a combined **timeline** so you can see how an animal changed after a feed or management adjustment. |
+| **Weights** | One-tap stepper entry, automatic **average daily gain** (period + lifetime), projected show weight, ADG-needed-to-hit-target, and an interactive chart with target/projected lines and feed/show markers. Range toggle (7/30/90/season). |
+| **Feed** | Versioned feed programs — **changing feed never erases the old program**; each change is a dated version. Multi-product meals, objectives, advisor recs, per-program weight response (gain + ADG), duplicate-to-reuse, and side-by-side **compare**. |
+| **Progress media** | Photos & videos stored privately **on-device** (IndexedDB), with gallery / timeline / **before-and-after** views that show weight Δ, days between, and ADG for the period. |
+| **Shows** | Shows, entries (division/class/weight/exhibitor), and full results (placing, champion/banner, showmanship, sale price, premiums, judge comments, lessons). |
+| **Calendar & tasks** | Shared month view + task list with priorities, recurrence and animal links. |
+| **Health · Exercise · Measurements** | Treatments/vaccinations with **withdrawal tracking** (never suggests dosages), exercise logs, and body measurements with charts. |
+| **Expenses & income** | Per-animal cost tracking, cost of gain, and net result. |
+| **Reports** | ADG ranking, species mix, show results, and one-tap exports: **season summary** (printable / Save-as-PDF), animals CSV, weights CSV, and a full JSON backup/restore. |
+| **Team** | Roles (Owner · Administrator · Editor · Contributor · Viewer · Advisor) with permission gating, invitations, and an advisor-recommendation review flow (accept / modify / decline). |
+| **Archive** | Finish an animal's career without deleting it — every record is preserved, searchable, and **restorable**. |
 
 ## Design
 
-Steel-black industrial aesthetic (Rogue / First Form direction) with the Devitt
-Family Show Team **purple + teal** accents and the Grizzly bear mark. Phone-first,
-tabular numerals throughout, semantic traffic-light color reserved for the
-back-safety system.
+Show-livestock brand direction: **deep purple + teal**, white, black, light-gray
+surfaces. High-contrast for bright outdoor barn use, large touch targets,
+bottom navigation with a quick-add button, confirmation toasts, and helpful
+empty states.
 
-## Roadmap
+## Architecture & the cloud path
 
-- **V1.0 — Foundation** *(this build)*: dashboard, logging, Week-1 nutrition, handbook.
-- **V2.0 — Nutrition & Cookbook**: 12 rotating weeks, recipes, restaurant/travel guides.
-- **V3.0 — Training System**: full 52-week periodization, deloads, substitution engine.
-- **V4.0 — Dashboard & Analytics**: strength progression graphs, auto calorie/macro adjustments.
+This is a **local-first** build: all structured data lives in `localStorage`
+and media blobs in `IndexedDB`, behind a single data layer (`DB.*` in
+`app.js`). The UI never touches storage directly.
 
-*Built for life.*
+That boundary is deliberate. To make the app fully **cloud + multi-user** —
+secure auth (email/Google/Apple), a relational database (e.g. Postgres/Supabase
+with **row-level security** keyed on `team_id`), object storage with signed
+URLs for media, and real-time sync across devices — you swap the data layer for
+API calls without rewriting the interface. Login, teams, roles, the audit log,
+per-record `createdBy/updatedBy` stamps, and archive semantics are already
+modeled for that transition.
+
+## Files
+
+- `index.html` — app shell + styles
+- `app.js` — the entire application (data layer, router, views)
+- `sw.js` — service worker (network-first HTML, cache-first assets; never
+  touches user data)
+- `manifest.webmanifest`, `icon.svg`, `icon-*.png`, `apple-touch-icon.png` — PWA install assets
+
+*Built as a long-term, scalable record system for the Devitt Family Show Team —
+not a single-season tracker.*

@@ -1,10 +1,10 @@
-/* Project Grizzly service worker
+/* Devitt Family Show Team service worker
    - App HTML: network-first so new versions load automatically when online
-   - Static assets (icons/manifest): cache-first for speed
+   - Static assets (app.js/icons/manifest): cache-first for speed
    - Fully offline-capable via cache fallback
    NOTE: user data (localStorage + IndexedDB) is never touched by this cache. */
-const VERSION = 'grizzly-v3';
-const ASSETS = ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const VERSION = 'dfst-v1';
+const ASSETS = ['index.html', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
