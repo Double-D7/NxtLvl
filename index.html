@@ -542,7 +542,94 @@ function fresh(){
 let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch(e){ S = fresh(); }
 if(!Array.isArray(S.prHistory)) S.prHistory=[];   // migrate older saves
+if(!S.targets) S.targets={cal:TARGETS.cal,protein:TARGETS.protein,carbs:TARGETS.carbs,fat:TARGETS.fat};
+if(!Array.isArray(S.adjustLog)) S.adjustLog=[];
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast("Storage full — export soon"); } }
+
+/* ---------- dynamic targets + coaching engine ---------- */
+function T(){ const t=S.targets||{}; return {
+  cal:t.cal||TARGETS.cal, protein:t.protein||TARGETS.protein, carbs:t.carbs||TARGETS.carbs, fat:t.fat||TARGETS.fat,
+  water:TARGETS.waterGal, steps:TARGETS.steps }; }
+const TARGET_RATE=-0.75; // lb/week goal in Phase 1 (lose fat, hold strength)
+function weeklyRate(){ const a=sevenDayAvg(), p=prevAvg(); return (a!=null&&p!=null)? round1(a-p):null; }
+function daysLogged(){ return sortedWeightDates().length; }
+function daysSinceAdjust(){
+  const last=(S.adjustLog&&S.adjustLog.length)? S.adjustLog[S.adjustLog.length-1].date : S.startDate;
+  if(!last) return 999;
+  return Math.round((new Date(todayISO())-new Date(last))/86400000);
+}
+function calcMacros(cal){ const protein=T().protein, fat=T().fat;
+  return {cal, protein, fat, carbs:Math.max(0,Math.round((cal-protein*4-fat*9)/4))}; }
+function coachCalorie(){
+  const rate=weeklyRate(), n=daysLogged(), cal=T().cal;
+  if(n<10 || rate==null) return {status:'need-data', msg:`Log ${Math.max(1,14-n)} more morning weigh-ins to unlock calorie coaching.`, cal, rate};
+  let status='hold', newCal=cal;
+  if(rate > -0.35){ status='cut'; newCal=cal-150; }        // stalling or gaining
+  else if(rate < -1.25){ status='add'; newCal=cal+150; }   // too fast — protect muscle
+  const ready = S.adjustLog.length ? daysSinceAdjust()>=14 : daysLogged()>=14;
+  return {status, ready, rate, cal, newCal, macros:calcMacros(newCal)};
+}
+function applyCalorie(cal){
+  const m=calcMacros(cal); S.targets={cal:m.cal,protein:m.protein,carbs:m.carbs,fat:m.fat};
+  S.adjustLog.push({date:todayISO(),cal:m.cal}); save();
+}
+function bpStatus(sys,dia){
+  sys=parseFloat(sys); dia=parseFloat(dia); if(!sys||!dia) return null;
+  if(sys>=140||dia>=90) return {label:'Stage 2 — check with your doctor',dot:'r',ok:false};
+  if(sys>=130||dia>=80) return {label:'Stage 1 — watch it',dot:'y',ok:false};
+  if(sys>=120)          return {label:'Elevated',dot:'y',ok:false};
+  return {label:'Normal',dot:'g',ok:true};
+}
+function measDelta(key){
+  const cs=S.checkins.filter(c=>c.measurements&&c.measurements[key]);
+  if(cs.length<2) return null;
+  const a=parseFloat(cs[cs.length-1].measurements[key]), b=parseFloat(cs[cs.length-2].measurements[key]);
+  return (isNaN(a)||isNaN(b))?null:round1(a-b);
+}
+function sundaySummary(){
+  const c=latestCheckin();
+  const op=String(c?c.operation:operationNo()).padStart(3,'0');
+  const w=latestWeight(), avg=sevenDayAvg(), rate=weeklyRate(), bf=navyBF(), lm=leanMass();
+  const dW=measDelta('waistNavel');
+  const prWk=(S.prHistory||[]).filter(p=>(new Date(todayISO())-new Date(p.date))/86400000<=7);
+  const L=[`PROJECT GRIZZLY — Operation ${op}`, `${fmtDate(todayISO())} · Operator David Devitt`, ''];
+  L.push(`Weight: ${w??'—'} lb (7-day avg ${avg??'—'}${rate!=null?`, ${rate>0?'+':''}${rate}/wk`:''})`);
+  if(c?.measurements?.waistNavel) L.push(`Waist: ${c.measurements.waistNavel}"${dW!=null?` (${dW>0?'+':''}${dW}")`:''}`);
+  if(bf!=null) L.push(`Body fat: ${bf}% · Lean mass: ${lm} lb`);
+  if(c&&c.bpSys&&c.bpDia){ const s=bpStatus(c.bpSys,c.bpDia); L.push(`BP: ${c.bpSys}/${c.bpDia}${s?` (${s.label})`:''}${c.rhr?` · RHR ${c.rhr}`:''}`); }
+  if(c&&c.back!=null&&c.back!=='') L.push(`Back: ${c.back}/10 · Sleep ${c.sleep||'—'}h · Energy ${c.energy||'—'}/10`);
+  L.push(`Compliance: ${compliance()}%`);
+  if(prWk.length) L.push(`PRs this week: ${prWk.map(p=>`${p.name} ${p.w}×${p.r}`).join(', ')}`);
+  if(c?.wins) L.push(`Wins: ${c.wins}`);
+  if(c?.focus) L.push(`Next week: ${c.focus}`);
+  const cc=coachCalorie();
+  if(cc.status==='cut') L.push(`Coach: loss stalling — consider ${cc.newCal} kcal.`);
+  else if(cc.status==='add') L.push(`Coach: dropping fast — consider ${cc.newCal} kcal to hold muscle.`);
+  else if(cc.status==='hold') L.push(`Coach: on track — hold ${cc.cal} kcal.`);
+  return L.join('\n');
+}
+function coachCard(){
+  const cc=coachCalorie(), c=latestCheckin();
+  let inner;
+  if(cc.status==='need-data'){
+    inner=`<div style="display:flex;align-items:center;gap:12px"><span style="font-size:20px">🧭</span><span style="font-weight:600;color:var(--ink-2);font-size:14px">${cc.msg}</span></div>`;
+  } else {
+    const map={hold:['On track','Hold '+cc.cal+' kcal'],cut:['Loss stalling','Drop to '+cc.newCal],add:['Dropping fast','Add to '+cc.newCal]};
+    const m=map[cc.status];
+    const right = (cc.status!=='hold' && cc.ready)
+      ? `<button class="btn sm primary" data-applycal="${cc.newCal}" style="width:auto">${m[1]}</button>`
+      : `<span class="badge" style="background:rgba(63,185,80,.12);color:#9ae6a4;border-color:rgba(63,185,80,.3)">${cc.status==='hold'?'Hold':('Reassess '+Math.max(0,14-daysSinceAdjust())+'d')}</span>`;
+    inner=`<div style="display:flex;align-items:center;gap:12px">
+      <div style="flex:1"><div class="label">Calorie coach</div>
+      <div style="font-weight:700;font-size:15px;margin-top:3px">${m[0]}</div>
+      <div class="small tnum">${cc.rate>0?'+':''}${cc.rate} lb/wk · goal ${TARGET_RATE} · now ${cc.cal} kcal</div></div>${right}</div>`;
+  }
+  let bp='';
+  if(c&&c.bpSys&&c.bpDia){ const s=bpStatus(c.bpSys,c.bpDia);
+    if(s&&!s.ok) bp=`<div class="divider"></div><div style="display:flex;align-items:center;gap:10px"><span class="dot ${s.dot}"></span><span class="small" style="color:var(--ink-2)">Blood pressure <b class="tnum">${c.bpSys}/${c.bpDia}</b> — ${s.label}</span></div>`;
+  }
+  return `<div class="section-h"><h2>Coach</h2><div class="rule"></div></div><div class="card">${inner}${bp}</div>`;
+}
 
 /* ---------- math helpers ---------- */
 const round1 = n => Math.round(n*10)/10;
@@ -621,9 +708,12 @@ function checkinSeries(sel){
     if(sel==="waist") v=parseFloat(c.measurements?.waistNavel);
     else if(sel==="chest") v=parseFloat(c.measurements?.chest);
     else if(sel==="armRF") v=parseFloat(c.measurements?.armRF);
+    else if(sel==="bpSys") v=parseFloat(c.bpSys);
+    else if(sel==="rhr") v=parseFloat(c.rhr);
+    else if(sel==="back"){ if(c.back!=null && c.back!=='') v=Number(c.back); }
     else if(sel==="bf"){ const wa=parseFloat(c.measurements?.waistNavel),nk=parseFloat(c.measurements?.neck);
       if(wa&&nk&&wa>nk) v=round1(Math.max(4,Math.min(50,86.010*Math.log10(wa-nk)-70.041*Math.log10(PROFILE.heightIn)+36.76))); }
-    return v?{t:c.date,v}:null;
+    return (v!=null && !isNaN(v))?{t:c.date,v}:null;
   }).filter(Boolean);
 }
 function strengthSeries(exName){
@@ -853,6 +943,8 @@ function VIEW_dash(){
     <div class="tile"><div class="k">Compliance</div><div class="v tnum">${comp}<small>%</small></div><div class="sub">Last 7 days</div></div>
   </div>
 
+  ${coachCard()}
+
   <div class="section-h"><h2>Today's Mission</h2><div class="rule"></div></div>
   <div class="card">
     <div class="check ${S.workouts.some(x=>x.date===todayISO())?'on':''}">
@@ -862,7 +954,7 @@ function VIEW_dash(){
     </div>
     <div class="check ${mealsDone>=6?'on':''}">
       <div class="box">✓</div>
-      <div class="tx"><div class="m">Nutrition — ${TARGETS.cal} kcal</div><div class="d">${mealsDone}/7 meals logged · P ${TARGETS.protein} / C ${TARGETS.carbs} / F ${TARGETS.fat}</div></div>
+      <div class="tx"><div class="m">Nutrition — ${T().cal} kcal</div><div class="d">${mealsDone}/7 meals logged · P ${T().protein} / C ${T().carbs} / F ${T().fat}</div></div>
       <button class="btn sm" data-go="fuel" style="flex:0 0 auto">Fuel</button>
     </div>
     <div class="check ${(nToday.steps>=TARGETS.steps)?'on':''}">
@@ -1071,15 +1163,15 @@ function VIEW_fuel(){
     <button class="btn sm ${n.supps[i]?'teal':'ghost'}" data-supp="${i}" style="width:auto">${n.supps[i]?'✓ ':''}${s}</button>`).join(" ");
 
   return `
-  <div class="section-h"><h2>Fuel</h2><span class="badge">${TARGETS.cal} kcal</span><div class="rule"></div></div>
+  <div class="section-h"><h2>Fuel</h2><span class="badge">${T().cal} kcal</span><div class="rule"></div></div>
 
   <div class="card">
-    <div class="label" style="margin-bottom:10px">Macro targets · tap a meal below or enter running totals</div>
+    <div class="label" style="margin-bottom:10px">Macro targets · tap a meal below or enter running totals${S.adjustLog.length?` · adjusted ${fmtDate(S.adjustLog[S.adjustLog.length-1].date)}`:''}</div>
     <div class="macros">
-      ${macroTile("Protein","protein",n.protein,TARGETS.protein,"g","--teal")}
-      ${macroTile("Carbs","carbs",n.carbs,TARGETS.carbs,"g","--purple")}
-      ${macroTile("Fat","fat",n.fat,TARGETS.fat,"g","--warn")}
-      ${macroTile("Calories","cal",cals,TARGETS.cal,"","--teal")}
+      ${macroTile("Protein","protein",n.protein,T().protein,"g","--teal")}
+      ${macroTile("Carbs","carbs",n.carbs,T().carbs,"g","--purple")}
+      ${macroTile("Fat","fat",n.fat,T().fat,"g","--warn")}
+      ${macroTile("Calories","cal",cals,T().cal,"","--teal")}
     </div>
     <div class="grid g3" style="margin-top:14px">
       <div class="field"><span class="label">Protein g</span><input type="number" inputmode="numeric" data-macro="protein" value="${n.protein||""}" class="tnum"/></div>
@@ -1123,14 +1215,19 @@ function macroValue(key){
 let progMetric="weight", progPose="Front", progA=null, progB=null, photoCache=null;
 function progMetrics(){
   const base=[["weight","Weight"],["waist","Waist"],["bf","Body Fat"]];
+  const health=[["bpSys","Blood Pressure"],["rhr","Resting HR"],["back","Back Pain"]]
+    .filter(m=>checkinSeries(m[0]).length>0);
   const lifts=BENCHMARKS.filter(n=>strengthSeries(n).length>0)
     .map(n=>["lift:"+n, n.replace("Barbell ","BB ").replace("DB ","")]);
-  return base.concat(lifts);
+  return base.concat(health,lifts);
 }
 function metricSeries(key){
   if(key==="weight") return {pts:weightSeries(),unit:" lb",color:"#8B5CF6",up:false,fmt:v=>Math.round(v)};
   if(key==="waist")  return {pts:checkinSeries("waist"),unit:'"',color:"#2DD4BF",up:false,fmt:v=>v.toFixed(1)};
   if(key==="bf")     return {pts:checkinSeries("bf"),unit:"%",color:"#E3A008",up:false,fmt:v=>v.toFixed(1)};
+  if(key==="bpSys")  return {pts:checkinSeries("bpSys"),unit:" sys",color:"#F0553B",up:false,fmt:v=>Math.round(v)};
+  if(key==="rhr")    return {pts:checkinSeries("rhr"),unit:" bpm",color:"#2DD4BF",up:false,fmt:v=>Math.round(v)};
+  if(key==="back")   return {pts:checkinSeries("back"),unit:"/10",color:"#8B5CF6",up:false,fmt:v=>Math.round(v)};
   if(key.startsWith("lift:")) return {pts:strengthSeries(key.slice(5)),unit:" e1RM",color:"#8B5CF6",up:true,fmt:v=>Math.round(v)};
   return {pts:[],unit:"",color:"#8B5CF6",up:true,fmt:v=>v};
 }
@@ -1304,6 +1401,14 @@ function VIEW_check(){
     <button class="btn primary" id="saveCheckin" style="margin-top:14px">Log Operation ${String(op).padStart(3,"0")}</button>
   </div>
 
+  <div class="section-h"><h2>Sunday Summary</h2><div class="rule"></div></div>
+  <div class="card">
+    <p class="hint" style="margin:0 0 10px">One tap builds a clean recap from your logged data — copy it to send your coach each week.</p>
+    <button class="btn teal" id="genSummary">Generate summary</button>
+    <textarea id="summaryOut" readonly style="margin-top:12px;min-height:170px;display:none;font-size:13px"></textarea>
+    <button class="btn ghost" id="copySummary" style="margin-top:10px;display:none">Copy to clipboard</button>
+  </div>
+
   ${S.checkins.length?`<div class="section-h"><h2>Past Operations</h2><div class="rule"></div></div><div class="card">${history}</div>`:""}
   `;
 }
@@ -1427,6 +1532,8 @@ const VIEWS={dash:VIEW_dash,weigh:VIEW_weigh,train:VIEW_train,fuel:VIEW_fuel,pro
 function bind(){
   // nav + any data-go
   document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+  document.querySelectorAll("[data-applycal]").forEach(b=>b.onclick=()=>{
+    applyCalorie(parseInt(b.dataset.applycal)); toast("Calorie target updated → "+T().cal+" kcal",true); render(); });
 
   if(route==="weigh") bindWeigh();
   if(route==="train") bindTrain();
@@ -1548,6 +1655,12 @@ function bindCheck(){
     b.classList.toggle("teal"); b.classList.toggle("ghost");
     ci.photos[b.dataset.photo]=b.classList.contains("teal");
   });
+  const gen=document.getElementById("genSummary"), out=document.getElementById("summaryOut"), cp=document.getElementById("copySummary");
+  if(gen) gen.onclick=()=>{ out.value=sundaySummary(); out.style.display="block"; cp.style.display="flex"; out.style.height="auto"; out.style.height=out.scrollHeight+"px"; };
+  if(cp) cp.onclick=()=>{ out.select();
+    const done=()=>toast("Summary copied",true);
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(out.value).then(done,()=>{document.execCommand("copy");done();}); }
+    else { document.execCommand("copy"); done(); } };
   const sv=document.getElementById("saveCheckin");
   if(sv) sv.onclick=()=>{
     const rec={ id:"c"+Date.now(), date:todayISO(), operation:operationNo(),
