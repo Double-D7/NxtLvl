@@ -403,17 +403,17 @@ function lineChart(series, opt={}){
   let g='';
   // y gridlines
   for(let i=0;i<=3;i++){ const yv=minY+(maxY-minY)*i/3; const yy=sy(yv);
-    g+=`<line x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}" stroke="#EEF0F3"/>`;
-    g+=`<text x="4" y="${yy+3}" font-size="9" fill="#9AA0AA">${Math.round(yv)}</text>`; }
+    g+=`<line x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}" stroke="var(--line)"/>`;
+    g+=`<text x="4" y="${yy+3}" font-size="9" fill="var(--muted)">${Math.round(yv)}</text>`; }
   (opt.markers||[]).forEach(m=>{ const x=sx(m.x); g+=`<line x1="${x}" y1="${pad.t}" x2="${x}" y2="${H-pad.b}" stroke="${m.color||'#C4B5FD'}" stroke-width="1.5" stroke-dasharray="3 3"/>`; });
   series.forEach(s=>{ const pts=s.data.filter(d=>d.y!=null); if(pts.length<1)return;
     const d=pts.map((p,i)=>(i?'L':'M')+sx(p.x).toFixed(1)+' '+sy(p.y).toFixed(1)).join(' ');
     g+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width||2.4}" ${s.dashed?'stroke-dasharray="5 4"':''} stroke-linecap="round" stroke-linejoin="round"/>`;
-    if(!s.dashed) pts.forEach(p=>{ g+=`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="#fff" stroke="${s.color}" stroke-width="2"/>`; });
+    if(!s.dashed) pts.forEach(p=>{ g+=`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="var(--card)" stroke="${s.color}" stroke-width="2"/>`; });
   });
   // x labels (first/last)
-  g+=`<text x="${pad.l}" y="${H-6}" font-size="9" fill="#9AA0AA">${fmtShort(all[0].x)}</text>`;
-  g+=`<text x="${W-pad.r}" y="${H-6}" font-size="9" fill="#9AA0AA" text-anchor="end">${fmtShort(series[0].data[series[0].data.length-1]?.x||all.at(-1).x)}</text>`;
+  g+=`<text x="${pad.l}" y="${H-6}" font-size="9" fill="var(--muted)">${fmtShort(all[0].x)}</text>`;
+  g+=`<text x="${W-pad.r}" y="${H-6}" font-size="9" fill="var(--muted)" text-anchor="end">${fmtShort(series[0].data[series[0].data.length-1]?.x||all.at(-1).x)}</text>`;
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" preserveAspectRatio="none">${g}</svg>`;
 }
 function barChart(items, opt={}){ // items:[{label,value,color}]
@@ -2005,7 +2005,7 @@ function openCloudConnect(){
   const cfg=cloudConfig()||{}; const body=el('div');
   const connected = Cloud.enabled && Cloud.teamId;
   body.innerHTML=`
-    ${Cloud.enabled?`<div class="card pad" style="margin-bottom:14px;${connected?'background:#DCFCE7;border-color:#bbf7d0':''}">
+    ${Cloud.enabled?`<div class="card pad" style="margin-bottom:14px;${connected?'background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4)':''}">
       <div style="display:flex;align-items:center;gap:10px"><span class="dot" style="width:10px;height:10px;background:${connected?'var(--good)':'var(--warn)'}"></span>
       <div><div style="font-weight:800">${connected?'Connected & syncing live':'Cloud configured — sign in to sync'}</div>
       <div style="font-size:12px;color:var(--muted)">${connected?esc(Cloud.user?.email||'')+' · '+esc(Cloud.role)+' · team shared':'Not signed in yet'}</div></div></div></div>`:''}
