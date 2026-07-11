@@ -102,8 +102,33 @@ const Media = (()=>{
   async function get(id){ const db=await open(); return new Promise((res,rej)=>{ const tx=db.transaction('blobs','readonly'); const rq=tx.objectStore('blobs').get(id); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); }
   async function del(id){ const db=await open(); return new Promise((res)=>{ const tx=db.transaction('blobs','readwrite'); tx.objectStore('blobs').delete(id); tx.oncomplete=()=>res(); }); }
   const urls={};
-  async function url(id){ if(!id) return null; if(urls[id]) return urls[id]; const b=await get(id); if(!b) return null; const u=URL.createObjectURL(b); urls[id]=u; return u; }
-  return {put,get,del,url};
+  // Resolve a media blob to a displayable URL. Prefer the on-device copy
+  // (fast, offline). If it isn't here (e.g. uploaded from another device),
+  // pull a signed URL from the team's private Storage bucket and cache the
+  // blob locally for next time. The blob id doubles as the storage key.
+  async function url(id){
+    if(!id) return null; if(urls[id]) return urls[id];
+    const b=await get(id);
+    if(b){ const u=URL.createObjectURL(b); urls[id]=u; return u; }
+    if(typeof Cloud!=='undefined' && Cloud.enabled && Cloud.teamId){
+      try{
+        const path=Cloud.teamId+'/'+id;
+        const {data,error}=await Cloud.sb.storage.from('media').createSignedUrl(path, 3600);
+        if(error||!data) return null;
+        urls[id]=data.signedUrl;
+        // warm the offline cache in the background
+        fetch(data.signedUrl).then(r=>r.blob()).then(bl=>put(id,bl)).catch(()=>{});
+        return data.signedUrl;
+      }catch(e){ return null; }
+    }
+    return null;
+  }
+  async function upload(id, blob){ // best-effort push to cloud storage
+    if(typeof Cloud==='undefined' || !Cloud.enabled || !Cloud.teamId) return;
+    try{ await Cloud.sb.storage.from('media').upload(Cloud.teamId+'/'+id, blob, {upsert:true, contentType:blob.type||'application/octet-stream'}); }
+    catch(e){ console.error('media upload',e); }
+  }
+  return {put,get,del,url,upload};
 })();
 /* ===================================================================
    DATA LAYER — single source of truth in localStorage.
@@ -135,7 +160,8 @@ const EXP_CATS = ['Purchase price','Feed','Supplements','Medication','Veterinary
 const MEDIA_VIEWS = ['Profile','Side view','Front view','Rear view','Top view','Walking video','Driving video','Showmanship video','Feeding video','Health','General'];
 
 let DB = null;
-function save(){ DB.updatedAt=nowISO(); try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){ toast('Storage full — remove some records',''); } }
+function save(localOnly){ DB.updatedAt=nowISO(); if(DB.currentUserId)DB.updatedBy=DB.currentUserId; try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){ toast('Storage full — remove some records',''); }
+  if(!localOnly && typeof Cloud!=='undefined' && Cloud.enabled && Cloud.teamId && !Cloud.applying) Cloud.schedulePush(); }
 function load(){ try{ DB = JSON.parse(localStorage.getItem(KEY)); }catch(e){ DB=null; } return DB; }
 
 function blankDB(){
@@ -471,10 +497,150 @@ window.go=go; window.render=render;
 /* ===================================================================
    BOOT
    =================================================================== */
-function boot(){
+/* ===================================================================
+   CLOUD — Supabase-backed shared data, auth, media & live sync.
+   Model: each team's entire dataset is one JSON document in the `teams`
+   table (guarded by Row-Level Security via team membership). Every device
+   reads it into the in-memory `DB`, writes push the document back, and a
+   Realtime subscription streams other devices' changes in live. Media
+   blobs live in the private `media` Storage bucket. Fully degrades to
+   local-only when no keys are configured. See supabase/SETUP.md.
+   =================================================================== */
+function cloudConfig(){
+  let c = (window.DFST_CONFIG && window.DFST_CONFIG.supabaseUrl) ? window.DFST_CONFIG : null;
+  if(!c){ try{ c=JSON.parse(localStorage.getItem('dfst_cloud_cfg')||'null'); }catch(e){} }
+  return (c && c.supabaseUrl && c.supabaseAnonKey) ? c : null;
+}
+const Cloud = {
+  enabled:false, sb:null, user:null, teamId:null, role:'Owner', cfg:null,
+  channel:null, pushTimer:null, sentTokens:[], applying:false, pending:false,
+  init(){
+    this.cfg=cloudConfig();
+    if(!this.cfg || !window.supabase){ return false; }
+    try{ this.sb=window.supabase.createClient(this.cfg.supabaseUrl, this.cfg.supabaseAnonKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}}); }
+    catch(e){ console.error('Supabase init failed',e); return false; }
+    this.enabled=true; return true;
+  },
+  async session(){ try{ const {data}=await this.sb.auth.getSession(); return data.session; }catch(e){ return null; } },
+  token(){ return 'w_'+Math.random().toString(36).slice(2)+Date.now().toString(36); },
+
+  /* Establish the signed-in user, resolve team + data, subscribe to live updates */
+  async onAuthed(session){
+    this.user=session.user;
+    const uid_ = this.user.id;
+    const name = this.user.user_metadata?.name || (this.user.email||'').split('@')[0];
+    const email = this.user.email;
+    await this.acceptInvites(uid_, email);
+    let team = await this.loadTeam(uid_);
+    if(!team){ team = await this.createTeamFromLocal(uid_, name, email); }
+    if(!team){ toast('Signed in, but no team is available','bad'); return; }
+    this.teamId=team.teamId; this.role=team.role;
+    this.applying=true;
+    DB = mergeDefaults(team.data || blankDB());
+    reconcileMember(uid_, name, email, this.role);
+    DB.currentUserId=uid_;
+    if(!DB.breeds || !DB.breeds.length) seedBreeds(DB);
+    save(true);
+    this.applying=false;
+    save(); // push reconciled membership back up
+    this.subscribe();
+  },
+  async loadTeam(uid_){
+    const {data:mems,error}=await this.sb.from('team_members').select('team_id,role');
+    if(error){ console.error(error); return null; }
+    if(!mems || !mems.length) return null;
+    const m = mems.find(x=>x.role==='Owner') || mems[0];
+    const {data:team,error:e2}=await this.sb.from('teams').select('data').eq('id',m.team_id).single();
+    if(e2){ console.error(e2); return null; }
+    return { teamId:m.team_id, role:m.role, data:team && team.data };
+  },
+  async createTeamFromLocal(uid_, name, email){
+    // First owner: their existing local data becomes the team's cloud document.
+    const local = mergeDefaults(load() || blankDB());
+    reconcileMember(uid_, name, email, 'Owner');
+    local.currentUserId=uid_;
+    const {data:team,error}=await this.sb.from('teams').insert({ owner:uid_, name:local.team?.name||'Devitt Family Show Team', data:local, write_token:this.token() }).select('id').single();
+    if(error){ console.error(error); toast('Could not create team: '+error.message,'bad'); return null; }
+    const {error:me_}=await this.sb.from('team_members').insert({ team_id:team.id, user_id:uid_, role:'Owner' });
+    if(me_) console.error(me_);
+    return { teamId:team.id, role:'Owner', data:local };
+  },
+  async acceptInvites(uid_, email){
+    if(!email) return;
+    const {data:invs}=await this.sb.from('team_invites').select('id,team_id,role').ilike('email',email);
+    if(!invs || !invs.length) return;
+    for(const inv of invs){
+      await this.sb.from('team_members').upsert({ team_id:inv.team_id, user_id:uid_, role:inv.role }, {onConflict:'team_id,user_id'});
+      await this.sb.from('team_invites').delete().eq('id',inv.id);
+    }
+  },
+  schedulePush(){
+    if(!this.enabled || !this.teamId) return;
+    clearTimeout(this.pushTimer);
+    this.pushTimer=setTimeout(()=>this.push(), 650);
+  },
+  async push(){
+    if(!this.enabled || !this.teamId) return;
+    if(!navigator.onLine){ this.pending=true; return; }
+    const tok=this.token(); this.sentTokens.push(tok); if(this.sentTokens.length>12)this.sentTokens.shift();
+    const payload={ data:DB, name:DB.team?.name, updated_at:new Date().toISOString(), write_token:tok };
+    const {error}=await this.sb.from('teams').update(payload).eq('id',this.teamId);
+    if(error){ console.error('push failed',error); this.pending=true; }
+    else this.pending=false;
+  },
+  subscribe(){
+    if(this.channel){ try{ this.sb.removeChannel(this.channel); }catch(e){} }
+    this.channel=this.sb.channel('team_'+this.teamId)
+      .on('postgres_changes', {event:'UPDATE', schema:'public', table:'teams', filter:'id=eq.'+this.teamId}, payload=>{
+        const row=payload.new; if(!row) return;
+        if(row.write_token && this.sentTokens.includes(row.write_token)) return; // ignore our own echoes
+        this.applyRemote(row.data);
+      }).subscribe();
+    window.addEventListener('online', ()=>{ if(this.pending) this.push(); });
+  },
+  applyRemote(data){
+    if(!data) return;
+    const keepUser=DB.currentUserId, keepRecent=DB._recentAnimals, keepScale=DB.lastScale;
+    this.applying=true;
+    DB = mergeDefaults(data);
+    DB.currentUserId=keepUser; DB._recentAnimals=keepRecent; DB.lastScale=keepScale;
+    save(true);
+    this.applying=false;
+    // Don't yank the UI out from under an open editor; refresh quietly instead.
+    if(!sheetStack.length){ render(); } else { toast('Synced changes from your team',''); }
+  },
+  async signOut(){ try{ if(this.channel) this.sb.removeChannel(this.channel); await this.sb.auth.signOut(); }catch(e){} this.user=null; this.teamId=null; this.channel=null; },
+};
+/* merge a loaded/remote object onto the schema defaults so new fields never break old docs */
+function mergeDefaults(obj){ const base=blankDB(); const out={...base, ...obj}; for(const k of Object.keys(base)){ if(Array.isArray(base[k]) && !Array.isArray(out[k])) out[k]=base[k]; if(base[k] && typeof base[k]==='object' && !Array.isArray(base[k])) out[k]={...base[k], ...(obj&&obj[k]||{})}; } return out; }
+/* ensure the signed-in auth user is represented in DB.users, remapping any pending/demo invite by email */
+function reconcileMember(uid_, name, email, role){
+  DB.users = DB.users||[];
+  let byId = DB.users.find(u=>u.id===uid_);
+  let byEmail = email && DB.users.find(u=>u.email && u.email.toLowerCase()===email.toLowerCase() && u.id!==uid_);
+  if(byEmail){ // a pending invite / placeholder for this person — adopt their real auth id
+    const old=byEmail.id;
+    DB.animals.forEach(a=>{ if(a.advisorId===old)a.advisorId=uid_; });
+    byEmail.id=uid_; byEmail.invited=false; byEmail.verified=true; if(name)byEmail.name=byEmail.name||name; byId=byEmail;
+    DB.users=DB.users.filter((u,i)=>DB.users.findIndex(x=>x.id===u.id)===i); // dedupe by id
+  }
+  if(!byId){ DB.users.push({ id:uid_, name:name||'Member', email, role: role||(DB.users.length?'Editor':'Owner'), verified:true }); }
+  else { if(role && byId.role!=='Owner') byId.role=role; if(email&&!byId.email)byId.email=email; }
+}
+
+async function boot(){
   load();
-  if(!DB){ DB=blankDB(); seedBreeds(DB); save(); }
-  else if(!DB.breeds || !DB.breeds.length){ seedBreeds(DB); save(); }
+  if(!DB){ DB=blankDB(); seedBreeds(DB); save(true); }
+  else if(!DB.breeds || !DB.breeds.length){ seedBreeds(DB); save(true); }
+  if(Cloud.init()){
+    try{
+      const s=await Cloud.session();
+      if(s){ await Cloud.onAuthed(s); }
+      Cloud.sb.auth.onAuthStateChange((ev, session)=>{
+        if(ev==='SIGNED_OUT'){ DB.currentUserId=null; render(); }
+      });
+    }catch(e){ console.error('cloud boot',e); }
+  }
   render();
   if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 }
@@ -482,38 +648,68 @@ function boot(){
 /* ===================================================================
    LOGIN (local accounts — cloud auth is the backend phase; see README)
    =================================================================== */
+let loginMode='signin'; // 'signin' | 'signup'
 function renderLogin(){
+  const cloud = Cloud.enabled;
   const existing = DB.users.length;
+  const isSignup = !cloud ? !existing : loginMode==='signup';
   $('#app').innerHTML = `<div class="login"><div class="box">
     <div class="logo">${LOGO()}</div>
     <h1>Devitt Family Show Team</h1><div class="tag">Show Livestock Management</div>
     <div class="card">
       <div class="oauth">
-        <button class="btn block" data-oauth="Google">${gicon()} Continue with Google</button>
-        <button class="btn block" data-oauth="Apple">${aicon()} Continue with Apple</button>
+        <button class="btn block" data-oauth="google">${gicon()} Continue with Google</button>
+        <button class="btn block" data-oauth="apple">${aicon()} Continue with Apple</button>
       </div>
       <div class="orline">OR</div>
-      <div class="field"><label>Name</label><input class="control" id="lgName" placeholder="Your name" ${existing?'':'autofocus'}></div>
-      <div class="field"><label>Email</label><input class="control" id="lgEmail" type="email" placeholder="you@example.com" value="${existing?'':'david.devitt@fortressds.com'}"></div>
+      ${isSignup?`<div class="field"><label>Name</label><input class="control" id="lgName" placeholder="Your name" value="${cloud?'':esc(me().name||'')}"></div>`:''}
+      <div class="field"><label>Email</label><input class="control" id="lgEmail" type="email" placeholder="you@example.com" value="${(!cloud&&!existing)?'david.devitt@fortressds.com':''}"></div>
       <div class="field"><label>Password</label><input class="control" id="lgPass" type="password" placeholder="••••••••"></div>
-      <button class="btn primary block" id="lgGo" style="margin-top:4px">${existing?'Sign in':'Create the team account'}</button>
-      <div style="text-align:center;margin-top:12px;font-size:12.5px;color:var(--muted);font-weight:600">
-        <a href="#" id="lgForgot">Forgot password?</a></div>
-      ${existing?userSwitcher():''}
+      <button class="btn primary block" id="lgGo" style="margin-top:4px">${isSignup?'Create account':'Sign in'}</button>
+      ${cloud?`<div style="text-align:center;margin-top:12px;font-size:12.5px;color:var(--muted);font-weight:600">
+        ${isSignup?'Already have an account? <a href="#" id="lgToggle">Sign in</a>':'New here? <a href="#" id="lgToggle">Create an account</a>'}
+        &nbsp;·&nbsp; <a href="#" id="lgForgot">Forgot password?</a></div>`:`
+      <div style="text-align:center;margin-top:12px;font-size:12.5px;color:var(--muted);font-weight:600"><a href="#" id="lgForgot">Forgot password?</a></div>
+      ${existing?userSwitcher():''}`}
     </div>
     <p style="color:rgba(255,255,255,.5);font-size:11px;text-align:center;margin-top:18px;line-height:1.5">
-      Secure sessions · Email verification · Multi-device sync<br>Data is stored on this device in this build.</p>
+      ${cloud?'Secure cloud sessions · Email verification · Live multi-device sync':'Local mode · <a href="#" id="lgConnect" style="color:rgba(255,255,255,.8)">Connect to cloud</a> for shared multi-device data'}</p>
   </div></div>`;
-  const signIn=(name,email,via)=>{
-    name=name||(email?email.split('@')[0]:'David Devitt');
-    let u = DB.users.find(x=>x.email && email && x.email.toLowerCase()===email.toLowerCase());
-    if(!u){ u={ id:uid('u'), name, email, role: DB.users.length? 'Editor':'Owner', via, verified:true }; DB.users.push(u); }
-    DB.currentUserId=u.id; logAct('login', (via?via+' · ':'')+u.name); save(); render();
-  };
-  $('#lgGo').onclick=()=>{ const n=$('#lgName').value.trim(), e=$('#lgEmail').value.trim(); if(!e){toast('Enter an email','bad');return;} signIn(n,e); };
-  $$('[data-oauth]').forEach(b=>b.onclick=()=>signIn(null, $('#lgEmail').value.trim()||'david.devitt@fortressds.com', b.dataset.oauth));
-  $('#lgForgot').onclick=e=>{e.preventDefault(); toast('Password reset link sent (demo)','good');};
-  $$('[data-switch]').forEach(b=>b.onclick=()=>{ DB.currentUserId=b.dataset.switch; save(); render(); });
+
+  if(cloud){
+    $('#lgGo').onclick=()=>cloudAuthSubmit(isSignup);
+    $$('[data-oauth]').forEach(b=>b.onclick=async()=>{ try{ await Cloud.sb.auth.signInWithOAuth({ provider:b.dataset.oauth, options:{ redirectTo:location.href.split('#')[0] } }); }catch(e){ toast(e.message,'bad'); } });
+    if($('#lgToggle'))$('#lgToggle').onclick=e=>{ e.preventDefault(); loginMode=isSignup?'signin':'signup'; renderLogin(); };
+    $('#lgForgot').onclick=async e=>{ e.preventDefault(); const em=$('#lgEmail').value.trim(); if(!em){toast('Enter your email first','bad');return;} try{ await Cloud.sb.auth.resetPasswordForEmail(em,{redirectTo:location.href.split('#')[0]}); toast('Password reset email sent','good'); }catch(err){ toast(err.message,'bad'); } };
+  } else {
+    // local-only accounts (no cloud configured)
+    const signIn=(name,email,via)=>{ name=name||(email?email.split('@')[0]:'David Devitt');
+      let u = DB.users.find(x=>x.email && email && x.email.toLowerCase()===email.toLowerCase());
+      if(!u){ u={ id:uid('u'), name, email, role: DB.users.length?'Editor':'Owner', via, verified:true }; DB.users.push(u); }
+      DB.currentUserId=u.id; logAct('login',(via?via+' · ':'')+u.name); save(); render(); };
+    $('#lgGo').onclick=()=>{ const n=$('#lgName')?$('#lgName').value.trim():'', e=$('#lgEmail').value.trim(); if(!e){toast('Enter an email','bad');return;} signIn(n,e); };
+    $$('[data-oauth]').forEach(b=>b.onclick=()=>signIn(null, $('#lgEmail').value.trim()||'david.devitt@fortressds.com', b.dataset.oauth));
+    $('#lgForgot').onclick=e=>{e.preventDefault(); toast('Password reset link sent (demo)','good');};
+    $$('[data-switch]').forEach(b=>b.onclick=()=>{ DB.currentUserId=b.dataset.switch; save(); render(); });
+    if($('#lgConnect'))$('#lgConnect').onclick=e=>{ e.preventDefault(); openCloudConnect(); };
+  }
+}
+async function cloudAuthSubmit(isSignup){
+  const email=$('#lgEmail').value.trim(), pass=$('#lgPass').value, name=$('#lgName')?$('#lgName').value.trim():'';
+  if(!email||!pass){ toast('Email and password required','bad'); return; }
+  const btn=$('#lgGo'); btn.disabled=true; const orig=btn.textContent; btn.textContent='…';
+  try{
+    if(isSignup){
+      const {data,error}=await Cloud.sb.auth.signUp({ email, password:pass, options:{ data:{name}, emailRedirectTo:location.href.split('#')[0] } });
+      if(error) throw error;
+      if(!data.session){ toast('Check your email to confirm your account, then sign in','good'); loginMode='signin'; renderLogin(); return; }
+      await Cloud.onAuthed(data.session); render();
+    } else {
+      const {data,error}=await Cloud.sb.auth.signInWithPassword({ email, password:pass });
+      if(error) throw error;
+      await Cloud.onAuthed(data.session); render();
+    }
+  }catch(e){ toast(e.message||'Sign-in failed','bad'); btn.disabled=false; btn.textContent=orig; }
 }
 function userSwitcher(){
   return `<hr class="soft"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quick switch (demo devices)</div>`+
@@ -1143,7 +1339,7 @@ function hiddenFile(accept,cb){ let inp=el('input'); inp.type='file'; inp.accept
 async function addMedia(animalId,files,kind){
   if(!can('addRecord')){ toast('Your role can’t upload media','bad'); return; }
   toast('Uploading…','');
-  for(const file of files){ const blobId=uid('blob'); await Media.put(blobId,file);
+  for(const file of files){ const blobId=uid('blob'); await Media.put(blobId,file); await Media.upload(blobId,file);
     const rec=stamp({id:uid('m'),animalId,kind:kind||(file.type.startsWith('video')?'video':'photo'),blobId,size:file.size,mime:file.type,view: kind==='video'?'Walking video':'Side view',date:todayISO(),captured:todayISO(),by:DB.currentUserId,caption:'',shared:false});
     // capture weight+feed context
     const ws=weightsFor(animalId); rec.contextWeight=ws.length?+ws[ws.length-1].weight:null; const cf=currentFeed(animalId); rec.contextFeed=cf?cf.name:null;
@@ -1163,7 +1359,9 @@ function openMediaViewer(m,a){
   const sh=openSheet({title:'Media',body,foot});
   $('[data-save]',sh).onclick=()=>{ m.view=$('#mvView',body).value; m.captured=$('#mvDate',body).value; m.caption=$('#mvCap',body).value.trim(); touch(m); save(); closeSheet(); toast('Saved','good'); render(); };
   if($('[data-profile]',sh))$('[data-profile]',sh).onclick=()=>{ a.profileMediaId=m.blobId; save(); closeSheet(); toast('Profile photo set','good'); render(); };
-  $('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete media','Remove this file permanently?','Delete',true)){ await Media.del(m.blobId); DB.media=DB.media.filter(x=>x.id!==m.id); if(a.profileMediaId===m.blobId)a.profileMediaId=null; save(); closeSheet(); render(); } };
+  $('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete media','Remove this file permanently?','Delete',true)){ await Media.del(m.blobId);
+    if(Cloud.enabled && Cloud.teamId){ try{ await Cloud.sb.storage.from('media').remove([Cloud.teamId+'/'+m.blobId]); }catch(e){} }
+    DB.media=DB.media.filter(x=>x.id!==m.id); if(a.profileMediaId===m.blobId)a.profileMediaId=null; save(); closeSheet(); render(); } };
 }
 function drawCompare(box,a,items){
   const photos=items.filter(m=>m.kind!=='video').slice().reverse();
@@ -1712,8 +1910,13 @@ function openInvite(){ const body=el('div');
     <div class="help">${ICON.info}<span>They'll get their own secure login. Advisors only see the animals you assign to them.</span></div>`;
   const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">Send invite</button>`;
   const sh=openSheet({title:'Invite member',body,foot});
-  $('[data-save]',sh).onclick=()=>{ const e=$('#ivEmail',body).value.trim(); if(!e){toast('Enter email','bad');return;}
-    DB.users.push({id:uid('u'),name:$('#ivName',body).value.trim()||e.split('@')[0],email:e,role:$('#ivRole',body).value,invited:true,verified:false}); logAct('team','Invited '+e); save(); closeSheet(); toast('Invite sent (demo)','good'); render(); };
+  $('[data-save]',sh).onclick=async()=>{ const e=$('#ivEmail',body).value.trim(); if(!e){toast('Enter email','bad');return;}
+    const role=$('#ivRole',body).value;
+    DB.users.push({id:'pending_'+e.toLowerCase(),name:$('#ivName',body).value.trim()||e.split('@')[0],email:e,role,invited:true,verified:false}); logAct('team','Invited '+e);
+    if(Cloud.enabled && Cloud.teamId){ try{ const {error}=await Cloud.sb.from('team_invites').upsert({ team_id:Cloud.teamId, email:e.toLowerCase(), role }, {onConflict:'team_id,email'}); if(error)throw error; save(); closeSheet(); toast('Invite sent — they can sign up with '+e,'good'); render(); }
+      catch(err){ save(); closeSheet(); toast('Saved locally; invite sync failed: '+err.message,'bad'); render(); } }
+    else { save(); closeSheet(); toast('Invite added (connect cloud to send)','good'); render(); }
+  };
 }
 function openMemberSheet(uid_){ const u=DB.users.find(x=>x.id===uid_);
   const body=el('div');
@@ -1759,6 +1962,10 @@ route('more',()=>{
       ${moreRow('__notif',ICON.bell,'Notifications')}
       ${moreRow('__settings',ICON.settings,'Team settings')}
     </div>
+    <div class="section-title">Sync</div>
+    <div class="list">
+      ${moreRow('__cloud',ICON.share, Cloud.enabled?'Cloud sync':'Connect to cloud')}
+    </div>
     <div class="section-title">Data</div>
     <div class="list">
       ${moreRow('__backup',ICON.download,'Export full backup')}
@@ -1766,14 +1973,35 @@ route('more',()=>{
       ${moreRow('__demo',ICON.trash,DB.seeded?'Remove demo data':'Load demo data')}
     </div>
     <div style="margin-top:18px"><button class="btn block" id="logout">${ICON.logout} Sign out</button></div>
-    <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">Devitt Family Show Team · Local-first build<br>Data stored on this device</p>`;
+    <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">Devitt Family Show Team${Cloud.enabled?' · Cloud sync on':' · Local-first build'}<br>${Cloud.enabled&&Cloud.teamId?'Shared & synced across your team':'Data stored on this device'}</p>`;
   v.append(wrap);
   $$('[data-more]',wrap).forEach(b=>b.onclick=()=>{ const k=b.dataset.more;
     if(k==='__breeds')openBreeds(); else if(k==='__notif')openNotif(); else if(k==='__settings')openTeamSettings();
     else if(k==='__inventory')openInventory(); else if(k==='__backup')exportBackup();
-    else if(k==='__import')importBackup(); else if(k==='__demo')toggleDemo(); else go('/'+k); });
-  $('#logout',wrap).onclick=()=>{ DB.currentUserId=null; save(); render(); };
+    else if(k==='__import')importBackup(); else if(k==='__demo')toggleDemo(); else if(k==='__cloud')openCloudConnect(); else go('/'+k); });
+  $('#logout',wrap).onclick=async()=>{ if(Cloud.enabled){ await Cloud.signOut(); } DB.currentUserId=null; save(true); render(); };
 });
+function openCloudConnect(){
+  const cfg=cloudConfig()||{}; const body=el('div');
+  const connected = Cloud.enabled && Cloud.teamId;
+  body.innerHTML=`
+    ${Cloud.enabled?`<div class="card pad" style="margin-bottom:14px;${connected?'background:#DCFCE7;border-color:#bbf7d0':''}">
+      <div style="display:flex;align-items:center;gap:10px"><span class="dot" style="width:10px;height:10px;background:${connected?'var(--good)':'var(--warn)'}"></span>
+      <div><div style="font-weight:800">${connected?'Connected & syncing live':'Cloud configured — sign in to sync'}</div>
+      <div style="font-size:12px;color:var(--muted)">${connected?esc(Cloud.user?.email||'')+' · '+esc(Cloud.role)+' · team shared':'Not signed in yet'}</div></div></div></div>`:''}
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Paste your Supabase project keys to turn on shared, multi-device sync. Both values are safe to store in the app — row-level security protects the data. See <b>supabase/SETUP.md</b> for the 5-minute setup.</p>
+    <div class="field"><label>Supabase Project URL</label><input class="control" id="cbUrl" placeholder="https://xxxx.supabase.co" value="${esc(cfg.supabaseUrl||'')}"></div>
+    <div class="field"><label>Anon public key</label><textarea class="control" id="cbKey" style="min-height:70px;font-family:monospace;font-size:12px" placeholder="eyJhbGciOi...">${esc(cfg.supabaseAnonKey||'')}</textarea></div>
+    <div class="help">${ICON.info}<span>Your current on-device animals become this team's shared data the first time you sign in as owner.</span></div>`;
+  const foot=el('div'); foot.innerHTML=`${Cloud.enabled?`<button class="btn danger" data-off>Disconnect</button>`:''}<button class="btn primary" data-save style="flex:1">${Cloud.enabled?'Update & reload':'Connect & reload'}</button>`;
+  const sh=openSheet({title:'Cloud sync',body,foot});
+  $('[data-save]',sh).onclick=()=>{ const url=$('#cbUrl',body).value.trim().replace(/\/$/,''); const key=$('#cbKey',body).value.trim();
+    if(!url||!key){ toast('Enter both values','bad'); return; }
+    if(!/^https:\/\/.+\.supabase\.(co|in)/.test(url)){ toast('That doesn’t look like a Supabase URL','bad'); return; }
+    localStorage.setItem('dfst_cloud_cfg', JSON.stringify({supabaseUrl:url, supabaseAnonKey:key}));
+    toast('Reloading with cloud…','good'); setTimeout(()=>location.reload(),500); };
+  if($('[data-off]',sh))$('[data-off]',sh).onclick=async()=>{ if(await confirmSheet('Disconnect cloud','Stop cloud sync on this device? Your data stays on the device. Other devices keep their cloud copy.','Disconnect',true)){ localStorage.removeItem('dfst_cloud_cfg'); if(window.DFST_CONFIG){window.DFST_CONFIG.supabaseUrl='';} toast('Disconnected — reloading','good'); setTimeout(()=>location.reload(),500); } };
+}
 function moreRow(k,ic,label){ return `<button class="li" data-more="${k}" style="width:100%;text-align:left"><div class="thumb" style="background:var(--line-2);color:var(--purple)">${ic}</div><div class="main"><div class="t1">${esc(label)}</div></div>${ICON.chev}</button>`; }
 function openBreeds(){ const body=el('div');
   const draw=()=>{ body.innerHTML=DB.species.map(sp=>`<div class="section-title" style="margin-top:8px">${esc(sp.name)} <button class="more" data-addbr="${sp.id}">+ Add</button></div>

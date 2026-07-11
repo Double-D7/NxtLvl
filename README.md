@@ -44,26 +44,50 @@ surfaces. High-contrast for bright outdoor barn use, large touch targets,
 bottom navigation with a quick-add button, confirmation toasts, and helpful
 empty states.
 
-## Architecture & the cloud path
+## Shared multi-user cloud sync (Supabase)
 
-This is a **local-first** build: all structured data lives in `localStorage`
-and media blobs in `IndexedDB`, behind a single data layer (`DB.*` in
-`app.js`). The UI never touches storage directly.
+The app runs **local-first** out of the box (data on-device). To let multiple
+people see and update the **same** data live across devices, connect a free
+**Supabase** backend — no server for you to run.
 
-That boundary is deliberate. To make the app fully **cloud + multi-user** —
-secure auth (email/Google/Apple), a relational database (e.g. Postgres/Supabase
-with **row-level security** keyed on `team_id`), object storage with signed
-URLs for media, and real-time sync across devices — you swap the data layer for
-API calls without rewriting the interface. Login, teams, roles, the audit log,
-per-record `createdBy/updatedBy` stamps, and archive semantics are already
-modeled for that transition.
+**Setup:** follow **[`supabase/SETUP.md`](supabase/SETUP.md)** — create a free
+project, run **[`supabase/schema.sql`](supabase/schema.sql)**, and paste your
+Project URL + anon key into `config.js` (or the in-app **More → Connect to
+cloud** screen). Then sign up as the owner and invite family by email.
+
+Once connected you get:
+
+- **Real auth** — email/password, plus Google/Apple when you enable those
+  providers; email verification and password reset.
+- **Shared data** — the whole team works off one cloud dataset; your existing
+  on-device animals migrate up automatically on the owner's first sign-in.
+- **Live sync** — an edit on one phone appears on the others within a second
+  (Supabase Realtime).
+- **Private media** — photos/videos go to a private Storage bucket with signed
+  URLs; still cached on-device for offline viewing.
+- **Team permissions** — enforced by **Row-Level Security** so you can only
+  read/write teams you belong to.
+- **Offline-friendly** — each device keeps a local cache and syncs when back
+  online.
+
+### How it's architected
+
+All reads/writes go through one data layer (`DB.*`), and cloud concerns are
+isolated in the `Cloud` module in `app.js`. Each team's dataset is a single
+JSON document in the `teams` table, streamed live and guarded by RLS. The UI
+never talks to storage or the network directly — so the sync model can be
+upgraded later (e.g. to per-record tables) without touching any screen. See the
+"How it works" section of `supabase/SETUP.md` for the trade-offs.
 
 ## Files
 
 - `index.html` — app shell + styles
-- `app.js` — the entire application (data layer, router, views)
-- `sw.js` — service worker (network-first HTML, cache-first assets; never
-  touches user data)
+- `app.js` — the entire application (data layer, `Cloud` sync module, router, views)
+- `config.js` — Supabase keys (empty = local-only; fill in to enable cloud)
+- `vendor/supabase.js` — vendored Supabase JS client (offline-capable)
+- `supabase/schema.sql` + `supabase/SETUP.md` — one-time cloud setup
+- `sw.js` — service worker (network-first HTML, cache-first same-origin assets;
+  never caches Supabase API calls or touches user data)
 - `manifest.webmanifest`, `icon.svg`, `icon-*.png`, `apple-touch-icon.png` — PWA install assets
 
 *Built as a long-term, scalable record system for the Devitt Family Show Team —
