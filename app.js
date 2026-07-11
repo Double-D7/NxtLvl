@@ -439,6 +439,8 @@ const LOGO = (c1='#4C1D95',c2='#0D9488')=>`<svg viewBox="0 0 48 48" fill="none">
   <ellipse cx="24" cy="29" rx="3.4" ry="2.6" fill="#fff"/><circle cx="22.8" cy="29" r=".7" fill="${c1}"/><circle cx="25.2" cy="29" r=".7" fill="${c1}"/>
   <circle cx="18.5" cy="17" r="1.1" fill="#fff"/><circle cx="29.5" cy="17" r="1.1" fill="#fff"/>
 </svg>`;
+/* Brand badge = the real app icon (matches the home-screen tile) */
+const brandImg = () => `<img src="icon-192.png" alt="Devitt Family Show Team" style="width:100%;height:100%;object-fit:cover;display:block">`;
 
 /* ===================================================================
    ROUTER + CHROME
@@ -457,7 +459,7 @@ function renderChrome(activeTop){
   if(!$('#view')){
     app.innerHTML =
       `<header class="app-header"><div class="row">
-        <div class="brandmark">${LOGO(DB.team.colors.purple,DB.team.colors.teal)}</div>
+        <div class="brandmark">${brandImg()}</div>
         <div><h1>${esc(DB.team.name)}</h1><div class="sub">${esc(DB.team.subtitle||'Show Livestock')}</div></div>
         <div class="header-actions">
           <button class="iconbtn" id="hSearch" aria-label="Search">${ICON.search}</button>
@@ -654,7 +656,7 @@ function renderLogin(){
   const existing = DB.users.length;
   const isSignup = !cloud ? !existing : loginMode==='signup';
   $('#app').innerHTML = `<div class="login"><div class="box">
-    <div class="logo">${LOGO()}</div>
+    <div class="logo">${brandImg()}</div>
     <h1>Devitt Family Show Team</h1><div class="tag">Show Livestock Management</div>
     <div class="card">
       <div class="oauth">
@@ -725,7 +727,7 @@ function aicon(){return `<svg width="16" height="18" viewBox="0 0 24 24" fill="c
 function renderSetup(){
   $('#app').innerHTML = `<div style="min-height:100vh;background:var(--bg)">
     <header class="app-header" style="border-radius:0"><div class="row">
-      <div class="brandmark">${LOGO(DB.team.colors.purple,DB.team.colors.teal)}</div>
+      <div class="brandmark">${brandImg()}</div>
       <div><h1>Welcome, ${esc(me().name.split(' ')[0])}</h1><div class="sub">Let's set up your show team</div></div>
     </div></header>
     <main style="max-width:520px"><div id="setupBody"></div></main></div>`;
@@ -1899,7 +1901,7 @@ route('team',()=>{
   const v=setView('','team'); const wrap=el('div');
   wrap.innerHTML=`${pageHeader('Team',null,can('invite')?`<button class="btn primary sm" id="inv">${ICON.plus} Invite</button>`:'')}
     <div class="card pad" style="background:linear-gradient(135deg,var(--purple-2),var(--purple));color:#fff;border:none">
-      <div style="display:flex;align-items:center;gap:12px"><div class="brandmark" style="width:44px;height:44px">${LOGO(DB.team.colors.purple,DB.team.colors.teal)}</div>
+      <div style="display:flex;align-items:center;gap:12px"><div class="brandmark" style="width:44px;height:44px">${brandImg()}</div>
       <div><div style="font-weight:800;font-size:16px">${esc(DB.team.name)}</div><div style="font-size:12px;opacity:.85">${DB.users.length} member${DB.users.length===1?'':'s'} · ${activeAnimals().length} active animals</div></div></div>
     </div>
     <div class="section-title">Members</div><div id="members"></div>
@@ -2043,7 +2045,7 @@ function openTeamSettings(){ const body=el('div');
   body.innerHTML=`<div class="field"><label>Team name</label><input class="control" id="tsName" value="${esc(DB.team.name)}"></div>
     <div class="field"><label>Subtitle</label><input class="control" id="tsSub" value="${esc(DB.team.subtitle||'')}"></div>
     <div class="field"><label>Weekly weigh-in day</label><select class="control" id="tsDay">${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d,i)=>`<option value="${i}" ${DB.team.weighDay===i?'selected':''}>${d}</option>`).join('')}</select></div>
-    <div class="field"><label>Team logo</label><div id="tsLogoPrev" style="width:60px;height:60px;border-radius:14px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;margin-bottom:8px">${LOGO(DB.team.colors.purple,DB.team.colors.teal)}</div><button class="btn sm" id="tsLogoBtn">${ICON.upload} Upload logo</button></div>`;
+    <div class="field"><label>Team logo</label><div id="tsLogoPrev" style="width:60px;height:60px;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin-bottom:8px">${brandImg()}</div><button class="btn sm" id="tsLogoBtn">${ICON.upload} Upload logo</button></div>`;
   const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">Save settings</button>`;
   const sh=openSheet({title:'Team settings',body,foot});
   $('[data-save]',sh).onclick=()=>{ DB.team.name=$('#tsName',body).value.trim()||DB.team.name; DB.team.subtitle=$('#tsSub',body).value.trim(); DB.team.weighDay=+$('#tsDay',body).value; save(); closeSheet(); $('.app-header').remove(); toast('Settings saved','good'); render(); };
