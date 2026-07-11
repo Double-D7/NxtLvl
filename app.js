@@ -334,12 +334,24 @@ function seedDemo(db){
   db.seeded=true;
   logAct('seed','Loaded demo show team data');
 }
+const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory'];
 function removeDemo(){
-  ['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory']
-    .forEach(k=>{ DB[k]=DB[k].filter(r=>!r.demo && !(r.animalId && (DB.animals.find(a=>a.id===r.animalId)||{}).demo)); });
+  DEMO_ARRAYS.forEach(k=>{ DB[k]=DB[k].filter(r=>!r.demo && !(r.animalId && (DB.animals.find(a=>a.id===r.animalId)||{}).demo)); });
   DB.animals=DB.animals.filter(a=>!a.demo);
   DB.users=DB.users.filter(u=>!u.demo);
   DB.seeded=false; save();
+}
+/* Convert the seeded demo records into permanent, real data: strip the `demo`
+   tag from every record (and demo team members) so the "Demo" label disappears
+   and nothing will ever be swept away by "remove demo data". Keeps everything. */
+function promoteDemo(){
+  let n=0;
+  DEMO_ARRAYS.forEach(k=>{ (DB[k]||[]).forEach(r=>{ if(r.demo){ delete r.demo; if(k==='animals')n++; } }); });
+  DB.users.forEach(u=>{ if(u.demo) delete u.demo; });
+  DB.seeded=false;
+  logAct('data','Kept demo animals as permanent records');
+  save();
+  return n;
 }
 
 /* ===================================================================
@@ -1992,7 +2004,7 @@ route('more',()=>{
     <div class="list">
       ${moreRow('__backup',ICON.download,'Export full backup')}
       ${moreRow('__import',ICON.upload,'Import backup')}
-      ${moreRow('__demo',ICON.trash,DB.seeded?'Remove demo data':'Load demo data')}
+      ${moreRow('__demo',DB.seeded?ICON.check:ICON.boxes,DB.seeded?'Demo animals — keep or remove':'Load demo data')}
     </div>
     <div style="margin-top:18px"><button class="btn block" id="logout">${ICON.logout} Sign out</button></div>
     <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">Devitt Family Show Team${Cloud.enabled?' · Cloud sync on':' · Local-first build'}<br>${Cloud.enabled&&Cloud.teamId?'Shared & synced across your team':'Data stored on this device'}</p>`;
@@ -2057,7 +2069,18 @@ function openInventory(){ const body=el('div');
   draw(); openSheet({title:'Feed inventory',body});
 }
 function importBackup(){ const inp=hiddenFile('application/json',async(files)=>{ try{ const txt=await files[0].text(); const data=JSON.parse(txt); if(!data.animals){toast('Invalid backup','bad');return;} if(await confirmSheet('Import backup','This replaces all current data on this device. Continue?','Import',true)){ DB=data; save(); toast('Backup imported','good'); location.hash='#/dashboard'; $('#app').innerHTML=''; render(); } }catch(e){toast('Could not read file','bad');} }); inp.click(); }
-async function toggleDemo(){ if(DB.seeded){ if(await confirmSheet('Remove demo data','Delete all demo animals and their records?','Remove',true)){ removeDemo(); toast('Demo data removed','good'); render(); } } else { seedDemo(DB); save(); toast('Demo data loaded','good'); render(); } }
+function toggleDemo(){
+  if(!DB.seeded){ seedDemo(DB); save(); toast('Demo data loaded','good'); render(); return; }
+  const demoCount=DB.animals.filter(a=>a.demo).length;
+  const body=el('div');
+  body.innerHTML=`<p style="font-size:14px;color:var(--ink-2);line-height:1.55;margin:2px 0 6px">You have <b>${demoCount}</b> animal${demoCount===1?'':'s'} still tagged <span class="pill" style="font-size:10px">Demo</span>. What do you want to do with them?</p>
+    <div class="help" style="margin-bottom:4px">${ICON.info}<span>Adding real history to these animals? Choose <b>Keep</b> — it just removes the “Demo” label and makes them permanent. Nothing is deleted.</span></div>`;
+  const foot=el('div');
+  foot.innerHTML=`<button class="btn danger" data-del>${ICON.trash} Delete</button><button class="btn primary" data-keep style="flex:1">${ICON.check} Keep as my animals</button>`;
+  const sh=openSheet({title:'Demo animals',body,foot});
+  $('[data-keep]',sh).onclick=()=>{ const n=promoteDemo(); closeSheet(); toast(`${n} animal${n===1?'':'s'} are now permanent`,'good'); render(); };
+  $('[data-del]',sh).onclick=async()=>{ closeSheet(); if(await confirmSheet('Delete demo data',`Permanently delete the ${demoCount} demo animal${demoCount===1?'':'s'} and all their records? This cannot be undone.`,'Delete everything',true)){ removeDemo(); toast('Demo data removed','good'); render(); } };
+}
 
 route('media',()=>{ // global recent media → route to first animal gallery fallback
   const v=setView('','dashboard'); const all=DB.media.slice().sort((a,b)=>a.createdAt<b.createdAt?1:-1);
