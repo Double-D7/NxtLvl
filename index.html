@@ -318,6 +318,70 @@ nav.dock button.on:after{content:"";position:absolute;top:-8px;width:22px;height
 .histrow .a{font-weight:700;font-size:14px}
 .histrow .b{font-size:11.5px;color:var(--mute)}
 .histrow .c{text-align:right;font-family:var(--disp);font-weight:700}
+
+/* ---- in-gym power tools ---- */
+.lastset{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--mute);margin:2px 0 8px}
+.lastset b{color:var(--teal);font-weight:700}
+.lastset .beat{margin-left:auto;color:var(--purple);font-weight:700;letter-spacing:.03em}
+.exhead .rest{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;display:inline-flex;gap:5px;align-items:center}
+.exhead .rest:active{background:var(--panel-2)}
+#restbar{position:fixed;left:50%;transform:translateX(-50%) translateY(24px);bottom:calc(88px + var(--safe-b));z-index:70;
+  background:linear-gradient(180deg,#20242b,#171a1e);border:1px solid var(--purple);border-radius:14px;
+  padding:9px 12px 9px 14px;display:none;align-items:center;gap:12px;box-shadow:var(--shadow);opacity:0;transition:.25s;min-width:200px}
+#restbar.show{display:flex;opacity:1;transform:translateX(-50%) translateY(0)}
+#restbar .rt{font-family:var(--disp);font-size:26px;font-weight:700;color:var(--ink);min-width:64px;text-align:center}
+#restbar .rt.done{color:var(--teal)}
+#restbar .rlbl{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);font-weight:700}
+#restbar button{background:var(--panel-2);border:1px solid var(--line);color:var(--ink);border-radius:8px;width:34px;height:34px;font-size:16px;font-weight:700}
+#restbar .adj{font-size:13px}
+.plate-calc{margin-top:12px}
+.plate-out{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;align-items:center}
+.plate{font-family:var(--disp);font-weight:700;font-size:13px;padding:8px 11px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);min-width:38px;text-align:center}
+.plate.err{color:var(--warn);background:transparent;border-color:transparent;font-family:var(--sans);font-weight:600}
+.pr-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line-soft)}
+.pr-item:first-child{border-top:0}
+.pr-item .medal{font-size:18px}
+.pr-item .pn{flex:1;font-weight:700;font-size:14px}
+.pr-item .pv{font-family:var(--disp);font-weight:700;color:var(--teal);font-size:15px}
+.pr-item .pd{font-size:11px;color:var(--mute)}
+
+/* ---- progress: charts + photos ---- */
+.chart-wrap{position:relative}
+canvas.chart{width:100%;height:180px;display:block}
+.chip-row{display:flex;gap:7px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+.chip-row::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;padding:8px 13px;border-radius:10px;border:1px solid var(--line);background:var(--char);font-size:12.5px;font-weight:700;color:var(--ink-2);white-space:nowrap}
+.chip.on{background:linear-gradient(180deg,var(--purple),var(--purple-dim));border-color:transparent;color:#fff}
+.chart-meta{display:flex;justify-content:space-between;margin-top:8px}
+.chart-meta .cm{font-size:11px;color:var(--mute)} .chart-meta .cm b{color:var(--ink);font-family:var(--disp);font-size:15px}
+.pose-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+.pcell{position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:var(--char);border:1px solid var(--line-soft);display:grid;place-items:center}
+.pcell img{width:100%;height:100%;object-fit:cover;display:block}
+.pcell .plabel{position:absolute;left:0;right:0;bottom:0;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  background:linear-gradient(0deg,rgba(0,0,0,.82),transparent);color:#fff;padding:12px 6px 4px;text-align:center}
+.pcell .cnt{position:absolute;top:5px;right:5px;background:rgba(139,92,246,.9);color:#fff;font-size:9px;font-weight:800;border-radius:6px;padding:2px 5px}
+.pcell.empty-p{color:var(--mute);font-size:10px;text-align:center;padding:6px}
+.compare{position:relative;width:100%;aspect-ratio:3/4;max-height:62vh;border-radius:12px;overflow:hidden;background:var(--char);border:1px solid var(--line-soft);margin:0 auto}
+.compare img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.compare .after-wrap{position:absolute;inset:0;overflow:hidden;border-right:2px solid var(--teal)}
+.compare .tagA,.compare .tagB{position:absolute;top:8px;font-size:10px;font-weight:800;letter-spacing:.05em;padding:3px 8px;border-radius:6px;color:#fff}
+.compare .tagA{left:8px;background:rgba(139,92,246,.9)} .compare .tagB{right:8px;background:rgba(45,212,191,.9);color:#04231f}
+.compare-slider{width:100%;margin-top:12px}
+.photo-row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.thumbstrip{display:flex;gap:8px;overflow-x:auto;padding:4px 0;scrollbar-width:none}
+.thumbstrip::-webkit-scrollbar{display:none}
+.thumb{flex:0 0 auto;width:56px;height:74px;border-radius:8px;overflow:hidden;border:2px solid transparent;background:var(--char)}
+.thumb.sel{border-color:var(--teal)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+input[type=range]{-webkit-appearance:none;appearance:none;height:30px;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line)}
+input[type=range]::-moz-range-track{height:5px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:linear-gradient(180deg,var(--purple),var(--purple-dim));margin-top:-9px;border:2px solid #fff2}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--purple);border:2px solid #fff2}
+
+/* dock scales to 7 items */
+nav.dock button{font-size:9px;letter-spacing:.03em}
+nav.dock button svg{width:22px;height:22px}
 </style>
 </head>
 <body>
@@ -471,11 +535,13 @@ function fresh(){
     nutrition:{},          // iso -> {meals:{}, supps:{}, water, steps, protein,carbs,fat}
     checkins:[],           // {id,date,operation,measurements,bp,rhr,sleep,energy,hunger,stress,back,cardio,wins,focus,photos:{}}
     prs:{},                // exName -> {w,r,e1rm,date}
+    prHistory:[],          // [{name,w,r,e1rm,date}] append-only feed
     groceryChecked:{},
   };
 }
 let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch(e){ S = fresh(); }
+if(!Array.isArray(S.prHistory)) S.prHistory=[];   // migrate older saves
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast("Storage full — export soon"); } }
 
 /* ---------- math helpers ---------- */
@@ -526,6 +592,147 @@ function compliance(){
   return max? Math.round(pts/max*100) : 0;
 }
 
+/* ---------- power-tool helpers ---------- */
+function setScore(s){ const w=parseFloat(s.w), r=parseInt(s.r); return (w>0&&r>0)? e1rm(w,r):0; }
+function bestSet(sets){ let best=null,bs=-1; (sets||[]).forEach(s=>{ const sc=setScore(s); if(sc>bs){bs=sc;best=s;} }); return best; }
+// most recent PRIOR session containing this exercise with logged sets
+function lastSession(exName){
+  const today=todayISO();
+  const cands=S.workouts
+    .filter(w=>w.date!==today || false) // exclude today's own record; still allow older same-day? keep simple: exclude today
+    .filter(w=>w.exercises && w.exercises.some(e=>e.name===exName && e.sets.some(s=>parseFloat(s.w)>0)))
+    .sort((a,b)=>a.date<b.date?1:-1);
+  if(!cands.length) return null;
+  const w=cands[0]; const ex=w.exercises.find(e=>e.name===exName);
+  return { date:w.date, sets:ex.sets.filter(s=>parseFloat(s.w)>0), best:bestSet(ex.sets) };
+}
+const PLATES=[45,35,25,10,5,2.5];
+function platesPerSide(target,bar){
+  let per=(target-bar)/2; if(per<0) return {err:"Below bar weight"};
+  const out=[]; PLATES.forEach(p=>{ while(per>=p-1e-9){ out.push(p); per=Math.round((per-p)*100)/100; } });
+  if(per>0.01) return {plates:out, rem:per};
+  return {plates:out};
+}
+// time series
+function weightSeries(){ return sortedWeightDates().map(d=>({t:d,v:S.weights[d]})); }
+function checkinSeries(sel){
+  return S.checkins.map(c=>{
+    let v=null;
+    if(sel==="waist") v=parseFloat(c.measurements?.waistNavel);
+    else if(sel==="chest") v=parseFloat(c.measurements?.chest);
+    else if(sel==="armRF") v=parseFloat(c.measurements?.armRF);
+    else if(sel==="bf"){ const wa=parseFloat(c.measurements?.waistNavel),nk=parseFloat(c.measurements?.neck);
+      if(wa&&nk&&wa>nk) v=round1(Math.max(4,Math.min(50,86.010*Math.log10(wa-nk)-70.041*Math.log10(PROFILE.heightIn)+36.76))); }
+    return v?{t:c.date,v}:null;
+  }).filter(Boolean);
+}
+function strengthSeries(exName){
+  return S.workouts
+    .filter(w=>w.exercises && w.exercises.some(e=>e.name===exName))
+    .map(w=>{ const ex=w.exercises.find(e=>e.name===exName); const b=bestSet(ex.sets); return b&&setScore(b)?{t:w.date,v:setScore(b)}:null; })
+    .filter(Boolean).sort((a,b)=>a.t<b.t?-1:1);
+}
+
+/* ---------- generic line chart ---------- */
+function drawLineChart(cv, pts, opts){
+  opts=opts||{}; const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth||300, h=cv.clientHeight||180;
+  cv.width=w*dpr; cv.height=h*dpr; const ctx=cv.getContext("2d"); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  if(!pts||pts.length<2){
+    ctx.fillStyle="#6E7783"; ctx.font="12px -apple-system,sans-serif"; ctx.textAlign="center";
+    ctx.fillText(pts&&pts.length===1?"One point — log more to draw the trend":"Not enough data yet", w/2, h/2); return;
+  }
+  const vals=pts.map(p=>p.v); let min=Math.min(...vals), max=Math.max(...vals);
+  if(min===max){ min-=1; max+=1; } const pad=(max-min)*0.15; min-=pad; max+=pad;
+  const L=34, Rp=8, T=10, B=20;
+  const X=i=>L+i*(w-L-Rp)/(pts.length-1);
+  const Y=v=>T+(1-(v-min)/(max-min))*(h-T-B);
+  const col=opts.color||"#8B5CF6";
+  // gridlines + y labels
+  ctx.strokeStyle="#22262d"; ctx.fillStyle="#6E7783"; ctx.font="10px -apple-system,sans-serif"; ctx.textAlign="right"; ctx.lineWidth=1;
+  for(let g=0; g<=3; g++){ const val=min+(max-min)*g/3, y=Y(val);
+    ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(w-Rp,y); ctx.stroke();
+    ctx.fillText(opts.fmt?opts.fmt(val):Math.round(val), L-5, y+3); }
+  // area
+  const grad=ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,opts.fill||"rgba(139,92,246,.28)"); grad.addColorStop(1,"rgba(139,92,246,0)");
+  ctx.beginPath(); ctx.moveTo(X(0),Y(vals[0])); pts.forEach((p,i)=>ctx.lineTo(X(i),Y(p.v)));
+  ctx.lineTo(X(pts.length-1),h-B); ctx.lineTo(X(0),h-B); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+  // line
+  ctx.beginPath(); ctx.moveTo(X(0),Y(vals[0])); pts.forEach((p,i)=>ctx.lineTo(X(i),Y(p.v)));
+  ctx.strokeStyle=col; ctx.lineWidth=2.4; ctx.lineJoin="round"; ctx.stroke();
+  // endpoint
+  const lx=X(pts.length-1), ly=Y(vals[vals.length-1]);
+  ctx.beginPath(); ctx.arc(lx,ly,4,0,7); ctx.fillStyle="#2DD4BF"; ctx.fill();
+  ctx.beginPath(); ctx.arc(lx,ly,7,0,7); ctx.strokeStyle="rgba(45,212,191,.4)"; ctx.lineWidth=2; ctx.stroke();
+}
+
+/* ---------- IndexedDB photo store ---------- */
+const IDB={db:null};
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    if(IDB.db) return res(IDB.db);
+    const rq=indexedDB.open("grizzlyPhotos",1);
+    rq.onupgradeneeded=()=>{ const db=rq.result; if(!db.objectStoreNames.contains("photos")) db.createObjectStore("photos",{keyPath:"id"}); };
+    rq.onsuccess=()=>{ IDB.db=rq.result; res(IDB.db); };
+    rq.onerror=()=>rej(rq.error);
+  });
+}
+function idbAll(){ return idbOpen().then(db=>new Promise((res,rej)=>{
+  const tx=db.transaction("photos","readonly").objectStore("photos").getAll();
+  tx.onsuccess=()=>res(tx.result||[]); tx.onerror=()=>rej(tx.error); })); }
+function idbPut(rec){ return idbOpen().then(db=>new Promise((res,rej)=>{
+  const tx=db.transaction("photos","readwrite").objectStore("photos").put(rec);
+  tx.onsuccess=()=>res(); tx.onerror=()=>rej(tx.error); })); }
+function idbDel(id){ return idbOpen().then(db=>new Promise((res,rej)=>{
+  const tx=db.transaction("photos","readwrite").objectStore("photos").delete(id);
+  tx.onsuccess=()=>res(); tx.onerror=()=>rej(tx.error); })); }
+function compressImage(file, maxPx, quality){
+  return new Promise((res,rej)=>{
+    const rd=new FileReader();
+    rd.onload=()=>{ const img=new Image();
+      img.onload=()=>{ let{width:iw,height:ih}=img; const sc=Math.min(1,maxPx/Math.max(iw,ih));
+        const cw=Math.round(iw*sc),ch=Math.round(ih*sc);
+        const c=document.createElement("canvas"); c.width=cw; c.height=ch;
+        c.getContext("2d").drawImage(img,0,0,cw,ch);
+        res(c.toDataURL("image/jpeg",quality||0.8)); };
+      img.onerror=rej; img.src=rd.result; };
+    rd.onerror=rej; rd.readAsDataURL(file);
+  });
+}
+
+/* ---------- rest timer ---------- */
+const REST={end:0,dur:0,int:null};
+function ensureRestBar(){
+  let el=document.getElementById("restbar");
+  if(!el){ el=document.createElement("div"); el.id="restbar";
+    el.innerHTML=`<div><div class="rlbl">Rest</div><div class="rt" id="rt">0:00</div></div>
+      <button class="adj" data-radj="-15">−15</button><button class="adj" data-radj="15">+15</button>
+      <button data-rstop aria-label="stop">✕</button>`;
+    document.body.appendChild(el);
+    el.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+      if(b.hasAttribute("data-rstop")) stopRest();
+      else if(b.dataset.radj){ REST.end+=parseInt(b.dataset.radj)*1000; tickRest(); } });
+  }
+  return el;
+}
+function startRest(sec){
+  ensureRestBar().classList.add("show");
+  REST.dur=sec; REST.end=Date.now()+sec*1000;
+  clearInterval(REST.int); REST.int=setInterval(tickRest,250); tickRest();
+}
+function tickRest(){
+  const el=document.getElementById("restbar"); if(!el) return;
+  const left=Math.max(0,REST.end-Date.now()); const s=Math.ceil(left/1000);
+  const rt=document.getElementById("rt");
+  rt.textContent=Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+  if(left<=0){ rt.classList.add("done"); rt.textContent="DONE"; clearInterval(REST.int);
+    if(navigator.vibrate) navigator.vibrate([120,60,120]); setTimeout(stopRest,2500); }
+  else rt.classList.remove("done");
+}
+function stopRest(){ clearInterval(REST.int); const el=document.getElementById("restbar"); if(el) el.classList.remove("show"); }
+
 /* ---------- toast ---------- */
 let toastT;
 function toast(msg, ok){
@@ -536,7 +743,7 @@ function toast(msg, ok){
 
 /* ---------- router ---------- */
 let route = location.hash.replace("#","") || "dash";
-const ROUTES = ["dash","weigh","train","fuel","check","book"];
+const ROUTES = ["dash","weigh","train","fuel","progress","check","book"];
 function go(r){ route=r; location.hash=r; render(); window.scrollTo(0,0); }
 window.addEventListener("hashchange",()=>{ const r=location.hash.replace("#",""); if(ROUTES.includes(r)&&r!==route){route=r;render();} });
 
@@ -548,6 +755,7 @@ const IC = {
   fuel:'<path d="M8 3v6a3 3 0 006 0V3M6 3v18M18 3c-2 0-3 2-3 5v4h3zM18 12v9"/>',
   check:'<path d="M9 11l3 3 8-8M20 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
   book:'<path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2zM4 19h15"/>',
+  progress:'<path d="M3 3v18h18M7 15l4-5 3 3 5-7"/>',
 };
 const BEAR = `<svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
   <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -569,6 +777,7 @@ function render(){
   bind();
   if(route==="dash") drawSpark();
   if(route==="fuel") drawMacros();
+  if(route==="progress") drawProgress();
 }
 
 function header(){
@@ -583,7 +792,7 @@ function header(){
   </header>`;
 }
 function dock(){
-  const items=[["dash","Dash"],["weigh","Weigh"],["train","Train"],["fuel","Fuel"],["check","Check-In"],["book","Book"]];
+  const items=[["dash","Dash"],["weigh","Weigh"],["train","Train"],["fuel","Fuel"],["progress","Progress"],["check","Check"],["book","Book"]];
   return `<nav class="dock">${items.map(([r,l])=>
     `<button data-go="${r}" class="${route===r?"on":""}"><svg viewBox="0 0 24 24">${IC[r]}</svg>${l}</button>`).join("")}</nav>`;
 }
@@ -675,8 +884,21 @@ function VIEW_dash(){
     <button class="btn teal" data-go="check">Run Operation ${String(operationNo()).padStart(3,"0")} check-in</button>
   </div>
 
+  ${prFeed(3)}
+
   <div style="text-align:center;margin:26px 0 6px" class="eyebrow">Forged · Powerful · Unbreakable</div>
   `;
+}
+function prFeed(limit){
+  const hist=(S.prHistory||[]).slice().reverse().slice(0,limit);
+  if(!hist.length) return "";
+  return `<div class="section-h"><h2>Personal Records</h2><span class="badge" style="background:rgba(45,212,191,.12);color:#8be7db;border-color:rgba(45,212,191,.3)">🔥 ${S.prHistory.length}</span><div class="rule"></div></div>
+  <div class="card">
+    ${hist.map(p=>`<div class="pr-item"><span class="medal">🥇</span>
+      <span class="pn">${p.name}</span>
+      <span style="text-align:right"><div class="pv tnum">${p.w} × ${p.r}</div><div class="pd">${fmtDate(p.date)} · e1RM ${p.e1rm}</div></span>
+    </div>`).join("")}
+  </div>`;
 }
 
 /* ---------- WEIGH-IN ---------- */
@@ -718,6 +940,7 @@ function VIEW_weigh(){
 
 /* ---------- TRAIN ---------- */
 let trainDay = DOW[new Date().getDay()];
+let plateOpen=false, plateWeight="", plateBar=45;
 function currentWorkout(iso, key){
   return S.workouts.find(w=>w.date===iso && w.key===key);
 }
@@ -759,31 +982,62 @@ function VIEW_train(){
       <span><span class="dot y"></span> Brace &amp; control</span>
       <span><span class="dot r"></span> Avoid</span>
     </div>
+    <button class="btn sm ghost" id="plateToggle" style="margin-top:12px">⚖ Plate calculator</button>
+    <div class="plate-calc" id="plateCalc" style="display:${plateOpen?'block':'none'}">
+      <div class="grid g2" style="margin-top:4px">
+        <div class="field"><span class="label">Target weight (lb)</span><input type="number" inputmode="decimal" id="plTarget" value="${plateWeight||''}" placeholder="185" class="tnum"/></div>
+        <div class="field"><span class="label">Bar weight (lb)</span><input type="number" inputmode="decimal" id="plBar" value="${plateBar}" class="tnum"/></div>
+      </div>
+      <div class="plate-out" id="plateOut"></div>
+    </div>
   </div>
   ${body}
   `;
 }
+function renderPlates(){
+  const out=document.getElementById("plateOut"); if(!out) return;
+  const t=parseFloat(plateWeight), bar=parseFloat(plateBar);
+  if(!t||!bar){ out.innerHTML='<span class="plate err">Enter a target weight</span>'; return; }
+  const r=platesPerSide(t,bar);
+  if(r.err){ out.innerHTML=`<span class="plate err">${r.err}</span>`; return; }
+  if(!r.plates.length){ out.innerHTML='<span class="plate err">Just the bar</span>'; return; }
+  out.innerHTML=`<span class="small" style="width:100%">Per side (${r.plates.length} plates):</span>`+
+    r.plates.map(p=>`<span class="plate">${p}</span>`).join("")+
+    (r.rem?`<span class="plate err">+${r.rem} lb short</span>`:"");
+}
 function blankSet(){ return {w:"",r:"",rpe:""}; }
 function exerciseCard(e,ei,session){
   const pr=S.prs[e.name];
-  const setsHtml=e.sets.map((s,si)=>`
+  const last=lastSession(e.name);
+  const lb = last && last.best ? last.best : null;
+  const setsHtml=e.sets.map((s,si)=>{
+    // suggest last week's matching set (by index), else its best set, as placeholder
+    const ref = last ? (last.sets[si]||last.best) : null;
+    const wp = ref&&ref.w? ref.w : "lb", rp = ref&&ref.r? ref.r : "reps";
+    return `
     <div class="setrow" data-ex="${ei}" data-set="${si}">
       <div class="sn">${si+1}</div>
-      <input type="number" inputmode="decimal" placeholder="lb" value="${s.w}" data-f="w" class="tnum"/>
-      <input type="number" inputmode="numeric" placeholder="reps" value="${s.r}" data-f="r" class="tnum"/>
+      <input type="number" inputmode="decimal" placeholder="${wp}" value="${s.w}" data-f="w" class="tnum"/>
+      <input type="number" inputmode="numeric" placeholder="${rp}" value="${s.r}" data-f="r" class="tnum"/>
       <input type="number" inputmode="decimal" placeholder="RPE" value="${s.rpe}" data-f="rpe" class="tnum rpe"/>
       <button class="kill" data-killset="${ei}:${si}" aria-label="remove set">×</button>
-    </div>`).join("");
+    </div>`;}).join("");
+  const lastLine = lb
+    ? `<div class="lastset">Last · <b>${lb.w} lb × ${lb.r}</b> <span class="small">(${fmtDate(last.date)})</span><span class="beat">▲ beat it</span></div>`
+    : `<div class="lastset">First time logging — set the benchmark</div>`;
   return `<div class="card" data-excard="${ei}">
     <div class="exhead">
       <span class="dot ${e.rating}" title="${RTXT[e.rating]}"></span>
       <span class="nm">${e.name}</span>
       <span class="scheme">${e.scheme}</span>
+      <button class="rest" data-rest="120">⏱ Rest</button>
     </div>
+    ${lastLine}
     ${pr?`<div class="prev">PR · ${pr.w} lb × ${pr.r}  (e1RM ${pr.e1rm})</div>`:`<div class="prev">No PR logged yet</div>`}
     ${setsHtml}
     <div style="display:flex;gap:10px;margin-top:10px">
       <button class="btn sm ghost" data-addset="${ei}">+ Add set</button>
+      <button class="btn sm ghost" data-rest="90">⏱ 90s rest</button>
     </div>
     <textarea data-note="${ei}" placeholder="Notes — form cues, how the back felt, substitutions…" style="margin-top:10px">${e.note||""}</textarea>
   </div>`;
@@ -863,6 +1117,131 @@ function macroValue(key){
   const n=S.nutrition[todayISO()]||{};
   if(key==="cal") return Math.round((n.protein||0)*4+(n.carbs||0)*4+(n.fat||0)*9);
   return n[key]||0;
+}
+
+/* ---------- PROGRESS (charts + photos) ---------- */
+let progMetric="weight", progPose="Front", progA=null, progB=null, photoCache=null;
+function progMetrics(){
+  const base=[["weight","Weight"],["waist","Waist"],["bf","Body Fat"]];
+  const lifts=BENCHMARKS.filter(n=>strengthSeries(n).length>0)
+    .map(n=>["lift:"+n, n.replace("Barbell ","BB ").replace("DB ","")]);
+  return base.concat(lifts);
+}
+function metricSeries(key){
+  if(key==="weight") return {pts:weightSeries(),unit:" lb",color:"#8B5CF6",up:false,fmt:v=>Math.round(v)};
+  if(key==="waist")  return {pts:checkinSeries("waist"),unit:'"',color:"#2DD4BF",up:false,fmt:v=>v.toFixed(1)};
+  if(key==="bf")     return {pts:checkinSeries("bf"),unit:"%",color:"#E3A008",up:false,fmt:v=>v.toFixed(1)};
+  if(key.startsWith("lift:")) return {pts:strengthSeries(key.slice(5)),unit:" e1RM",color:"#8B5CF6",up:true,fmt:v=>Math.round(v)};
+  return {pts:[],unit:"",color:"#8B5CF6",up:true,fmt:v=>v};
+}
+function VIEW_progress(){
+  const metrics=progMetrics();
+  if(!metrics.some(m=>m[0]===progMetric)) progMetric="weight";
+  const chips=metrics.map(m=>`<button class="chip ${m[0]===progMetric?'on':''}" data-metric="${m[0]}">${m[1]}</button>`).join("");
+  return `
+  <div class="section-h"><h2>Progress</h2><span class="badge" style="background:rgba(45,212,191,.12);color:#8be7db;border-color:rgba(45,212,191,.3)">You can see it</span><div class="rule"></div></div>
+
+  <div class="section-h" style="margin-top:6px"><h2 style="font-size:14px">Trends</h2><div class="rule"></div></div>
+  <div class="card">
+    <div class="chip-row">${chips}</div>
+    <div class="chart-wrap"><canvas class="chart" id="trendChart"></canvas></div>
+    <div class="chart-meta" id="chartMeta"></div>
+  </div>
+
+  <div class="section-h"><h2 style="font-size:14px">Progress Photos</h2><div class="rule"></div></div>
+  <div class="card">
+    <div class="photo-row">
+      <div class="field" style="flex:1;min-width:130px"><span class="label">Pose</span>
+        <select id="photoPose">${PHOTO_LIST.map(p=>`<option ${p===progPose?'selected':''}>${p}</option>`).join("")}</select></div>
+      <button class="btn primary" id="addPhotoBtn" style="width:auto">＋ Add photo</button>
+      <input type="file" id="photoFile" accept="image/*" style="display:none"/>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Stored privately on this device. Same lighting, distance and pose each week for a clean comparison.</p>
+    <div class="pose-grid" id="poseGrid"><div class="pcell empty-p">Loading…</div></div>
+  </div>
+
+  <div class="section-h"><h2 style="font-size:14px">Compare · Before / After</h2><div class="rule"></div></div>
+  <div class="card" id="compareCard">
+    <div class="field"><span class="label">Pose</span>
+      <select id="cmpPose">${PHOTO_LIST.map(p=>`<option ${p===progPose?'selected':''}>${p}</option>`).join("")}</select></div>
+    <div id="compareArea" style="margin-top:12px"><div class="empty">Add two photos of the same pose to compare.</div></div>
+  </div>
+  `;
+}
+function drawProgress(){
+  const cv=document.getElementById("trendChart"); if(!cv) return;
+  const m=metricSeries(progMetric);
+  drawLineChart(cv, m.pts, {color:m.color, fmt:m.fmt});
+  const meta=document.getElementById("chartMeta"); if(!meta) return;
+  const pts=m.pts;
+  if(pts.length>=1){ const first=pts[0].v, last=pts[pts.length-1].v, dv=round1(last-first);
+    const improved = m.up ? dv>0 : dv<0;
+    const col = dv===0?"var(--ink)":(improved?"var(--teal)":"var(--warn)");
+    meta.innerHTML=`<span class="cm">Latest <b class="tnum">${m.fmt(last)}${m.unit}</b></span>
+      <span class="cm">Change <b class="tnum" style="color:${col}">${dv>0?'+':''}${dv}${m.unit}</b></span>
+      <span class="cm">Points <b class="tnum">${pts.length}</b></span>`;
+  } else meta.innerHTML=`<span class="cm">No data yet — log to build this trend.</span>`;
+}
+function bindProgress(){
+  document.querySelectorAll("[data-metric]").forEach(b=>b.onclick=()=>{ progMetric=b.dataset.metric; render(); });
+  const pose=document.getElementById("photoPose");
+  if(pose) pose.onchange=()=>{ progPose=pose.value; const cp=document.getElementById("cmpPose"); if(cp) cp.value=progPose; progA=progB=null; renderCompareArea(); };
+  const cmp=document.getElementById("cmpPose");
+  if(cmp) cmp.onchange=()=>{ progPose=cmp.value; progA=progB=null; renderCompareArea(); };
+  const addBtn=document.getElementById("addPhotoBtn"), file=document.getElementById("photoFile");
+  if(addBtn&&file){ addBtn.onclick=()=>file.click();
+    file.onchange=async()=>{ const f=file.files[0]; if(!f) return;
+      try{ const data=await compressImage(f,1280,0.82);
+        const rec={id:"p"+Date.now(), pose:document.getElementById("photoPose").value, date:todayISO(), data};
+        await idbPut(rec); if(!photoCache) photoCache=[]; photoCache.push(rec);
+        toast("Photo saved",true); renderPoseGrid(); renderCompareArea();
+      }catch(err){ toast("Couldn't save that photo"); }
+      file.value=""; };
+  }
+  if(photoCache){ renderPoseGrid(); renderCompareArea(); }
+  else idbAll().then(list=>{ photoCache=list||[]; renderPoseGrid(); renderCompareArea(); })
+              .catch(()=>{ photoCache=[]; renderPoseGrid(); renderCompareArea(); });
+}
+function renderPoseGrid(){
+  const grid=document.getElementById("poseGrid"); if(!grid) return;
+  const byPose={}; (photoCache||[]).forEach(p=>{ (byPose[p.pose]=byPose[p.pose]||[]).push(p); });
+  const poses=PHOTO_LIST.filter(p=>byPose[p]&&byPose[p].length);
+  if(!poses.length){ grid.style.gridTemplateColumns="1fr";
+    grid.innerHTML='<div class="pcell empty-p" style="aspect-ratio:auto;padding:20px">No photos yet — add your first above to start your visual timeline.</div>'; return; }
+  grid.style.gridTemplateColumns="repeat(3,1fr)";
+  grid.innerHTML=poses.map(p=>{ const arr=byPose[p].slice().sort((a,b)=>a.date<b.date?-1:1); const latest=arr[arr.length-1];
+    return `<button class="pcell" data-openpose="${p}"><img src="${latest.data}" alt="${p}"/><span class="cnt">${arr.length}</span><span class="plabel">${p}</span></button>`;
+  }).join("");
+  grid.querySelectorAll("[data-openpose]").forEach(b=>b.onclick=()=>{ progPose=b.dataset.openpose; progA=progB=null;
+    const cp=document.getElementById("cmpPose"); if(cp) cp.value=progPose;
+    renderCompareArea(); const cc=document.getElementById("compareCard"); if(cc) cc.scrollIntoView({behavior:"smooth",block:"start"}); });
+}
+function renderCompareArea(){
+  const area=document.getElementById("compareArea"); if(!area) return;
+  const arr=(photoCache||[]).filter(p=>p.pose===progPose).sort((a,b)=>a.date<b.date?-1:1);
+  if(arr.length<2){ area.innerHTML=`<div class="empty">Add at least two “${progPose}” photos to compare.${arr.length?` You have ${arr.length} so far.`:""}</div>`; return; }
+  if(!progA || !arr.some(p=>p.id===progA)) progA=arr[0].id;
+  if(!progB || !arr.some(p=>p.id===progB)) progB=arr[arr.length-1].id;
+  const A=arr.find(p=>p.id===progA), B=arr.find(p=>p.id===progB);
+  const strip=(sel)=>arr.map(p=>`<button class="thumb ${((sel==='A'&&p.id===progA)||(sel==='B'&&p.id===progB))?'sel':''}" data-pick="${sel}:${p.id}"><img src="${p.data}"/></button>`).join("");
+  area.innerHTML=`
+    <div class="compare" id="cmpView">
+      <img class="base" src="${A.data}" alt="before"/>
+      <div class="after-wrap" id="afterWrap"><img id="afterImg" src="${B.data}" alt="after"/></div>
+      <span class="tagA">${fmtDate(A.date)}</span><span class="tagB">${fmtDate(B.date)}</span>
+    </div>
+    <input type="range" min="0" max="100" value="55" class="compare-slider" id="cmpSlider" aria-label="reveal after photo"/>
+    <div style="margin-top:12px"><div class="label" style="margin-bottom:5px">Before (purple)</div><div class="thumbstrip">${strip('A')}</div></div>
+    <div style="margin-top:10px"><div class="label" style="margin-bottom:5px">After (teal)</div><div class="thumbstrip">${strip('B')}</div></div>`;
+  const view=document.getElementById("cmpView"), afterImg=document.getElementById("afterImg"),
+        wrap=document.getElementById("afterWrap"), slider=document.getElementById("cmpSlider");
+  const sizeAfter=()=>{ afterImg.style.width=view.clientWidth+"px"; };
+  const applyReveal=()=>{ wrap.style.width=slider.value+"%"; };
+  if(afterImg.complete) sizeAfter(); else afterImg.onload=sizeAfter;
+  applyReveal();
+  slider.oninput=applyReveal;
+  area.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const [sel,id]=b.dataset.pick.split(":");
+    if(sel==='A') progA=id; else progB=id; renderCompareArea(); });
 }
 
 /* ---------- CHECK-IN ---------- */
@@ -1040,7 +1419,7 @@ function exLibrary(){
   return out.map(e=>`<div class="exlib"><span class="dot ${e[2]}"></span><span class="nm">${e[0]}</span><span class="tag">${e[1]}</span></div>`).join("");
 }
 
-const VIEWS={dash:VIEW_dash,weigh:VIEW_weigh,train:VIEW_train,fuel:VIEW_fuel,check:VIEW_check,book:VIEW_book};
+const VIEWS={dash:VIEW_dash,weigh:VIEW_weigh,train:VIEW_train,fuel:VIEW_fuel,progress:VIEW_progress,check:VIEW_check,book:VIEW_book};
 
 /* ============================================================
    BINDINGS  (per-view; state saved on interaction)
@@ -1052,6 +1431,7 @@ function bind(){
   if(route==="weigh") bindWeigh();
   if(route==="train") bindTrain();
   if(route==="fuel")  bindFuel();
+  if(route==="progress") bindProgress();
   if(route==="check") bindCheck();
   if(route==="book")  bindBook();
 }
@@ -1074,6 +1454,15 @@ function bindWeigh(){
 
 function bindTrain(){
   document.querySelectorAll("[data-day]").forEach(b=>b.onclick=()=>{ trainDay=b.dataset.day; draft=null; render(); });
+  // plate calculator (available on every day)
+  const pt=document.getElementById("plateToggle");
+  if(pt) pt.onclick=()=>{ plateOpen=!plateOpen; const c=document.getElementById("plateCalc"); if(c){ c.style.display=plateOpen?'block':'none'; if(plateOpen) renderPlates(); } };
+  const plT=document.getElementById("plTarget"), plB=document.getElementById("plBar");
+  if(plT) plT.oninput=()=>{ plateWeight=plT.value; renderPlates(); };
+  if(plB) plB.oninput=()=>{ plateBar=plB.value; renderPlates(); };
+  if(plateOpen) renderPlates();
+  // rest timer buttons (present on training days)
+  document.querySelectorAll("[data-rest]").forEach(b=>b.onclick=()=>startRest(parseInt(b.dataset.rest)));
   if(trainDay==="sun"||trainDay==="thu") return;
   ensureDraft();
   // sync inputs -> draft
@@ -1113,7 +1502,10 @@ function saveWorkout(){
       const w=parseFloat(s.w), r=parseInt(s.r);
       if(w>0&&r>0){
         const est=e1rm(w,r), cur=S.prs[e.name];
-        if(!cur || est>cur.e1rm){ S.prs[e.name]={w:round1(w),r,e1rm:est,date:todayISO()}; prCount++; }
+        if(!cur || est>cur.e1rm){
+          const rec={name:e.name,w:round1(w),r,e1rm:est,date:todayISO()};
+          S.prs[e.name]=rec; S.prHistory.push(rec); prCount++;
+        }
       }
     });
   });
@@ -1251,7 +1643,7 @@ function drawMacros(){
 /* ---------- boot ---------- */
 if(!ROUTES.includes(route)) route="dash";
 render();
-window.addEventListener("resize",()=>{ if(route==="dash")drawSpark(); if(route==="fuel")drawMacros(); });
+window.addEventListener("resize",()=>{ if(route==="dash")drawSpark(); if(route==="fuel")drawMacros(); if(route==="progress")drawProgress(); });
 </script>
 <script>
 if('serviceWorker' in navigator){
