@@ -8,6 +8,6 @@
 
    Leave them empty to run the app in local-only mode (data stays on-device). */
 window.DFST_CONFIG = {
-  supabaseUrl:     "",   // e.g. "https://abcdefgh.supabase.co"
-  supabaseAnonKey: ""    // the "anon public" key from Project Settings → API
+  supabaseUrl:     "https://awwqwxyfbmgxsashxaml.supabase.co",
+  supabaseAnonKey: "sb_publishable_4KwaK78zSHqmK5PGoLqt5A_iV4cg1fE"  // publishable key (safe in frontend)
 };
