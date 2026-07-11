@@ -38,8 +38,9 @@ img{max-width:100%;display:block}
 #app{min-height:100vh;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 8px)}
 .app-header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,var(--purple-2),var(--purple));color:#fff;padding:calc(var(--safe-t) + 10px) 16px 12px;box-shadow:0 2px 14px rgba(59,27,110,.28)}
 .app-header .row{display:flex;align-items:center;gap:12px}
-.brandmark{width:36px;height:36px;border-radius:10px;background:#fff;display:grid;place-items:center;flex:none;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.brandmark{width:36px;height:36px;border-radius:10px;background:#0d0f14;overflow:hidden;display:grid;place-items:center;flex:none;box-shadow:0 2px 8px rgba(0,0,0,.28)}
 .brandmark svg{width:26px;height:26px}
+.brandmark img{width:100%;height:100%;object-fit:cover;display:block}
 .app-header h1{font-size:16px;font-weight:800;letter-spacing:.2px}
 .app-header .sub{font-size:11px;opacity:.82;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
 .header-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
@@ -188,8 +189,9 @@ hr.soft{border:none;border-top:1px solid var(--line-2);margin:14px 0}
 
 .login{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:24px;background:linear-gradient(160deg,var(--purple-2),#241046 60%,#0d0620)}
 .login .box{max-width:400px;margin:0 auto;width:100%}
-.login .logo{width:78px;height:78px;border-radius:22px;background:#fff;display:grid;place-items:center;margin:0 auto 18px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.login .logo{width:82px;height:82px;border-radius:22px;background:#0d0f14;overflow:hidden;display:grid;place-items:center;margin:0 auto 18px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
 .login .logo svg{width:52px;height:52px}
+.login .logo img{width:100%;height:100%;object-fit:cover;display:block}
 .login h1{color:#fff;text-align:center;font-size:23px;font-weight:800;letter-spacing:.2px}
 .login .tag{color:rgba(255,255,255,.72);text-align:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin:6px 0 26px}
 .login .card{padding:20px;border-radius:20px}
