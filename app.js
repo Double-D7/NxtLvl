@@ -8,7 +8,10 @@
 "use strict";
 
 /* ---------------- Icons (inline SVG, stroke) ---------------- */
-const I = (p, o) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${(o&&o.w)||2}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+/* width/height are set explicitly so iOS Safari doesn't fall back to a giant
+   default size for viewBox-only SVGs; CSS rules (.btn svg, .iconbtn svg, …)
+   still override these where a specific size is needed. */
+const I = (p, o) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="${(o&&o.w)||2}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 const ICON = {
   dash:I('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
   animals:I('<path d="M4 14c0-3 2-5 4-5m8 0c2 0 4 2 4 5"/><circle cx="7.5" cy="8" r="1.6"/><circle cx="16.5" cy="8" r="1.6"/><path d="M9 18c0-2 1.4-3 3-3s3 1 3 3-1.4 3-3 3-3-1-3-3z"/><path d="M5 19c-1.2 0-2-1-1.6-2M19 19c1.2 0 2-1 1.6-2"/>'),
