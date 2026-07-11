@@ -1646,8 +1646,19 @@ render();
 window.addEventListener("resize",()=>{ if(route==="dash")drawSpark(); if(route==="fuel")drawMacros(); if(route==="progress")drawProgress(); });
 </script>
 <script>
+/* Register SW + auto-refresh to the newest version when one is deployed.
+   User data lives in localStorage/IndexedDB and is never affected by updates. */
 if('serviceWorker' in navigator){
-  window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  var hadController = !!navigator.serviceWorker.controller, reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if(hadController && !reloaded){ reloaded = true; location.reload(); }
+  });
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      if(reg.update) reg.update();               // check for a new version each launch
+      setInterval(function(){ reg.update && reg.update(); }, 60*60*1000);
+    }).catch(function(){});
+  });
 }
 </script>
 </body>
