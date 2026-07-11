@@ -1,4 +1,4 @@
-name: Deploy Project Grizzly to GitHub Pages
+name: Deploy Devitt Family Show Team to GitHub Pages
 
 on:
   push:
