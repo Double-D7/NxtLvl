@@ -1065,6 +1065,7 @@ route('animal',(parts)=>{
       <div class="ov"></div>
       <button class="iconbtn no-print" style="position:absolute;left:12px;top:calc(var(--safe-t) + 8px);z-index:3" onclick="history.length>1?history.back():go('/animals')">${ICON.back}</button>
       <button class="iconbtn no-print" style="position:absolute;right:12px;top:calc(var(--safe-t) + 8px);z-index:3" data-edit>${ICON.edit}</button>
+      ${can('addRecord')?`<button class="no-print" data-setphoto style="position:absolute;right:12px;bottom:12px;z-index:3;display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.42);color:#fff;border:1px solid rgba(255,255,255,.35);padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:700;backdrop-filter:blur(4px)"><span style="width:16px;height:16px">${ICON.camera}</span>${a.profileMediaId?'Change photo':'Add photo'}</button>`:''}
       <div class="meta">
         <div style="display:flex;gap:8px;margin-bottom:6px"><span class="pill ${STATUS_COLOR[a.status]||'gray'}">${esc(a.status)}</span>${a.archived?'<span class="pill gray">Archived</span>':''}${a.demo?'<span class="pill" style="background:rgba(255,255,255,.2);color:#fff">Demo</span>':''}</div>
         <h2>${esc(a.name)}${a.barnName?` <span style="font-weight:600;opacity:.8;font-size:16px">“${esc(a.barnName)}”</span>`:''}</h2>
@@ -1076,6 +1077,7 @@ route('animal',(parts)=>{
   v.append(hero);
   if(a.profileMediaId) Media.url(a.profileMediaId).then(u=>{ if(u){ const c=$('[data-cover]',hero); c.classList.remove('ph'); c.style.backgroundImage=`url(${u})`; c.innerHTML=''; }});
   $('[data-edit]',hero).onclick=()=>openAnimalForm(a.id);
+  if($('[data-setphoto]',hero)) $('[data-setphoto]',hero).onclick=()=>uploadProfilePhoto(a.id);
   $$('[data-tab]',hero).forEach(b=>b.onclick=()=>{ go('/animal/'+id+'/'+b.dataset.tab); });
   // keep active tab visible
   const at=$('.tab.active',hero); if(at) at.scrollIntoView({inline:'center',block:'nearest'});
@@ -1334,7 +1336,11 @@ function tabMedia(box,a){
 function mediaCell(m,a){ const cell=el('div','g'); cell.innerHTML=`<div class="tag">${esc(m.view||m.kind)}</div>`+(m.kind==='video'?`<div class="play">${ICON.video}</div>`:'');
   Media.url(m.blobId).then(u=>{ if(!u)return; const e=m.kind==='video'?el('video'):el('img'); e.src=u; if(m.kind==='video')e.muted=true; cell.prepend(e); });
   cell.onclick=()=>openMediaViewer(m,a); return cell; }
-function hiddenFile(accept,cb){ let inp=el('input'); inp.type='file'; inp.accept=accept; inp.style.display='none'; inp.multiple=true; inp.capture=accept.startsWith('image')?'environment':undefined;
+function hiddenFile(accept,cb,opts){ let inp=el('input'); inp.type='file'; inp.accept=accept; inp.style.display='none';
+  if(opts&&opts.multiple!==false) inp.multiple=true;
+  // No `capture` attribute → the phone shows its full picker (Photo Library,
+  // Take Photo/Video, Choose File) instead of forcing a live camera shot.
+  if(opts&&opts.capture) inp.capture=opts.capture;
   inp.onchange=()=>{ if(inp.files.length)cb([...inp.files]); inp.value=''; }; document.body.appendChild(inp); return inp; }
 async function addMedia(animalId,files,kind){
   if(!can('addRecord')){ toast('Your role can’t upload media','bad'); return; }
@@ -1347,6 +1353,20 @@ async function addMedia(animalId,files,kind){
     DB.media.push(rec);
   }
   logAct('media',`Uploaded ${files.length} ${kind}${files.length>1?'s':''}`,animalId); save(); toast('Media added','good'); render();
+}
+/* pick a photo from the library (or camera) and set it as the animal's profile picture */
+function uploadProfilePhoto(animalId){
+  if(!can('addRecord')){ toast('Your role can’t change photos','bad'); return; }
+  hiddenFile('image/*', async(files)=>{
+    const file=files[0]; if(!file) return;
+    toast('Uploading…','');
+    const blobId=uid('blob'); await Media.put(blobId,file); await Media.upload(blobId,file);
+    const a=getAnimal(animalId); if(!a) return;
+    const ws=weightsFor(animalId); const cf=currentFeed(animalId);
+    DB.media.push(stamp({id:uid('m'),animalId,kind:'photo',blobId,size:file.size,mime:file.type,view:'Profile',date:todayISO(),captured:todayISO(),by:DB.currentUserId,caption:'',shared:false,contextWeight:ws.length?+ws[ws.length-1].weight:null,contextFeed:cf?cf.name:null}));
+    a.profileMediaId=blobId; touch(a);
+    logAct('media','Set profile photo',animalId); save(); toast('Profile photo updated','good'); render();
+  }, {multiple:false}).click();
 }
 function openMediaViewer(m,a){
   const body=el('div'); body.innerHTML=`<div style="border-radius:14px;overflow:hidden;background:#000;margin-bottom:12px" id="mvMedia"></div>
