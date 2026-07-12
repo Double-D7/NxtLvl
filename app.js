@@ -1267,6 +1267,23 @@ function weightFlags(ws, sp){
   }
   return flags;
 }
+/* Entry-time sanity check for a single weigh-in against its date-neighbours.
+   Returns a plain-English reason string if it looks off, else null. */
+function weighInAnomaly(animalId, weight, date, excludeId){
+  const a=getAnimal(animalId); if(!a) return null;
+  const others=weightsFor(animalId).filter(w=>w.id!==excludeId);
+  if(others.some(o=>o.date===date)) return `You already have a weigh-in dated ${fmtShort(date)}. Is the date right?`;
+  const ceil=speciesAdgCeiling(a.species);
+  const earlier=others.filter(o=>o.date<date).sort((x,y)=>x.date<y.date?1:-1)[0];
+  const later=others.filter(o=>o.date>date).sort((x,y)=>x.date<y.date?-1:1)[0];
+  if(earlier){ const days=daysBetween(earlier.date,date); if(days>0){ const adg=(weight-earlier.weight)/days;
+    if(adg>ceil) return `That's +${round(adg,1)} lb/day since ${fmtShort(earlier.date)} (${earlier.weight} lb) — a big jump. Is the weight and date right?`;
+    if(adg< -0.6) return `That's a ${round(adg,1)} lb/day drop from ${fmtShort(earlier.date)} (${earlier.weight} lb). Is the weight and date right?`; } }
+  if(later){ const days=daysBetween(date,later.date); if(days>0){ const adg=(later.weight-weight)/days;
+    if(adg>ceil) return `That would need +${round(adg,1)} lb/day to reach the ${fmtShort(later.date)} weigh-in (${later.weight} lb) — is this weight right?`;
+    if(adg< -0.6) return `That's higher than the next weigh-in on ${fmtShort(later.date)} (${later.weight} lb) — is the weight and date right?`; } }
+  return null;
+}
 function tabWeight(box,a){
   const ws=weightsFor(a.id); const st=animalStats(a);
   const flags=weightFlags(ws,a.species); const flagCount=Object.keys(flags).length;
@@ -1377,8 +1394,11 @@ function openWeightSheet(animalId, weightId){
   $$('[data-step]',sh).forEach(b=>b.onclick=()=>setVal(+$('#wInput',body).value+(+b.dataset.step)));
   $('#wInput',sh).oninput=()=>{ $('#wVal',body).textContent=$('#wInput',body).value; calc(); };
   $('#wDate',sh).onchange=calc; calc();
-  $('[data-save]',sh).onclick=()=>{ const val=+$('#wInput',body).value; if(!val){toast('Enter a weight','bad');return;}
-    const rec={ weight:val, date:$('#wDate',body).value, time:$('#wTime',body).value, scale:$('#wScale',body).value.trim(), bcs:$('#wBcs',body).value||null, fill:$('#wFill',body).value||null, notes:$('#wNotes',body).value.trim(), by:DB.currentUserId };
+  $('[data-save]',sh).onclick=async()=>{ const val=+$('#wInput',body).value; if(!val){toast('Enter a weight','bad');return;}
+    const date=$('#wDate',body).value;
+    const warn=weighInAnomaly(animalId, val, date, weightId);
+    if(warn){ const ok=await confirmSheet('Double-check this weigh-in', warn, 'Save anyway'); if(!ok) return; }
+    const rec={ weight:val, date, time:$('#wTime',body).value, scale:$('#wScale',body).value.trim(), bcs:$('#wBcs',body).value||null, fill:$('#wFill',body).value||null, notes:$('#wNotes',body).value.trim(), by:DB.currentUserId };
     DB.lastScale=rec.scale;
     if(weightId){ Object.assign(DB.weights.find(x=>x.id===weightId),rec); touch(DB.weights.find(x=>x.id===weightId)); logAct('weight','Edited weight '+val+' lb',animalId); }
     else { DB.weights.push(stamp({id:uid('w'),animalId,...rec})); logAct('weight','Logged '+val+' lb',animalId); }
