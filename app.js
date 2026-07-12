@@ -201,7 +201,7 @@ function blankDB(){
     animals:[], weights:[], feed:[], media:[], measurements:[], exercise:[],
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
-    layovers:[], care:[],
+    layovers:[], care:[], helpers:[],
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
   };
 }
@@ -240,6 +240,9 @@ const feedFor = id => DB.feed.filter(f=>f.animalId===id).sort((a,b)=>a.startDate
 const mediaFor = id => DB.media.filter(m=>m.animalId===id).sort((a,b)=>(a.captured||a.date)<(b.captured||b.date)?1:-1);
 const speciesName = id => (DB.species.find(s=>s.id===id)||{}).name || id;
 const userName = id => (DB.users.find(u=>u.id===id)||{}).name || 'Unknown';
+const getHelper = id => (DB.helpers||[]).find(h=>h.id===id);
+const helperName = id => (getHelper(id)||{}).name || '';
+const animalsForHelper = id => DB.animals.filter(a=>(a.helperIds||[]).includes(id));
 const getLayover = id => (DB.layovers||[]).find(l=>l.id===id);
 const careForLayover = id => (DB.care||[]).filter(c=>c.layoverId===id);
 const careForAnimal = id => (DB.care||[]).filter(c=>c.animalId===id);
@@ -311,6 +314,10 @@ function seedDemo(db){
   const advisor = { id:uid('u'), name:'Cody Ratliff', email:'advisor@example.com', role:'Advisor', demo:true, scope:'assigned' };
   const spouse = { id:uid('u'), name:'Amanda Devitt', email:'amanda@example.com', role:'Administrator', demo:true };
   db.users.push(spouse, advisor);
+  const helperBlake=stamp({id:uid('help'),demo:true,name:'Blake Goss',note:'Swine feeding'});
+  const helperZach=stamp({id:uid('help'),demo:true,name:'Zach Vaughn',note:'Swine feeding'});
+  const helperCasey=stamp({id:uid('help'),demo:true,name:'Casey Sidwell',note:'Lambs'});
+  db.helpers.push(helperBlake, helperZach, helperCasey);
   const brId = (sp,nm)=> (db.breeds.find(b=>b.speciesId===sp && b.name===nm)||{}).id;
   const T = todayISO();
   const ago = n => new Date(Date.now()-n*86400000).toISOString().slice(0,10);
@@ -335,7 +342,7 @@ function seedDemo(db){
       earTag:sm.tag, earNotch:sm.notch, acquiredDate:aStart, startWeight:sm.start, startWeightDate:aStart,
       targetShow:'State Fair Market Show', targetDate:ago(-45), targetWeight:sm.tw, breeder:'Ratliff Show Pigs',
       penLocation:'Barn A · Pen '+(i+1), advisorId:advisor.id, color:sm.div, archived:false,
-      notes:'', profileMediaId:null });
+      helperIds:[ i%2===0 ? helperBlake.id : helperZach.id ], notes:'', profileMediaId:null });
     db.animals.push(a);
     if(sm.status!=='Prospect' || sm.cur.length){
       db.weights.push(stamp({id:uid('w'),animalId:a.id,weight:sm.start,date:aStart,by:owner.id,scale:'Barn deck'}));
@@ -378,7 +385,7 @@ function seedDemo(db){
   db.seeded=true;
   logAct('seed','Loaded demo show team data');
 }
-const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory','layovers','care'];
+const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory','layovers','care','helpers'];
 function removeDemo(){
   DEMO_ARRAYS.forEach(k=>{ DB[k]=DB[k].filter(r=>!r.demo && !(r.animalId && (DB.animals.find(a=>a.id===r.animalId)||{}).demo)); });
   DB.animals=DB.animals.filter(a=>!a.demo);
@@ -998,7 +1005,7 @@ function actVerb(ac){ return esc(ac.detail||ac.action); }
    =================================================================== */
 route('animals', (parts,q)=>{
   const v=setView('','animals');
-  const state={ species:q.get('species')||'', status:q.get('status')||'', sex:q.get('sex')||'',
+  const state={ species:q.get('species')||'', status:q.get('status')||'', sex:q.get('sex')||'', helper:q.get('helper')||'',
     filter:q.get('filter')||'', q:q.get('q')||'', archived:false, sort:'name' };
   const wrap=el('div'); v.append(wrap);
   const draw=()=>{
@@ -1009,6 +1016,7 @@ route('animals', (parts,q)=>{
     if(state.filter==='needweight') list=list.filter(a=>{const ws=weightsFor(a.id);return !ws.length||daysBetween(ws[ws.length-1].date,todayISO())>=7;});
     if(state.filter==='nomedia') list=list.filter(a=>mediaFor(a.id).length===0);
     if(state.filter==='market') list=list.filter(a=>a.marketBreeding==='Market');
+    if(state.helper) list=list.filter(a=>(a.helperIds||[]).includes(state.helper));
     if(state.q){ const s=state.q.toLowerCase(); list=list.filter(a=>[a.name,a.barnName,a.earTag,a.earNotch,a.registration,a.breeder,a.sire,a.dam,a.breed].some(f=>(f||'').toLowerCase().includes(s))); }
     list.sort((a,b)=> state.sort==='weight'? ((animalStats(b).curW||0)-(animalStats(a).curW||0)) : a.name.localeCompare(b.name));
 
@@ -1023,6 +1031,7 @@ route('animals', (parts,q)=>{
         <button class="chip ${state.filter==='nomedia'?'active':''}" data-filter="nomedia">No media</button>
         <button class="chip" id="moreFilters">${ICON.filter} Filters</button>
       </div>
+      ${(DB.helpers||[]).length?`<div class="chips"><span style="align-self:center;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding-right:2px">Helper</span>${DB.helpers.map(h=>`<button class="chip ${state.helper===h.id?'active':''}" data-helper="${h.id}">${ICON.team}${esc(h.name)}</button>`).join('')}<button class="chip" id="manageHelpers">${ICON.settings}</button></div>`:''}
       ${DB.savedViews.length?`<div class="chips">${DB.savedViews.map((sv,i)=>`<button class="chip" data-view="${i}">${ICON.star}${esc(sv.name)}</button>`).join('')}</div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 2px 8px">
         <div style="font-size:12.5px;color:var(--muted);font-weight:700">${list.length} ${state.archived?'archived':'animal'}${list.length===1?'':'s'}</div>
@@ -1040,9 +1049,11 @@ route('animals', (parts,q)=>{
 
     $('#addAn',wrap).onclick=()=>openAnimalForm();
     const s=$('#anSearch',wrap); s.oninput=()=>{ state.q=s.value; const pos=s.selectionStart; draw(); const ns=$('#anSearch',wrap); ns.focus(); ns.setSelectionRange(pos,pos); };
-    $('[data-clear]',wrap)&&($('[data-clear]',wrap).onclick=()=>{state.species='';state.status='';state.filter='';state.sex='';draw();});
+    $('[data-clear]',wrap)&&($('[data-clear]',wrap).onclick=()=>{state.species='';state.status='';state.filter='';state.sex='';state.helper='';draw();});
     $$('[data-species]',wrap).forEach(b=>b.onclick=()=>{state.species=state.species===b.dataset.species?'':b.dataset.species;draw();});
     $$('[data-filter]',wrap).forEach(b=>b.onclick=()=>{state.filter=state.filter===b.dataset.filter?'':b.dataset.filter;draw();});
+    $$('[data-helper]',wrap).forEach(b=>b.onclick=()=>{state.helper=state.helper===b.dataset.helper?'':b.dataset.helper;draw();});
+    if($('#manageHelpers',wrap))$('#manageHelpers',wrap).onclick=()=>go('/helpers');
     $('#toggleArch',wrap).onclick=()=>{state.archived=!state.archived;draw();};
     $('#moreFilters',wrap).onclick=()=>openFilterSheet(state,draw);
     $('#saveView',wrap).onclick=()=>{ const nm=prompt('Name this saved view'); if(nm){ DB.savedViews.push({name:nm,state:{...state}}); save(); toast('View saved','good'); draw(); } };
@@ -1069,6 +1080,7 @@ function sexOptions(sp){ return {swine:['Barrow','Gilt','Boar','Sow'],sheep:['We
 function openAnimalForm(id){
   if(!can(id?'edit':'addAnimal')){ toast('Your role can’t do that','bad'); return; }
   const a = id?{...getAnimal(id)}:{ species:'swine', status:'Prospect', sex:'', season:String(new Date().getFullYear()), marketBreeding:'Market' };
+  a.helperIds = [...(a.helperIds||[])];
   const body=el('div');
   const idFieldDefs={ earTag:'Ear tag', earNotch:'Ear notch', scrapieTag:'Scrapie tag', registration:'Registration #', tattoo:'Tattoo', brand:'Brand', rfid:'RFID' };
   const render=()=>{
@@ -1099,8 +1111,15 @@ function openAnimalForm(id){
         <div class="field" style="flex:1"><label>Dam</label><input class="control" id="afDam" value="${esc(a.dam||'')}"></div></div>
       <div class="field-row"><div class="field" style="flex:1"><label>Pen / location</label><input class="control" id="afPen" value="${esc(a.penLocation||'')}"></div>
         <div class="field" style="flex:1"><label>Assigned advisor</label><select class="control" id="afAdv"><option value="">None</option>${DB.users.filter(u=>u.role==='Advisor').map(u=>`<option value="${u.id}" ${a.advisorId===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select></div></div>
+      <div class="field"><label>Helpers <span style="font-weight:600;color:var(--muted)">· who helps feed / guide this animal</span></label><div id="afHelpers"></div></div>
       <div class="field"><label>Notes</label><textarea class="control" id="afNotes">${esc(a.notes||'')}</textarea></div>`;
     $('#afSp',body).onchange=()=>{ a.species=$('#afSp',body).value; a.breed=breedsFor(a.species)[0]?.name; a.sex=''; collect(); render(); };
+    drawHelpers();
+  };
+  const drawHelpers=()=>{ const box=$('#afHelpers',body); if(!box)return;
+    box.innerHTML=`<div class="chips" style="flex-wrap:wrap;white-space:normal">${(DB.helpers||[]).map(h=>`<button type="button" class="chip ${a.helperIds.includes(h.id)?'active':''}" data-h="${h.id}">${esc(h.name)}</button>`).join('')}<button type="button" class="chip" data-hadd>${ICON.plus} Add helper</button></div>`;
+    $$('[data-h]',box).forEach(b=>b.onclick=()=>{ const hid=b.dataset.h; if(a.helperIds.includes(hid))a.helperIds=a.helperIds.filter(x=>x!==hid); else a.helperIds.push(hid); drawHelpers(); });
+    $('[data-hadd]',box).onclick=()=>{ const nm=prompt('Helper name (e.g. Blake Goss)'); if(nm&&nm.trim()){ const h=stamp({id:uid('help'),name:nm.trim()}); DB.helpers.push(h); a.helperIds.push(h.id); save(); drawHelpers(); } };
   };
   const collect=()=>{ const g=id=>$('#'+id,body); a.name=g('afName').value.trim(); a.barnName=g('afBarn').value.trim(); a.breed=g('afBreed').value; a.sex=g('afSex').value; a.status=g('afStatus').value; a.marketBreeding=g('afMB').value; a.acquiredDate=g('afAcq').value; a.season=g('afSeason').value.trim(); a.startWeight=g('afSW').value===''?null:+g('afSW').value; a.startWeightDate=g('afSWD').value; a.targetShow=g('afTShow').value.trim(); a.targetDate=g('afTDate').value; a.targetWeight=g('afTW').value===''?null:+g('afTW').value; a.breeder=g('afBreeder').value.trim(); a.division=g('afDiv').value.trim(); a.sire=g('afSire').value.trim(); a.dam=g('afDam').value.trim(); a.penLocation=g('afPen').value.trim(); a.advisorId=g('afAdv').value||null; a.notes=g('afNotes').value; const sp=DB.species.find(s=>s.id===a.species); sp.idFields.forEach(f=>{ const e=$('#af_'+f,body); if(e)a[f]=e.value.trim(); }); };
   render();
@@ -1195,7 +1214,8 @@ function overviewChart(a){
   return lineChart(series,{markers, extraY:a.targetWeight?[a.targetWeight]:[]});
 }
 function detailKV(a){
-  const rows=[['Breeder',a.breeder],['Sire',a.sire],['Dam',a.dam],['Division',a.division],['Season',a.season],['Ear tag',a.earTag],['Ear notch',a.earNotch],['Scrapie',a.scrapieTag],['Registration',a.registration],['Tattoo',a.tattoo],['Brand',a.brand],['RFID',a.rfid],['Pen',a.penLocation],['Advisor',a.advisorId?userName(a.advisorId):''],['Acquired',a.acquiredDate?fmtDate(a.acquiredDate):'']];
+  const helpers=(a.helperIds||[]).map(helperName).filter(Boolean).join(', ');
+  const rows=[['Breeder',a.breeder],['Helpers',helpers],['Sire',a.sire],['Dam',a.dam],['Division',a.division],['Season',a.season],['Ear tag',a.earTag],['Ear notch',a.earNotch],['Scrapie',a.scrapieTag],['Registration',a.registration],['Tattoo',a.tattoo],['Brand',a.brand],['RFID',a.rfid],['Pen',a.penLocation],['Advisor',a.advisorId?userName(a.advisorId):''],['Acquired',a.acquiredDate?fmtDate(a.acquiredDate):'']];
   const shown=rows.filter(r=>r[1]);
   if(!shown.length) return '<div style="color:var(--muted);font-size:13px">No additional details. Tap edit to add lineage and IDs.</div>';
   return shown.map(r=>`<div class="kv"><span class="k">${esc(r[0])}</span><span class="v">${esc(r[1])}</span></div>`).join('');
@@ -2047,6 +2067,77 @@ function openCareSheet(opts){
 }
 
 /* ===================================================================
+   HELPERS — people who help feed / guide specific animals. Assignable
+   per animal, filterable, with a per-helper snapshot you can share.
+   =================================================================== */
+route('helpers',()=>{
+  const v=setView('','more'); const wrap=el('div');
+  const helpers=(DB.helpers||[]).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  wrap.innerHTML=pageHeader('Helpers',null,`<button class="btn primary sm" id="addHelper">${ICON.plus} Add</button>`);
+  wrap.append(htmlToFrag(`<div class="help" style="margin-bottom:12px">${ICON.info}<span>Add the people who help you feed out or guide specific animals, then tag each animal with its helper. You can filter the herd by helper and share a snapshot of just their animals.</span></div>`));
+  if(!helpers.length){ wrap.append(htmlToFrag(emptyState(ICON.team,'No helpers yet','Add someone like Blake Goss or Casey Sidwell, then assign them to the animals they help with.'))); }
+  else { const L=el('div','list'); helpers.forEach(h=>{ const n=animalsForHelper(h.id).filter(a=>!a.archived).length; const li=el('div','li');
+    li.innerHTML=`<div class="thumb" style="background:var(--line-2);color:var(--purple)">${esc(initials(h.name))}</div><div class="main"><div class="t1">${esc(h.name)}</div><div class="t2">${n} animal${n===1?'':'s'}${h.note?' · '+esc(h.note):''}</div></div>${ICON.chev}`;
+    li.onclick=()=>go('/helper/'+h.id); L.append(li); }); wrap.append(L); }
+  v.append(wrap);
+  $('#addHelper',wrap).onclick=()=>openHelperSheet();
+});
+function openHelperSheet(id){
+  if(!can('edit')){ toast('Your role can’t manage helpers','bad'); return; }
+  const h=id?{...getHelper(id)}:{name:'',note:''};
+  const body=el('div');
+  body.innerHTML=`<div class="field"><label>Name *</label><input class="control" id="hpName" value="${esc(h.name)}" placeholder="Blake Goss"></div>
+    <div class="field"><label>Role / note</label><input class="control" id="hpNote" value="${esc(h.note||'')}" placeholder="Swine feeding · phone, etc."></div>`;
+  const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">Save</button>`;
+  const sh=openSheet({title:id?'Edit helper':'New helper',body,foot});
+  $('[data-save]',sh).onclick=()=>{ const nm=$('#hpName',body).value.trim(); if(!nm){toast('Name required','bad');return;} const note=$('#hpNote',body).value.trim();
+    if(id){ Object.assign(getHelper(id),{name:nm,note}); } else { DB.helpers.push(stamp({id:uid('help'),name:nm,note})); }
+    save(); closeSheet(); toast('Saved','good'); render(); };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Remove helper','Remove '+h.name+'? They’ll be unassigned from all animals; the animals are untouched.','Remove',true)){ DB.animals.forEach(a=>{ if(a.helperIds)a.helperIds=a.helperIds.filter(x=>x!==id); }); DB.helpers=DB.helpers.filter(x=>x.id!==id); save(); closeSheet(); go('/helpers'); } };
+}
+route('helper',(parts)=>{
+  const h=getHelper(parts[1]); if(!h){ go('/helpers'); return; }
+  const v=setView('','more'); const wrap=el('div');
+  const animals=animalsForHelper(h.id).filter(a=>!a.archived).sort((a,b)=>a.name.localeCompare(b.name));
+  wrap.innerHTML=`${pageHeader(h.name,'/helpers',`<button class="iconbtn" style="background:var(--line-2);color:var(--ink)" id="edHelper">${ICON.edit}</button>`)}
+    <div class="btn-row" style="margin-bottom:12px"><button class="btn primary" id="viewAll" style="flex:1">${ICON.animals} Filter herd to ${esc(h.name.split(' ')[0])}</button><button class="btn" id="shareSnap">${ICON.share} Share</button></div>
+    <div class="section-title">${h.name.split(' ')[0]}’s animals · ${animals.length}</div>
+    <div id="hAnimals"></div>`;
+  v.append(wrap);
+  $('#edHelper',wrap).onclick=()=>openHelperSheet(h.id);
+  $('#viewAll',wrap).onclick=()=>go('/animals?helper='+h.id);
+  $('#shareSnap',wrap).onclick=()=>helperSnapshot(h.id);
+  const hc=$('#hAnimals',wrap);
+  if(!animals.length){ hc.innerHTML=emptyState(ICON.animals,'No animals yet','Assign '+h.name+' to animals from each animal’s Edit screen (Helpers field).'); return; }
+  animals.forEach(a=>{ const st=animalStats(a); const cf=currentFeed(a.id); const card=el('div','card pad'); card.style.marginBottom='10px';
+    card.innerHTML=`<div style="display:flex;align-items:center;gap:10px"><div class="thumb" data-th>${esc(initials(a.name))}</div>
+      <div style="flex:1"><div style="font-weight:800">${esc(a.name)}</div><div style="font-size:12px;color:var(--muted)">${esc(speciesName(a.species))} · ${esc(a.breed||'')} · ${esc(a.status)}</div></div>
+      <div style="text-align:right">${st.curW!=null?`<div style="font-weight:800" class="tnum">${st.curW} lb</div>`:''}${st.adgLife!=null?`<div style="font-size:11px;color:var(--muted)" class="tnum">${st.adgLife} lb/d</div>`:''}</div></div>
+      ${cf?`<div style="margin-top:8px;background:var(--line-2);border-radius:10px;padding:8px 10px;font-size:12.5px"><b>${esc(cf.name)}</b>${cf.objective?' · '+esc(cf.objective):''}${(cf.meals||[]).length?'<br><span style="color:var(--muted)">'+esc((cf.meals||[]).map(m=>m.time+': '+(m.items||[]).map(it=>it.amount+(it.unit||'')+' '+it.product).join(', ')).join(' · '))+'</span>':''}</div>`:''}`;
+    if(a.profileMediaId) Media.url(a.profileMediaId).then(u=>{ if(u){ const t=$('[data-th]',card); t.style.backgroundImage=`url(${u})`; t.style.backgroundSize='cover'; t.textContent=''; }});
+    card.onclick=()=>go('/animal/'+a.id); hc.append(card); });
+});
+function helperSnapshot(id){
+  const h=getHelper(id); const animals=animalsForHelper(id).filter(a=>!a.archived).sort((a,b)=>a.name.localeCompare(b.name));
+  const w=window.open('','_blank');
+  const rows=animals.map(a=>{ const st=animalStats(a); const cf=currentFeed(a.id);
+    const feed=cf?`<b>${esc(cf.name)}</b>${cf.objective?' ('+esc(cf.objective)+')':''}<br>`+(cf.meals||[]).map(m=>`<span class="muted">${esc(m.time)}:</span> ${esc((m.items||[]).map(it=>it.amount+' '+(it.unit||'')+' '+it.product).join(', '))}`).join('<br>'):'<span class="muted">No current feed program</span>';
+    return `<tr><td><b>${esc(a.name)}</b><div class="muted">${esc(speciesName(a.species))} · ${esc(a.breed||'')}${a.earTag?' · Tag '+esc(a.earTag):''}</div></td><td class="num">${st.curW??'—'} lb<div class="muted">${st.adgLife!=null?'ADG '+st.adgLife:''}</div></td><td>${feed}</td></tr>`; }).join('');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(h.name)} — Animals Snapshot</title>
+    <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:820px;margin:20px auto;padding:0 18px;line-height:1.5}
+    h1{color:#4C1D95;margin-bottom:2px}.sub{color:#777;font-size:13px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+    th{background:#f5f5f7;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#555}.num{white-space:nowrap;font-variant-numeric:tabular-nums}.muted{color:#888;font-size:12px}
+    @media print{.noprint{display:none}} .btn{background:#4C1D95;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:700;margin-top:18px;cursor:pointer}</style></head>
+    <body><h1>${esc(h.name)} — animals I'm helping with</h1><div class="sub">Devitt Family Show Team · ${fmtDate(todayISO())} · ${animals.length} animal${animals.length===1?'':'s'}</div>
+    ${animals.length?`<table><tr><th>Animal</th><th>Weight</th><th>Current feed program</th></tr>${rows}</table>`:'<p class="muted">No animals assigned yet.</p>'}
+    <button class="btn noprint" onclick="window.print()">Print / Save as PDF</button>
+    <p class="noprint muted" style="margin-top:10px">Tip: “Save as PDF” or screenshot this to text it to ${esc(h.name.split(' ')[0])}.</p>
+    </body></html>`);
+  w.document.close();
+}
+
+/* ===================================================================
    REPORTS
    =================================================================== */
 route('reports',()=>{
@@ -2208,6 +2299,7 @@ route('more',()=>{
       ${moreRow('archive',ICON.archive,'Archive')}
       ${moreRow('shows',ICON.shows,'Shows')}
       ${moreRow('layovers',ICON.layover,'Layover care')}
+      ${moreRow('helpers',ICON.team,'Helpers')}
       ${moreRow('__breeds',ICON.dna,'Species & breeds')}
       ${moreRow('__inventory',ICON.boxes,'Feed inventory')}
       ${moreRow('__notif',ICON.bell,'Notifications')}
