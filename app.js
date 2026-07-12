@@ -705,7 +705,10 @@ function reconcileMember(uid_, name, email, role){
 async function boot(){
   load();
   if(!DB){ DB=blankDB(); seedBreeds(DB); save(true); }
-  else { DB=mergeDefaults(DB); if(!DB.breeds || !DB.breeds.length) seedBreeds(DB); save(true); }
+  else { DB=mergeDefaults(DB); if(!DB.breeds || !DB.breeds.length) seedBreeds(DB);
+    // self-heal: any species that actually has animals must be selectable
+    let healed=false; DB.species.forEach(sp=>{ if(!sp.active && DB.animals.some(a=>a.species===sp.id)){ sp.active=true; healed=true; } });
+    save(true); }
   if(Cloud.init()){
     try{
       const s=await Cloud.session();
@@ -1095,7 +1098,7 @@ function openAnimalForm(id){
   const render=()=>{
     const sp=DB.species.find(s=>s.id===a.species)||DB.species[0];
     body.innerHTML=`
-      <div class="field"><label>Species</label><select class="control" id="afSp">${DB.species.filter(s=>s.active).map(s=>`<option value="${s.id}" ${a.species===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Species</label><select class="control" id="afSp">${DB.species.slice().sort((x,y)=>(y.active?1:0)-(x.active?1:0)).map(s=>`<option value="${s.id}" ${a.species===s.id?'selected':''}>${esc(s.name)}${s.active?'':' (add to show)'}</option>`).join('')}</select></div>
       <div class="field-row"><div class="field" style="flex:1"><label>Name *</label><input class="control" id="afName" value="${esc(a.name||'')}" placeholder="Batman"></div>
         <div class="field" style="flex:1"><label>Barn name</label><input class="control" id="afBarn" value="${esc(a.barnName||'')}" placeholder="Bats"></div></div>
       <div class="field-row"><div class="field" style="flex:1"><label>Breed</label><select class="control" id="afBreed">${breedsFor(a.species).map(b=>`<option ${a.breed===b.name?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
@@ -1136,6 +1139,7 @@ function openAnimalForm(id){
   const sh=openSheet({title:id?'Edit animal':'New animal', body, foot});
   $('[data-cancel]',sh).onclick=()=>closeSheet();
   $('[data-save]',sh).onclick=()=>{ collect(); if(!a.name){toast('Name is required','bad');return;}
+    const sp=DB.species.find(s=>s.id===a.species); if(sp && !sp.active){ sp.active=true; } // adding an animal turns its species on
     if(id){ const orig=getAnimal(id); Object.assign(orig,a); touch(orig); logAct('edit','Edited '+orig.name,id); }
     else { const rec=stamp({...a, archived:false}); DB.animals.push(rec);
       if(a.startWeight!=null) DB.weights.push(stamp({id:uid('w'),animalId:rec.id,weight:a.startWeight,date:a.startWeightDate||todayISO(),by:DB.currentUserId,scale:''}));
@@ -2404,9 +2408,11 @@ function openCloudConnect(){
 }
 function moreRow(k,ic,label){ return `<button class="li" data-more="${k}" style="width:100%;text-align:left"><div class="thumb" style="background:var(--line-2);color:var(--purple)">${ic}</div><div class="main"><div class="t1">${esc(label)}</div></div>${ICON.chev}</button>`; }
 function openBreeds(){ const body=el('div');
-  const draw=()=>{ body.innerHTML=DB.species.map(sp=>`<div class="section-title" style="margin-top:8px">${esc(sp.name)} <button class="more" data-addbr="${sp.id}">+ Add</button></div>
-    <div class="list">${breedsFor(sp.id).map(b=>`<div class="li"><div class="main"><div class="t1" style="font-size:14px">${esc(b.name)}${b.system?'':' <span class="pill t" style="font-size:9px">custom</span>'}</div></div>${b.system?'':`<button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-delbr="${b.id}">${ICON.x}</button>`}</div>`).join('')}</div>`).join('')+
+  const draw=()=>{ body.innerHTML=`<div class="help" style="margin-bottom:10px">${ICON.info}<span>Toggle a species on to show it on the dashboard and in the Add-animal list. Species that have animals stay on automatically.</span></div>`+
+    DB.species.map(sp=>{ const hasAnimals=DB.animals.some(a=>a.species===sp.id); return `<div class="section-title" style="margin-top:8px"><span style="width:16px;height:16px;color:${sp.active?'var(--purple-3)':'var(--muted)'}">${spIcon(sp.id)}</span>${esc(sp.name)} <label style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0"><input type="checkbox" data-spact="${sp.id}" ${sp.active?'checked':''} ${hasAnimals?'disabled':''} style="width:18px;height:18px"><span style="font-size:11px;color:var(--muted)">${sp.active?'On':'Off'}</span></label> <button class="more" data-addbr="${sp.id}">+ Breed</button></div>
+    <div class="list">${breedsFor(sp.id).map(b=>`<div class="li"><div class="main"><div class="t1" style="font-size:14px">${esc(b.name)}${b.system?'':' <span class="pill t" style="font-size:9px">custom</span>'}</div></div>${b.system?'':`<button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-delbr="${b.id}">${ICON.x}</button>`}</div>`).join('')}</div>`; }).join('')+
     `<button class="btn block" id="addSp" style="margin-top:14px">${ICON.plus} Add species</button>`;
+    $$('[data-spact]',body).forEach(cb=>cb.onchange=()=>{ const sp=DB.species.find(s=>s.id===cb.dataset.spact); sp.active=cb.checked; save(); draw(); if(location.hash==='#/dashboard'||location.hash===''){} });
     $$('[data-addbr]',body).forEach(btn=>btn.onclick=()=>{ const nm=prompt('New breed name'); if(nm){DB.breeds.push({id:uid('br'),speciesId:btn.dataset.addbr,name:nm,system:false,active:true,order:999});save();draw();} });
     $$('[data-delbr]',body).forEach(btn=>btn.onclick=()=>{ DB.breeds=DB.breeds.filter(b=>b.id!==btn.dataset.delbr);save();draw(); });
     $('#addSp',body).onclick=()=>{ const nm=prompt('New species name (e.g. Rabbits)'); if(nm){const id=nm.toLowerCase().replace(/\s+/g,'');DB.species.push({id,name:nm,active:true,idFields:['earTag','tattoo']});DB.breeds.push({id:uid('br'),speciesId:id,name:'Crossbred',system:false,active:true,order:0},{id:uid('br'),speciesId:id,name:'Other',system:false,active:true,order:1});save();draw();} };
