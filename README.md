@@ -30,6 +30,7 @@ marked and removable any time from **More → Remove demo data**.
 | **Feed** | Versioned feed programs — **changing feed never erases the old program**; each change is a dated version. Multi-product meals, objectives, advisor recs, per-program weight response (gain + ADG), duplicate-to-reuse, and side-by-side **compare**. |
 | **Progress media** | Photos & videos stored privately **on-device** (IndexedDB), with gallery / timeline / **before-and-after** views that show weight Δ, days between, and ADG for the period. |
 | **Shows** | Shows, entries (division/class/weight/exhibitor), and full results (placing, champion/banner, showmanship, sale price, premiums, judge comments, lessons). |
+| **Layover / Care Log** | Staging periods at a breeder's central barn before big shows. Log the breeder's time-specific directions per animal — water, snack, feed, supplement, wash/rinse, walk, blow-out, etc. — each **timestamped** (planned vs actual). Day-by-day timeline, one-tap quick log, active-layover dashboard banner, and a per-animal care history so you build a routine you can review and repeat. |
 | **Calendar & tasks** | Shared month view + task list with priorities, recurrence and animal links. |
 | **Health · Exercise · Measurements** | Treatments/vaccinations with **withdrawal tracking** (never suggests dosages), exercise logs, and body measurements with charts. |
 | **Expenses & income** | Per-animal cost tracking, cost of gain, and net result. |
