@@ -255,9 +255,18 @@ function careSort(a,b){ const ka=(a.date||'')+(a.time||'99:99'); const kb=(b.dat
    ADG = weight gain ÷ number of days
    =================================================================== */
 function animalStats(a){
-  const ws = weightsFor(a.id);
-  const startW = a.startWeight!=null ? +a.startWeight : (ws[0]?+ws[0].weight:null);
-  const startD = a.startWeightDate || (ws[0]?ws[0].date:a.acquiredDate);
+  const ws = weightsFor(a.id); // sorted ascending by date
+  const first = ws[0];
+  // Pair the starting weight and date from the SAME source so ADG can't be
+  // skewed by a profile start-date that disagrees with the weigh-in log.
+  // Use the explicit profile start only when it's no later than the first
+  // logged weigh-in; otherwise use the earliest actual weigh-in.
+  let startW, startD;
+  const hasExplicit = a.startWeight!=null && a.startWeightDate;
+  if(hasExplicit && (!first || a.startWeightDate <= first.date)){ startW=+a.startWeight; startD=a.startWeightDate; }
+  else if(first){ startW=+first.weight; startD=first.date; }
+  else if(a.startWeight!=null){ startW=+a.startWeight; startD=a.startWeightDate||a.acquiredDate||null; }
+  else { startW=null; startD=null; }
   const last = ws[ws.length-1];
   const prev = ws[ws.length-2];
   const curW = last ? +last.weight : startW;
