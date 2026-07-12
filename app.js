@@ -902,11 +902,11 @@ route('dashboard', ()=>{
       <div class="stat"><div class="k">Active animals</div><div class="v tnum">${active.length}</div><div class="sub">${DB.animals.length-active.length} archived</div></div>
       <div class="stat"><div class="k">Weighed this week</div><div class="v tnum">${weighedThisWeek}<small>/${active.length}</small></div><div class="sub">${needWeigh.length} need a weight</div></div>
     </div>
-    <div class="section-title">Species</div>
-    <div class="grid g4">${DB.species.filter(s=>s.active).map(s=>`
+    ${(()=>{ const shown=DB.species.filter(s=>(bySpecies[s.id]||0)>0); return shown.length?`<div class="section-title">Species</div>
+    <div class="grid g4">${shown.map(s=>`
       <button class="stat" style="text-align:left" onclick="go('/animals?species=${s.id}')">
         <div style="display:flex;align-items:center;gap:7px;color:var(--purple-3)"><span style="width:20px;height:20px">${spIcon(s.id)}</span><span class="k" style="color:var(--muted)">${esc(s.name)}</span></div>
-        <div class="v tnum" style="font-size:22px">${bySpecies[s.id]||0}</div></button>`).join('')}</div>
+        <div class="v tnum" style="font-size:22px">${bySpecies[s.id]}</div></button>`).join('')}</div>`:''; })()}
   `));
 
   // Next show countdown
