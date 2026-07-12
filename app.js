@@ -63,6 +63,14 @@ const ICON = {
   cow:I('<ellipse cx="12" cy="14" rx="6" ry="5"/><path d="M6 9C5 6 3 6 3 8s2 2 3 1M18 9c1-3 3-3 3-1s-2 2-3 1"/><circle cx="10" cy="14" r=".7" fill="currentColor"/><circle cx="14" cy="14" r=".7" fill="currentColor"/>'),
   wand:I('<path d="M15 4l5 5L9 20l-5-5L15 4z"/><path d="M14 5l5 5M6 3l.5 2 2 .5-2 .5L6 8l-.5-2-2-.5 2-.5L6 3z"/>'),
   location:I('<path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>'),
+  layover:I('<path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M9 21v-6h6v6"/><path d="M12 5V2"/>'),
+  water:I('<path d="M12 3s6 6.5 6 10.5a6 6 0 0 1-12 0C6 9.5 12 3 12 3z"/>'),
+  snack:I('<path d="M5 11h14l-1.2 8.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8L5 11z"/><path d="M8 11a4 4 0 0 1 8 0"/><path d="M12 7V5"/>'),
+  pill:I('<rect x="3.5" y="8.5" width="17" height="7" rx="3.5" transform="rotate(-45 12 12)"/><path d="M9.5 9.5l5 5"/>'),
+  wash:I('<path d="M7 3v5M11 3v5M15 3v5M5 8h12l-1 6H6L5 8z"/><path d="M8 17l-1 4M13 17l-1 4M18 15l-1 6"/>'),
+  rest:I('<path d="M20 14A8 8 0 1 1 10 4a6.5 6.5 0 0 0 10 10z"/>'),
+  dry:I('<path d="M3 8h10a3 3 0 1 0-3-3M3 12h14a3 3 0 1 1-3 3M3 16h8a2.5 2.5 0 1 1-2.5 2.5"/>'),
+  clip:I('<path d="M6 6l12 12M6 18L18 6"/><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/>'),
 };
 const spIcon = key => ({swine:ICON.pig, sheep:ICON.sheep, goat:ICON.goat, cattle:ICON.cow}[key] || ICON.paw);
 
@@ -158,6 +166,21 @@ const ROLES = ['Owner','Administrator','Editor','Contributor','Viewer','Advisor'
 const ROLE_RANK = {Owner:6,Administrator:5,Editor:4,Contributor:3,Advisor:2,Viewer:1};
 const FEED_OBJECTIVES = ['Growth','Maintenance','Increase appetite','Add body','Add muscle','Add shape','Increase fill','Increase freshness','Slow weight gain','Hold weight','Reduce body','Improve digestion','Recovery','Show-day preparation','Other'];
 const UNITS = ['lb','oz','cups','scoops','g','mL','cc','tablets','unit'];
+/* Layover / care-log categories — the breeder's time-specific directions */
+const CARE_CATS = [
+  {key:'Water',      icon:'water', color:'#38BDF8'},
+  {key:'Snack',      icon:'snack', color:'#F59E0B'},
+  {key:'Feed',       icon:'feed',  color:'#2DD4BF'},
+  {key:'Supplement', icon:'pill',  color:'#A78BFA'},
+  {key:'Wash/Rinse', icon:'wash',  color:'#22D3EE'},
+  {key:'Walk',       icon:'run',   color:'#FB923C'},
+  {key:'Rest',       icon:'rest',  color:'#818CF8'},
+  {key:'Blow/Dry',   icon:'dry',   color:'#60A5FA'},
+  {key:'Clip/Groom', icon:'clip',  color:'#F472B6'},
+  {key:'Medication', icon:'health',color:'#F87171'},
+  {key:'Other',      icon:'note',  color:'#94A3B8'},
+];
+const careCat = k => CARE_CATS.find(c=>c.key===k) || CARE_CATS[CARE_CATS.length-1];
 const NOTE_TYPES = ['General','Feed','Weight','Health','Exercise','Showmanship','Structure','Movement','Breeder feedback','Advisor feedback','Show result','Family discussion','Other'];
 const EXP_CATS = ['Purchase price','Feed','Supplements','Medication','Veterinary','Entry fees','Bedding','Equipment','Transportation','Fuel','Hotels','Meals','Grooming supplies','Show supplies','Breeding','Registration','Other'];
 const MEDIA_VIEWS = ['Profile','Side view','Front view','Rear view','Top view','Walking video','Driving video','Showmanship video','Feeding video','Health','General'];
@@ -178,6 +201,7 @@ function blankDB(){
     animals:[], weights:[], feed:[], media:[], measurements:[], exercise:[],
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
+    layovers:[], care:[],
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
   };
 }
@@ -216,6 +240,12 @@ const feedFor = id => DB.feed.filter(f=>f.animalId===id).sort((a,b)=>a.startDate
 const mediaFor = id => DB.media.filter(m=>m.animalId===id).sort((a,b)=>(a.captured||a.date)<(b.captured||b.date)?1:-1);
 const speciesName = id => (DB.species.find(s=>s.id===id)||{}).name || id;
 const userName = id => (DB.users.find(u=>u.id===id)||{}).name || 'Unknown';
+const getLayover = id => (DB.layovers||[]).find(l=>l.id===id);
+const careForLayover = id => (DB.care||[]).filter(c=>c.layoverId===id);
+const careForAnimal = id => (DB.care||[]).filter(c=>c.animalId===id);
+const activeLayover = () => (DB.layovers||[]).find(l=>l.start<=todayISO() && (!l.end||l.end>=todayISO()));
+function layoverDays(l){ const out=[]; if(!l||!l.start) return out; const end=l.end||l.start; let d=l.start; let guard=0; while(d<=end && guard++<60){ out.push(d); const dt=parseD(d); dt.setDate(dt.getDate()+1); d=dt.toISOString().slice(0,10); } return out; }
+function careSort(a,b){ const ka=(a.date||'')+(a.time||'99:99'); const kb=(b.date||'')+(b.time||'99:99'); return ka<kb?-1:ka>kb?1:0; }
 
 /* ===================================================================
    COMPUTATIONS — average daily gain, projections, targets
@@ -334,10 +364,21 @@ function seedDemo(db){
   db.tasks.push(stamp({id:uid('t'),title:'Review lamb weight targets',date:T,done:false,priority:'Low'}));
   db.tasks.push(stamp({id:uid('t'),title:'Order feed',date:ago(-2),done:false,priority:'High'}));
   db.income.push(stamp({id:uid('in'),animalId:db.animals[0].id,source:'Premium',amount:2100,date:ago(-22),demo:true}));
+  // demo layover (active today) with a few of the breeder's directions on Batman & Bandit
+  const lay=stamp({id:uid('lay'),demo:true,name:'State Fair Layover',breeder:'Ratliff Show Pigs',location:'Central Barn · Row C',showId:null,start:ago(1),end:ago(-3),animalIds:[db.animals[0].id,db.animals[1].id],notes:'Breeder has them for 5 days before move-in.'});
+  db.layovers.push(lay);
+  const care=(animalId,cat,detail,time,done,notes)=>db.care.push(stamp({id:uid('care'),demo:true,layoverId:lay.id,animalId,category:cat,detail,date:T,time,done:!!done,doneAt:done?nowISO():null,by:owner.id,notes:notes||''}));
+  care(db.animals[0].id,'Water','Fresh water, add electrolytes','06:00',true,'Drank well');
+  care(db.animals[0].id,'Feed','1.75 lb Maxxed Out, wet','06:30',true,'Cleaned it up');
+  care(db.animals[0].id,'Snack','2 handfuls rolled oats','10:00',true,'');
+  care(db.animals[0].id,'Wash/Rinse','Rinse & blow out, keep cool','14:00',false,'');
+  care(db.animals[0].id,'Walk','15 min, easy','16:30',false,'');
+  care(db.animals[1].id,'Water','Fresh water','06:00',true,'');
+  care(db.animals[1].id,'Supplement','2 oz Game On in AM feed','06:30',true,'');
   db.seeded=true;
   logAct('seed','Loaded demo show team data');
 }
-const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory'];
+const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory','layovers','care'];
 function removeDemo(){
   DEMO_ARRAYS.forEach(k=>{ DB[k]=DB[k].filter(r=>!r.demo && !(r.animalId && (DB.animals.find(a=>a.id===r.animalId)||{}).demo)); });
   DB.animals=DB.animals.filter(a=>!a.demo);
@@ -648,7 +689,7 @@ function reconcileMember(uid_, name, email, role){
 async function boot(){
   load();
   if(!DB){ DB=blankDB(); seedBreeds(DB); save(true); }
-  else if(!DB.breeds || !DB.breeds.length){ seedBreeds(DB); save(true); }
+  else { DB=mergeDefaults(DB); if(!DB.breeds || !DB.breeds.length) seedBreeds(DB); save(true); }
   if(Cloud.init()){
     try{
       const s=await Cloud.session();
@@ -855,6 +896,16 @@ route('dashboard', ()=>{
       <div style="display:flex;align-items:center;gap:12px">
         <div style="text-align:center;flex:none;background:rgba(255,255,255,.16);border-radius:14px;padding:10px 14px"><div style="font-size:30px;font-weight:800;line-height:1" class="tnum">${dleft}</div><div style="font-size:10px;font-weight:700;opacity:.85">DAYS</div></div>
         <div style="flex:1"><div style="font-size:11px;font-weight:700;opacity:.8;text-transform:uppercase;letter-spacing:.5px">Next show</div><div style="font-size:17px;font-weight:800;margin-top:2px">${esc(nextShow.name)}</div><div style="font-size:12.5px;opacity:.85">${fmtDate(nextShow.start)} · ${esc(nextShow.location||nextShow.city||'')}</div></div>
+        <span style="color:#fff">${ICON.chev}</span></div></div>`));
+  }
+
+  // Active layover banner
+  const lay=activeLayover();
+  if(lay){ const todayCare=careForLayover(lay.id).filter(c=>c.date===todayISO()); const done=todayCare.filter(c=>c.done).length; const dayN=layoverDays(lay).indexOf(todayISO())+1;
+    wrap.append(htmlToFrag(`<div class="card pad" style="margin-top:14px;background:linear-gradient(135deg,#0EA5B7,var(--teal-3));color:#fff;border:none;box-shadow:var(--shadow-lg)" onclick="go('/layover/${lay.id}')">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="flex:none;color:#fff;width:34px;height:34px">${ICON.layover}</div>
+        <div style="flex:1"><div style="font-size:11px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Layover in progress${dayN>0?' · Day '+dayN:''}</div><div style="font-size:16px;font-weight:800;margin-top:2px">${esc(lay.name)}</div><div style="font-size:12.5px;opacity:.9">${done}/${todayCare.length} care items done today${lay.breeder?' · '+esc(lay.breeder):''}</div></div>
         <span style="color:#fff">${ICON.chev}</span></div></div>`));
   }
 
@@ -1068,7 +1119,7 @@ function openAnimalForm(id){
 /* ===================================================================
    ANIMAL PROFILE (tabbed)
    =================================================================== */
-const ANIMAL_TABS=[['overview','Overview'],['weight','Weight'],['feed','Feed'],['media','Media'],['measurements','Measure'],['health','Health'],['exercise','Exercise'],['shows','Shows'],['pedigree','Pedigree'],['expenses','Expenses'],['notes','Notes'],['activity','History']];
+const ANIMAL_TABS=[['overview','Overview'],['weight','Weight'],['feed','Feed'],['care','Care'],['media','Media'],['measurements','Measure'],['health','Health'],['exercise','Exercise'],['shows','Shows'],['pedigree','Pedigree'],['expenses','Expenses'],['notes','Notes'],['activity','History']];
 route('animal',(parts)=>{
   const id=parts[1]; const a=getAnimal(id);
   if(!a){ setView(emptyState(ICON.animals,'Animal not found','It may have been deleted.'),'animals'); return; }
@@ -1099,7 +1150,7 @@ route('animal',(parts)=>{
   // keep active tab visible
   const at=$('.tab.active',hero); if(at) at.scrollIntoView({inline:'center',block:'nearest'});
   const body=$('#tabBody',hero);
-  ({overview:tabOverview,weight:tabWeight,feed:tabFeed,media:tabMedia,measurements:tabMeasure,health:tabHealth,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
+  ({overview:tabOverview,weight:tabWeight,feed:tabFeed,care:tabCare,media:tabMedia,measurements:tabMeasure,health:tabHealth,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
 });
 
 /* ---------- OVERVIEW ---------- */
@@ -1159,6 +1210,7 @@ function renderTimeline(box,a){
   DB.entries.filter(e=>e.animalId===a.id).forEach(e=>{ const sh=DB.shows.find(s=>s.id===e.showId); ev.push({d:sh?sh.start:todayISO(),icon:ICON.shows,c:'var(--purple)',title:`Show: ${sh?sh.name:''}`,body:e.result&&e.result.placing?`Placed ${e.result.placing}${e.result.divisionPlacing?' · '+e.result.divisionPlacing:''}`:''}); });
   DB.measurements.filter(m=>m.animalId===a.id).forEach(m=>ev.push({d:m.date,icon:ICON.ruler,c:'var(--ink-2)',title:`${m.type}: ${m.value} ${m.unit||''}`,body:''}));
   DB.notes.filter(n=>n.animalId===a.id).forEach(n=>ev.push({d:n.date,icon:ICON.note,c:'var(--muted)',title:`${n.type} note`,body:n.text}));
+  careForAnimal(a.id).forEach(c=>{ const cat=careCat(c.category); ev.push({d:c.date,icon:ICON[cat.icon],c:cat.color,title:`Care: ${c.category}`,body:c.detail||c.notes||''}); });
   ev.sort((x,y)=>x.d<y.d?1:-1);
   if(!ev.length){ box.innerHTML='<div class="empty" style="padding:14px">Nothing logged yet.</div>'; return; }
   box.innerHTML=`<div class="timeline">${ev.slice(0,40).map(e=>`<div class="tl-item"><div class="node" style="border-color:${e.c};color:${e.c}">${e.icon}</div><div class="tl-t">${esc(e.title)}</div><div class="tl-d">${fmtDate(e.d)} · ${relDays(e.d)}</div>${e.body?`<div class="tl-b">${esc(e.body)}</div>`:''}</div>`).join('')}</div>`;
@@ -1515,6 +1567,28 @@ function tabShows(box,a){
 }
 
 /* ---------- PEDIGREE ---------- */
+/* ---------- CARE / LAYOVER TAB ---------- */
+function tabCare(box,a){
+  const items=careForAnimal(a.id);
+  const al=activeLayover();
+  box.innerHTML=`
+    <div class="help">${ICON.info}<span>Log the breeder's time-specific directions during a layover — water, snack, feed, supplements, washing and more. Every entry is timestamped so you build a routine to review and repeat.</span></div>
+    <div class="btn-row" style="margin-top:12px"><button class="btn primary" id="careLog" style="flex:1">${ICON.plus} Log care</button><button class="btn" id="careOpen">${ICON.layover} Layovers</button></div>
+    <div id="careList" style="margin-top:12px"></div>`;
+  $('#careOpen',box).onclick=()=>go('/layovers');
+  $('#careLog',box).onclick=()=>{ const lay=(DB.layovers||[]).filter(l=>(l.animalIds||[]).includes(a.id)).sort((x,y)=>x.start<y.start?1:-1)[0]||al;
+    openCareSheet({layoverId:lay?lay.id:null, animalId:a.id, date:todayISO(), markDone:true}); };
+  const lc=$('#careList',box);
+  if(!items.length){ lc.innerHTML=emptyState(ICON.layover,'No care logged yet','When this animal is on layover, log each direction the breeder gives.'); return; }
+  // group by layover, then by date
+  const byLay={}; items.forEach(c=>{ const k=c.layoverId||'_'; (byLay[k]=byLay[k]||[]).push(c); });
+  const order=Object.keys(byLay).sort((x,y)=>{ const lx=getLayover(x), ly=getLayover(y); return (lx?lx.start:'')<(ly?ly.start:'')?1:-1; });
+  order.forEach(k=>{ const lay=getLayover(k); const list=byLay[k];
+    lc.append(htmlToFrag(`<div class="section-title">${lay?esc(lay.name):'Care log'} <button class="more" ${lay?`onclick="go('/layover/${lay.id}')"`:''}>${lay?'Open':''}</button></div>`));
+    const byDate={}; list.forEach(c=>(byDate[c.date]=byDate[c.date]||[]).push(c));
+    Object.keys(byDate).sort().reverse().forEach(d=>{ lc.append(htmlToFrag(`<div style="font-size:12px;font-weight:700;color:var(--muted);margin:8px 2px 2px">${fmtDate(d)} · ${relDays(d)}</div>`)); lc.append(careTimeline(byDate[d])); });
+  });
+}
 function tabPedigree(box,a){
   const kids=DB.animals.filter(x=>x.sireLink===a.id||x.damLink===a.id);
   box.innerHTML=`<div class="card pad">
@@ -1603,7 +1677,7 @@ function tabActivity(box,a){
    =================================================================== */
 function openQuickAdd(){
   const body=el('div');
-  const acts=[['Add weight',ICON.weight,'var(--purple-3)','weight'],['Upload photo',ICON.camera,'var(--info)','photo'],['Upload video',ICON.video,'var(--teal-3)','video'],['Change feed',ICON.feed,'var(--teal-3)','feed'],['Health record',ICON.health,'var(--bad)','health'],['Log exercise',ICON.run,'var(--warn)','exercise'],['Add note',ICON.note,'var(--muted)','note'],['New animal',ICON.animals,'var(--purple)','animal'],['New task',ICON.check,'var(--good)','task']];
+  const acts=[['Add weight',ICON.weight,'var(--purple-3)','weight'],['Log care',ICON.layover,'#38BDF8','care'],['Upload photo',ICON.camera,'var(--info)','photo'],['Upload video',ICON.video,'var(--teal-3)','video'],['Change feed',ICON.feed,'var(--teal-3)','feed'],['Health record',ICON.health,'var(--bad)','health'],['Log exercise',ICON.run,'var(--warn)','exercise'],['Add note',ICON.note,'var(--muted)','note'],['New animal',ICON.animals,'var(--purple)','animal'],['New task',ICON.check,'var(--good)','task']];
   const recent=(DB._recentAnimals||[]).map(getAnimal).filter(Boolean).slice(0,6);
   const active=activeAnimals();
   body.innerHTML=`<div class="grid g3" style="gap:10px">${acts.map(([l,ic,c,k])=>`<button class="card" data-act="${k}" style="padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="width:30px;height:30px;color:${c}">${ic}</span><span style="font-size:12px;font-weight:700;line-height:1.2">${l}</span></button>`).join('')}</div>
@@ -1629,6 +1703,7 @@ function runQuick(kind,id){ DB._recentAnimals=[id,...(DB._recentAnimals||[]).fil
   else if(kind==='video'){ hiddenFile('video/*',f=>addMedia(id,f,'video')).click(); }
   else if(kind==='health'){ go('/animal/'+id+'/health'); setTimeout(()=>$('#addH')&&$('#addH').click(),120); }
   else if(kind==='exercise'){ go('/animal/'+id+'/exercise'); setTimeout(()=>$('#addX')&&$('#addX').click(),120); }
+  else if(kind==='care'){ const lay=(DB.layovers||[]).filter(l=>(l.animalIds||[]).includes(id)).sort((x,y)=>x.start<y.start?1:-1)[0]||activeLayover(); openCareSheet({layoverId:lay?lay.id:null, animalId:id, date:todayISO(), markDone:true}); }
 }
 
 /* ===================================================================
@@ -1834,6 +1909,144 @@ function openShowSheet(id){
 }
 
 /* ===================================================================
+   LAYOVER — central-barn staging before big shows. Track the breeder's
+   time-specific directions (water, snack, feed, supplement, wash, walk…)
+   per animal as a timestamped care log that builds historical data.
+   =================================================================== */
+route('layovers',()=>{
+  const v=setView('','more'); const wrap=el('div');
+  const lays=(DB.layovers||[]).slice().sort((a,b)=>a.start<b.start?1:-1);
+  wrap.innerHTML=pageHeader('Layover',null,`<button class="btn primary sm" id="addLay">${ICON.plus} New</button>`);
+  wrap.append(htmlToFrag(`<div class="help" style="margin-bottom:12px">${ICON.info}<span>A layover is a staging period at a central barn before a show. Log the breeder's directions here — every entry is timestamped so you build a routine you can review and repeat.</span></div>`));
+  if(!lays.length){ wrap.append(htmlToFrag(emptyState(ICON.layover,'No layovers yet','Create one when you drop animals at the breeder’s barn, then log each direction as it comes.'))); }
+  else { const L=el('div','list'); lays.forEach(l=>{ const active=l.start<=todayISO()&&(!l.end||l.end>=todayISO()); const cnt=careForLayover(l.id).length; const done=careForLayover(l.id).filter(c=>c.done).length; const li=el('div','li');
+    li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.layover}</div><div class="main"><div class="t1">${esc(l.name)}${active?' <span class="pill good" style="font-size:9px">Active</span>':''}</div><div class="t2">${fmtShort(l.start)}${l.end&&l.end!==l.start?'–'+fmtShort(l.end):''} · ${(l.animalIds||[]).length} animals · ${done}/${cnt} logged</div></div>${ICON.chev}`;
+    li.onclick=()=>go('/layover/'+l.id); L.append(li); }); wrap.append(L); }
+  v.append(wrap);
+  $('#addLay',wrap).onclick=()=>openLayoverSheet();
+});
+
+route('layover',(parts,q)=>{
+  const l=getLayover(parts[1]); if(!l){ go('/layovers'); return; }
+  const v=setView('','more');
+  const days=layoverDays(l);
+  let day=q.get('day')||(days.includes(todayISO())?todayISO():days[0])||l.start;
+  let animalId=q.get('a')||'all';
+  const wrap=el('div'); v.append(wrap);
+  const draw=()=>{
+    const ids=(l.animalIds||[]);
+    let items=careForLayover(l.id).filter(c=>c.date===day);
+    if(animalId!=='all') items=items.filter(c=>c.animalId===animalId);
+    items.sort(careSort);
+    wrap.innerHTML=`${pageHeader(l.name,'/layovers',`<button class="iconbtn" style="background:var(--line-2);color:var(--ink)" id="edLay">${ICON.edit}</button>`)}
+      <div class="card pad">
+        ${[['Breeder',l.breeder],['Barn / location',l.location],['Target show',l.showId?(DB.shows.find(s=>s.id===l.showId)||{}).name:''],['Dates',fmtDate(l.start)+(l.end&&l.end!==l.start?' – '+fmtDate(l.end):'')]].filter(r=>r[1]).map(r=>`<div class="kv"><span class="k">${r[0]}</span><span class="v">${esc(r[1])}</span></div>`).join('')||'<div style="color:var(--muted);font-size:13px">Tap edit to add breeder, barn and dates.</div>'}
+      </div>
+      ${days.length>1?`<div class="chips" id="dayChips">${days.map((d,i)=>`<button class="chip ${d===day?'active':''}" data-day="${d}">Day ${i+1} · ${fmtShort(d)}</button>`).join('')}</div>`:''}
+      <div class="chips" id="anChips"><button class="chip ${animalId==='all'?'active':''}" data-an="all">All animals</button>${ids.map(id=>{const a=getAnimal(id);return a?`<button class="chip ${animalId===id?'active':''}" data-an="${id}">${esc(a.name)}</button>`:''}).join('')}</div>
+      <div class="btn-row" style="margin:2px 0 12px"><button class="btn primary" id="logCare" style="flex:1">${ICON.plus} Log care</button><button class="btn" id="schedCare">${ICON.clock} Schedule</button></div>
+      <div id="careBody"></div>`;
+    $('#edLay',wrap).onclick=()=>openLayoverSheet(l.id);
+    $$('[data-day]',wrap).forEach(b=>b.onclick=()=>{day=b.dataset.day;draw();});
+    $$('[data-an]',wrap).forEach(b=>b.onclick=()=>{animalId=b.dataset.an;draw();});
+    $('#logCare',wrap).onclick=()=>openCareSheet({layoverId:l.id, date:day, animalId:animalId!=='all'?animalId:(ids[0]||null), markDone:true});
+    $('#schedCare',wrap).onclick=()=>openCareSheet({layoverId:l.id, date:day, animalId:animalId!=='all'?animalId:(ids[0]||null), markDone:false});
+    const cb=$('#careBody',wrap);
+    if(!ids.length){ cb.innerHTML=emptyState(ICON.animals,'No animals on this layover','Tap edit to add the animals staged at the breeder’s barn.'); return; }
+    if(!items.length){ cb.innerHTML=emptyState(ICON.clock,'Nothing logged for this day','Tap “Log care” each time the breeder gives a direction — it’s stamped with the time automatically.'); return; }
+    cb.innerHTML='';
+    if(animalId==='all'){ // group by animal
+      const byAn={}; items.forEach(c=>(byAn[c.animalId]=byAn[c.animalId]||[]).push(c));
+      Object.keys(byAn).forEach(aid=>{ const a=getAnimal(aid); cb.append(htmlToFrag(`<div class="section-title" style="margin-top:6px">${esc(a?a.name:'—')}</div>`)); cb.append(careTimeline(byAn[aid])); });
+    } else cb.append(careTimeline(items));
+  };
+  draw();
+});
+
+function careTimeline(items){
+  const box=el('div','timeline'); box.style.marginTop='4px';
+  items.slice().sort(careSort).forEach(c=>{ const cat=careCat(c.category); const a=getAnimal(c.animalId);
+    const it=el('div','tl-item');
+    const t = c.done ? (c.doneAt?new Date(c.doneAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):(c.time||'')) : (c.time||'');
+    it.innerHTML=`<div class="node" style="border-color:${cat.color};color:${cat.color}">${ICON[cat.icon]}</div>
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <button class="thumb" data-done style="width:26px;height:26px;border-radius:8px;flex:none;background:${c.done?'var(--good)':'var(--line-2)'};color:${c.done?'#fff':'var(--muted)'};display:grid;place-items:center">${c.done?ICON.check:ICON.clock}</button>
+        <div style="flex:1">
+          <div class="tl-t">${esc(c.category)}${c.title?': '+esc(c.title):''}</div>
+          <div class="tl-d">${c.done?'Done '+t:(c.time?'Scheduled '+c.time:'Logged')}${c.by?' · '+esc(userName(c.by)):''}</div>
+          ${c.detail?`<div class="tl-b">${esc(c.detail)}</div>`:''}
+          ${c.notes?`<div class="tl-b" style="color:var(--muted)">“${esc(c.notes)}”</div>`:''}
+        </div></div>`;
+    $('[data-done]',it).onclick=(e)=>{ e.stopPropagation(); c.done=!c.done; c.doneAt=c.done?nowISO():null; if(c.done&&!c.by)c.by=DB.currentUserId; touch(c); logAct('care',(c.done?'Did ':'Unchecked ')+c.category+(a?' · '+a.name:''),c.animalId); save(); render(); };
+    it.querySelector('div').style.cursor='pointer';
+    it.querySelector('.tl-t').onclick=()=>openCareSheet({edit:c.id});
+    box.append(it);
+  });
+  return box;
+}
+
+function openLayoverSheet(id){
+  if(!can('edit')){ toast('Your role can’t manage layovers','bad'); return; }
+  const l=id?{...getLayover(id), animalIds:[...(getLayover(id).animalIds||[])]}:{name:'',start:todayISO(),end:todayISO(),animalIds:[]};
+  const body=el('div');
+  const draw=()=>{
+    body.innerHTML=`
+      <div class="field"><label>Layover name *</label><input class="control" id="loName" value="${esc(l.name)}" placeholder="State Fair Layover 2026"></div>
+      <div class="field-row"><div class="field" style="flex:1"><label>Start</label><input class="control" type="date" id="loStart" value="${l.start||''}"></div>
+        <div class="field" style="flex:1"><label>End</label><input class="control" type="date" id="loEnd" value="${l.end||''}"></div></div>
+      <div class="field-row"><div class="field" style="flex:1"><label>Breeder</label><input class="control" id="loBreeder" value="${esc(l.breeder||'')}"></div>
+        <div class="field" style="flex:1"><label>Barn / location</label><input class="control" id="loLoc" value="${esc(l.location||'')}"></div></div>
+      <div class="field"><label>Target show</label><select class="control" id="loShow"><option value="">— none —</option>${DB.shows.map(s=>`<option value="${s.id}" ${l.showId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Animals at this layover</label>
+        <div class="chips" style="flex-wrap:wrap;white-space:normal">${activeAnimals().map(a=>`<button type="button" class="chip ${l.animalIds.includes(a.id)?'active':''}" data-tog="${a.id}">${esc(a.name)}</button>`).join('')||'<span style="font-size:12px;color:var(--muted)">No active animals</span>'}</div></div>
+      <div class="field"><label>Notes</label><textarea class="control" id="loNotes">${esc(l.notes||'')}</textarea></div>`;
+    $$('[data-tog]',body).forEach(b=>b.onclick=()=>{ const aid=b.dataset.tog; if(l.animalIds.includes(aid))l.animalIds=l.animalIds.filter(x=>x!==aid); else l.animalIds.push(aid); collect(); draw(); });
+  };
+  const collect=()=>{ l.name=$('#loName',body).value.trim(); l.start=$('#loStart',body).value; l.end=$('#loEnd',body).value; l.breeder=$('#loBreeder',body).value.trim(); l.location=$('#loLoc',body).value.trim(); l.showId=$('#loShow',body).value||null; l.notes=$('#loNotes',body).value; };
+  draw();
+  const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">${id?'Save':'Create layover'}</button>`;
+  const sh=openSheet({title:id?'Edit layover':'New layover',body,foot});
+  $('[data-save]',sh).onclick=()=>{ collect(); if(!l.name){toast('Name the layover','bad');return;} if(l.end&&l.start&&l.end<l.start)l.end=l.start;
+    if(id){ Object.assign(getLayover(id),l); touch(getLayover(id)); } else { const rec=stamp({id:uid('lay'),...l}); DB.layovers.push(rec); id=rec.id; }
+    logAct('layover','Layover: '+l.name); save(); closeSheet(); toast('Layover saved','good'); go('/layover/'+id); };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete layover','Remove this layover and its care log? The animals and their other records are untouched.','Delete',true)){ DB.care=DB.care.filter(c=>c.layoverId!==id); DB.layovers=DB.layovers.filter(x=>x.id!==id); save(); closeSheet(); go('/layovers'); } };
+}
+
+/* Care entry sheet — opts: {layoverId, date, animalId, markDone} or {edit:careId} */
+function openCareSheet(opts){
+  if(!can('addRecord')){ toast('Your role can’t log care','bad'); return; }
+  const editing = !!opts.edit;
+  const c = editing ? {...DB.care.find(x=>x.id===opts.edit)}
+    : { layoverId:opts.layoverId||null, animalId:opts.animalId||null, category:'Water', title:'', detail:'', date:opts.date||todayISO(), time:nowTime(), done:!!opts.markDone, notes:'' };
+  const animals = c.layoverId ? (getLayover(c.layoverId)?.animalIds||[]).map(getAnimal).filter(Boolean) : activeAnimals();
+  const body=el('div');
+  body.innerHTML=`
+    ${animals.length?`<div class="field"><label>Animal</label><select class="control" id="caAnimal">${animals.map(a=>`<option value="${a.id}" ${c.animalId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>`:''}
+    <div class="field"><label>What did the breeder direct?</label>
+      <div class="chips" id="caCats" style="flex-wrap:wrap;white-space:normal">${CARE_CATS.map(cat=>`<button type="button" class="chip ${c.category===cat.key?'active':''}" data-cat="${cat.key}"><span style="width:15px;height:15px;color:${c.category===cat.key?'#fff':cat.color}">${ICON[cat.icon]}</span>${cat.key}</button>`).join('')}</div></div>
+    <div class="field"><label>Detail / amount</label><input class="control" id="caDetail" value="${esc(c.detail||'')}" placeholder="e.g. 2 oz Game On · walk 15 min · rinse & blow out"></div>
+    <div class="field-row"><div class="field" style="flex:1"><label>Date</label><input class="control" type="date" id="caDate" value="${c.date}"></div>
+      <div class="field" style="flex:1"><label>Time</label><input class="control" type="time" id="caTime" value="${c.time||nowTime()}"></div></div>
+    <label class="li" style="border:1px solid var(--line);border-radius:12px;margin-bottom:12px"><div class="main"><div class="t1" style="font-size:14px">Mark done now</div><div class="t2">Stamps the actual time it was completed</div></div><input type="checkbox" id="caDone" ${c.done?'checked':''} style="width:22px;height:22px"></label>
+    <div class="field"><label>Notes / how they responded</label><textarea class="control" id="caNotes" placeholder="drank well · stayed fresh · a little hot">${esc(c.notes||'')}</textarea></div>`;
+  let cat=c.category;
+  $$('[data-cat]',body).forEach(b=>b.onclick=()=>{ cat=b.dataset.cat; $$('[data-cat]',body).forEach(x=>{ const cc=careCat(x.dataset.cat); x.classList.toggle('active',x===b); const sp=x.querySelector('span'); if(sp)sp.style.color=(x===b)?'#fff':cc.color; }); });
+  const foot=el('div'); foot.innerHTML=`${editing?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">${editing?'Save':'Log it'}</button>`;
+  const sh=openSheet({title:editing?'Edit care entry':'Log care',body,foot});
+  $('[data-save]',sh).onclick=()=>{
+    const data={ category:cat, title:careCat(cat).key===cat?'':'', detail:$('#caDetail',body).value.trim(), date:$('#caDate',body).value, time:$('#caTime',body).value, notes:$('#caNotes',body).value.trim(), done:$('#caDone',body).checked };
+    if($('#caAnimal',body)) data.animalId=$('#caAnimal',body).value;
+    data.title=''; // category is the primary label; detail carries specifics
+    if(!data.animalId){ toast('Pick an animal','bad'); return; }
+    if(editing){ const rec=DB.care.find(x=>x.id===opts.edit); const wasDone=rec.done; Object.assign(rec,data); if(data.done&&!rec.doneAt)rec.doneAt=nowISO(); if(!data.done)rec.doneAt=null; touch(rec); }
+    else { const rec=stamp({id:uid('care'),layoverId:c.layoverId,by:DB.currentUserId,...data}); if(data.done)rec.doneAt=nowISO(); DB.care.push(rec); }
+    logAct('care',(data.done?'Logged ':'Scheduled ')+data.category+(data.detail?' · '+data.detail:''),data.animalId);
+    save(); closeSheet(); toast('Care logged','good'); render();
+  };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete entry','Remove this care entry?','Delete',true)){ DB.care=DB.care.filter(x=>x.id!==opts.edit); save(); closeSheet(); render(); } };
+}
+
+/* ===================================================================
    REPORTS
    =================================================================== */
 route('reports',()=>{
@@ -1994,6 +2207,7 @@ route('more',()=>{
       ${moreRow('reports',ICON.reports,'Reports & analytics')}
       ${moreRow('archive',ICON.archive,'Archive')}
       ${moreRow('shows',ICON.shows,'Shows')}
+      ${moreRow('layovers',ICON.layover,'Layover care')}
       ${moreRow('__breeds',ICON.dna,'Species & breeds')}
       ${moreRow('__inventory',ICON.boxes,'Feed inventory')}
       ${moreRow('__notif',ICON.bell,'Notifications')}
