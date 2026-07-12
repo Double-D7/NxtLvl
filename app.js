@@ -1246,8 +1246,30 @@ function renderTimeline(box,a){
 }
 
 /* ---------- WEIGHT TAB ---------- */
+/* Flag weigh-ins that look like data-entry errors (bad date or typo weight),
+   so unusual numbers are easy to spot and fix. Returns { [weightId]: {level,reason} }. */
+function speciesAdgCeiling(sp){ return {swine:4.5, cattle:6.5, sheep:2.5, goat:2.5}[sp] || 4.5; }
+function weightFlags(ws, sp){
+  const ceil=speciesAdgCeiling(sp); const flags={};
+  for(let j=1;j<ws.length;j++){ const w=ws[j], p=ws[j-1];
+    const days=daysBetween(p.date,w.date); const gain=+w.weight-+p.weight;
+    if(days<=0){ flags[w.id]={level:'bad',reason:'Date isn’t after the previous weigh-in — check the date'}; continue; }
+    const adg=gain/days;
+    if(adg>ceil){ flags[w.id]={level:'warn',reason:`+${round(adg,1)} lb/day since the last weigh-in looks high — check the weight or date`}; }
+    else if(adg< -0.6){ flags[w.id]={level:'warn',reason:`${round(adg,1)} lb/day (losing weight) — check the weight or date`}; }
+  }
+  // a single value far out of line with BOTH neighbours (a V or ^ shape) → likely a typo
+  for(let j=1;j<ws.length-1;j++){ const A=+ws[j-1].weight, B=+ws[j].weight, C=+ws[j+1].weight;
+    const d1=B-A, d2=C-B;
+    if(Math.sign(d1)!==Math.sign(d2) && Math.min(Math.abs(d1),Math.abs(d2))>=15 && !flags[ws[j].id]){
+      flags[ws[j].id]={level:'warn',reason:'This weight is out of line with the ones around it — possible typo'};
+    }
+  }
+  return flags;
+}
 function tabWeight(box,a){
   const ws=weightsFor(a.id); const st=animalStats(a);
+  const flags=weightFlags(ws,a.species); const flagCount=Object.keys(flags).length;
   box.innerHTML=`
     <div class="btn-row"><button class="btn primary" id="addW" style="flex:1">${ICON.plus} Add weight</button></div>
     <div class="grid g2" style="margin-top:12px">
@@ -1260,6 +1282,9 @@ function tabWeight(box,a){
       <div id="wChart"></div>
       <div class="chart-legend"><span><span class="leg-line" style="background:var(--purple-3)"></span>Actual</span>${a.targetWeight?'<span><span class="leg-line" style="background:var(--teal-3)"></span>Target</span>':''}</div>
     </div>
+    ${flagCount?`<div class="card pad" id="wFlagBanner" style="margin-top:12px;background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4);display:flex;align-items:center;gap:10px;cursor:pointer">
+      <span style="width:22px;height:22px;color:var(--warn);flex:none">${ICON.info}</span>
+      <div style="flex:1;font-size:13.5px;font-weight:700">${flagCount} weigh-in${flagCount===1?'':'s'} look${flagCount===1?'s':''} unusual — likely a wrong weight or date. Tap to review.</div>${ICON.chev}</div>`:''}
     <div class="section-title">History</div>
     <div id="wHist"></div>`;
   let range='all';
@@ -1272,10 +1297,13 @@ function tabWeight(box,a){
   const hist=$('#wHist',box);
   if(!ws.length) hist.innerHTML=emptyState(ICON.weight,'No weights yet','No weights have been recorded yet. Add the first weight to begin tracking average daily gain.');
   else { const L=el('div','list'); ws.slice().reverse().forEach((w,i,arr)=>{ const prev=arr[i+1]; const gain=prev?round(w.weight-prev.weight,1):null; const days=prev?daysBetween(prev.date,w.date):null; const adg=(gain!=null&&days>0)?round(gain/days,2):null;
-    const li=el('div','li'); li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.weight}</div>
-      <div class="main"><div class="t1 tnum">${w.weight} lb</div><div class="t2">${fmtDate(w.date)}${w.scale?' · '+esc(w.scale):''}${w.by?' · '+esc(userName(w.by)):''}</div></div>
+    const fl=flags[w.id];
+    const li=el('div','li'); if(fl)li.style.cssText='border-left:3px solid var(--'+(fl.level==='bad'?'bad':'warn')+')';
+    li.innerHTML=`<div class="thumb" style="color:${fl?'var(--'+(fl.level==='bad'?'bad':'warn')+')':'var(--purple-3)'}">${fl?ICON.info:ICON.weight}</div>
+      <div class="main"><div class="t1 tnum">${w.weight} lb${fl?` <span class="pill ${fl.level==='bad'?'bad':'warn'}" style="font-size:9px">Check</span>`:''}</div><div class="t2">${fmtDate(w.date)}${w.scale?' · '+esc(w.scale):''}${w.by?' · '+esc(userName(w.by)):''}</div>${fl?`<div class="t2" style="color:var(--${fl.level==='bad'?'bad':'warn'});white-space:normal;font-weight:600;margin-top:2px">${esc(fl.reason)}</div>`:''}</div>
       <div class="r">${gain!=null?`<div style="font-weight:800;color:${gain>=0?'var(--good)':'var(--bad)'}" class="tnum">${gain>=0?'+':''}${gain}</div><div style="font-size:11px;color:var(--muted)" class="tnum">${adg!=null?adg+' lb/d':''}</div>`:'<span class="pill gray" style="font-size:10px">start</span>'}</div>`;
     li.onclick=()=>openWeightSheet(a.id,w.id); L.append(li); }); hist.append(L); }
+  if($('#wFlagBanner',box))$('#wFlagBanner',box).onclick=()=>{ const first=$('#wHist .li[style*="border-left"]',box); if(first)first.scrollIntoView({behavior:'smooth',block:'center'}); };
   $('#addW',box).onclick=()=>openWeightSheet(a.id);
 }
 
