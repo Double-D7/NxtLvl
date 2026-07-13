@@ -73,6 +73,11 @@ const ICON = {
   clip:I('<path d="M6 6l12 12M6 18L18 6"/><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/>'),
   car:I('<path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/><path d="M3 13h18"/><circle cx="7" cy="16" r="1"/><circle cx="17" cy="16" r="1"/>'),
   calPlus:I('<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4M12 12v5M9.5 14.5h5"/>'),
+  target:I('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8" fill="currentColor"/>'),
+  clipboard:I('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4v.5a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4z"/><path d="M8.5 11l1.5 1.5 3-3M8.5 16.5h7"/>'),
+  book:I('<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5z"/><path d="M4 19a2 2 0 0 1 2-2h13"/><path d="M9 7h6M9 10h4"/>'),
+  medal:I('<circle cx="12" cy="14" r="5"/><path d="M12 14l0 0M9.5 10L7 3M14.5 10L17 3M10.5 13.5l1.5-1 1.5 1-.6 1.8h-1.8z" stroke-width="1.6"/>'),
+  rosette:I('<circle cx="12" cy="9" r="5"/><path d="M9.5 13l-2 8 4.5-2.5L16.5 21l-2-8"/><path d="M12 6.5l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2L9 8.6l2-.3z" stroke-width="1.4"/>'),
 };
 const spIcon = key => ({swine:ICON.pig, sheep:ICON.sheep, goat:ICON.goat, cattle:ICON.cow}[key] || ICON.paw);
 
@@ -955,6 +960,27 @@ route('dashboard', ()=>{
         <span style="color:#fff">${ICON.chev}</span></div></div>`));
   }
 
+  // Show-day banner (a show today or tomorrow)
+  const showSoon=upcoming.find(s=>daysBetween(todayISO(),s.start)>=0 && daysBetween(todayISO(),s.start)<=1);
+  if(showSoon){ const d0=daysBetween(todayISO(),showSoon.start);
+    wrap.append(htmlToFrag(`<div class="card pad" style="margin-top:14px;background:linear-gradient(135deg,#7C3AED,#DB2777);color:#fff;border:none;box-shadow:var(--shadow-lg)" onclick="go('/showday/${showSoon.id}')">
+      <div style="display:flex;align-items:center;gap:12px"><div style="flex:none;color:#fff;width:32px;height:32px">${ICON.clipboard}</div>
+        <div style="flex:1"><div style="font-size:11px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Show day ${d0===0?'is today':'is tomorrow'}</div><div style="font-size:16px;font-weight:800;margin-top:2px">${esc(showSoon.name)}</div><div style="font-size:12.5px;opacity:.9">Open show-day mode — checklist, weigh-in targets & classes</div></div>
+        <span style="color:#fff">${ICON.chev}</span></div></div>`));
+  }
+
+  // Game Plan summary
+  const gp=coachSummary();
+  if(gp.total){
+    wrap.append(htmlToFrag(`<div class="section-title">Game Plan <button class="more" onclick="go('/coach')">Open</button></div>`));
+    wrap.append(htmlToFrag(`<div class="card pad" style="cursor:pointer" onclick="go('/coach')"><div style="display:flex;text-align:center">
+      <div style="flex:1"><div style="font-size:22px;font-weight:800;color:var(--good)" class="tnum">${gp.ontrack}</div><div style="font-size:11px;color:var(--muted);font-weight:700">On track</div></div>
+      <div style="flex:1"><div style="font-size:22px;font-weight:800;color:var(--bad)" class="tnum">${gp.under}</div><div style="font-size:11px;color:var(--muted);font-weight:700">Behind</div></div>
+      <div style="flex:1"><div style="font-size:22px;font-weight:800;color:var(--warn)" class="tnum">${gp.over}</div><div style="font-size:11px;color:var(--muted);font-weight:700">Heavy</div></div>
+      <div style="flex:1"><div style="font-size:22px;font-weight:800" class="tnum">${gp.total}</div><div style="font-size:11px;color:var(--muted);font-weight:700">With a goal</div></div>
+    </div></div>`));
+  }
+
   // Today in the barn
   wrap.append(htmlToFrag(`<div class="section-title">Today in the barn <button class="more" onclick="go('/calendar')">Calendar</button></div>`));
   if(soonEvents.length){
@@ -1240,6 +1266,14 @@ function tabOverview(box,a){
       <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted);font-weight:700">Projected on ${fmtShort(a.targetDate)}</span><span style="font-weight:800" class="tnum">${st.projWeight} lb</span></div>
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px"><span style="color:var(--muted);font-weight:700">Target</span><span style="font-weight:800" class="tnum">${a.targetWeight} lb</span></div>
       ${st.reqAdg!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px"><span style="color:var(--muted);font-weight:700">ADG needed to hit target</span><span class="pill ${st.reqAdg>(st.adgLife||0)*1.15?'warn':'good'}">${st.reqAdg} lb/d</span></div>`:''}</div>`:''}
+    ${(()=>{ const cs=coachStatus(a); const eligible=coachEligible(a);
+      return `<div class="section-title">Game plan <button class="more" data-gpopen>${eligible?'Open':'Set a goal'}</button></div>
+      <div class="card pad" data-gpcard style="cursor:pointer">${eligible?`<div style="display:flex;gap:14px;align-items:center">
+        <div style="flex:none">${ringSVG(cs.pct,cs.color,cs.pct!=null?Math.round(cs.pct)+'%':'—','to goal')}</div>
+        <div style="flex:1"><span class="pill" style="background:${cs.color}22;color:${cs.color};font-size:10px">${cs.label}</span>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:5px">${cs.cur!=null?cs.cur+' lb':'—'} → ${cs.target} lb by ${fmtShort(cs.tdate)}${cs.daysLeft>=0?' · '+cs.daysLeft+'d':''}</div>
+        <div style="font-size:12px;margin-top:4px">Need <b class="tnum">${cs.reqAdg!=null?cs.reqAdg:'—'}</b> lb/d · averaging <b class="tnum">${cs.actAdg!=null?cs.actAdg:'—'}</b> lb/d</div></div>
+        <span style="color:var(--muted)">${ICON.chev}</span></div>`:`<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px"><span style="width:22px;height:22px;color:var(--purple-3)">${ICON.target}</span><span>Set a target weight and show date to coach ${esc(a.name)} to the ring.</span></div>`}</div>`; })()}
     <div class="section-title">Growth chart</div>
     <div class="card pad">${overviewChart(a)}
       <div class="chart-legend"><span><span class="leg-line" style="background:var(--purple-3)"></span>Actual</span>${a.targetWeight?'<span><span class="leg-line" style="background:var(--teal-3)"></span>Target</span>':''}${st.projWeight!=null?'<span><span class="leg-line" style="background:#C4B5FD;border-top:2px dashed #C4B5FD"></span>Projected</span>':''}</div></div>
@@ -1253,6 +1287,8 @@ function tabOverview(box,a){
     <div style="height:8px"></div>`;
   const cover=$('[data-cover]');
   renderTimeline($('#ovTimeline',box),a);
+  if($('[data-gpopen]',box))$('[data-gpopen]',box).onclick=()=>openGamePlanSheet(a.id);
+  if($('[data-gpcard]',box))$('[data-gpcard]',box).onclick=()=>openGamePlanSheet(a.id);
   $$('[data-fquick]',box).forEach(b=>{});
 }
 function overviewChart(a){
@@ -2311,10 +2347,13 @@ route('show',(parts)=>{
       ${s.start>=todayISO()?`<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="background:var(--purple);color:#fff;border-radius:12px;padding:8px 14px;text-align:center"><div style="font-size:24px;font-weight:800" class="tnum">${daysBetween(todayISO(),s.start)}</div><div style="font-size:9px;font-weight:700">DAYS</div></div><div style="font-size:13px;color:var(--muted);font-weight:600">until show day</div></div>`:''}
       ${[['Dates',fmtDate(s.start)+(s.end&&s.end!==s.start?' – '+fmtDate(s.end):'')],['Location',s.location||s.city],['Entry deadline',s.entryDeadline?fmtDate(s.entryDeadline):''],['Weigh-in',s.weighIn?fmtDate(s.weighIn):''],['Judge',s.judge],['Organization',s.org],['Entry fee',s.fee?money(s.fee):'']].filter(r=>r[1]).map(r=>`<div class="kv"><span class="k">${r[0]}</span><span class="v">${esc(r[1])}</span></div>`).join('')}
     </div>
+    <div class="btn-row" style="margin:12px 0 4px"><button class="btn primary" id="showDayBtn" style="flex:1">${ICON.clipboard} Show-day mode</button><button class="btn ghost" id="showRecBtn">${ICON.medal} Record book</button></div>
     <div class="section-title">Entries <button class="more" id="addEnt2">Add entry</button></div>
     <div id="shEntries"></div>`;
   v.append(wrap);
   $('#edShow',wrap).onclick=()=>openShowSheet(s.id);
+  $('#showDayBtn',wrap).onclick=()=>go('/showday/'+s.id);
+  $('#showRecBtn',wrap).onclick=()=>go('/records');
   $('#addEnt2',wrap).onclick=()=>{ // pick animal then entry
     const body=el('div'); const L=el('div','list'); activeAnimals().forEach(a=>{ const li=animalRow(a,''); li.onclick=()=>{closeSheet();openEntrySheet(a.id);}; L.append(li); }); body.append(L); openSheet({title:'Add entry — pick animal',body}); };
   const ec=$('#shEntries',wrap);
@@ -2708,6 +2747,8 @@ route('more',()=>{
     <div class="section-title">Manage</div>
     <div class="list">
       ${moreRow('team',ICON.team,'Team & members')}
+      ${moreRow('coach',ICON.target,'Game Plan')}
+      ${moreRow('records',ICON.medal,'Record Book')}
       ${moreRow('reports',ICON.reports,'Reports & analytics')}
       ${moreRow('archive',ICON.archive,'Archive')}
       ${moreRow('shows',ICON.shows,'Shows')}
@@ -2813,6 +2854,315 @@ route('media',()=>{ // global recent media → route to first animal gallery fal
   else { const g=el('div','gallery'); all.forEach(m=>g.append(mediaCell(m,getAnimal(m.animalId)||{}))); wrap.append(g); }
   v.append(wrap);
 });
+
+/* ===================================================================
+   COACHING / GAME PLAN — turn each animal's target show into a plan with
+   a straight-line pace, required ADG, projected finish and concrete advice.
+   Reuses the existing target weight/date; adds a per-animal `plan` note.
+   =================================================================== */
+function coachEligible(a){ return !a.archived && a.targetWeight && a.targetDate; }
+function coachStatus(a){
+  const st=animalStats(a);
+  const target=+a.targetWeight, tdate=a.targetDate;
+  const daysLeft=daysBetween(todayISO(), tdate);
+  const cur=st.curW;
+  // straight-line pace from start → target; where SHOULD the animal be today?
+  let idealNow=null, paceDelta=null;
+  if(st.startW!=null && st.startD){
+    const total=daysBetween(st.startD, tdate);
+    const elapsed=daysBetween(st.startD, todayISO());
+    const frac=total>0?clamp(elapsed/total,0,1):1;
+    idealNow=Math.round(st.startW + (target-st.startW)*frac);
+    if(cur!=null) paceDelta=Math.round(cur-idealNow);
+  }
+  const reqAdg=st.reqAdg, actAdg=st.adgLife, recentAdg=st.adgPeriod, proj=st.projWeight;
+  const gap=(proj!=null)?Math.round(proj-target):null;            // + = trending over target
+  const tol=Math.max(5, Math.round(target*0.03));
+  // progress toward the goal weight (for the ring)
+  let pct=null; if(st.startW!=null && cur!=null && target!==st.startW) pct=clamp((cur-st.startW)/(target-st.startW)*100,0,100);
+  let state,label,color;
+  if(daysLeft<0){ state='past'; label='Show passed'; color='var(--muted)'; }
+  else if(cur==null || gap==null){ state='nodata'; label='Weigh in to start'; color='var(--warn)'; }
+  else if(Math.abs(gap)<=tol){ state='ontrack'; label='On track'; color='var(--good)'; }
+  else if(gap>tol){ state='over'; label='Trending heavy'; color='var(--warn)'; }
+  else { state='under'; label='Behind pace'; color='var(--bad)'; }
+  return {st,target,tdate,daysLeft,cur,idealNow,paceDelta,reqAdg,actAdg,recentAdg,proj,gap,tol,pct,state,label,color};
+}
+function coachAdvice(a,cs){
+  const out=[];
+  if(cs.state==='nodata'){ out.push('Log a current weight so the game plan can project to show day.'); return out; }
+  if(cs.state==='past'){ out.push('This target date has passed — set a new goal for the next show to keep coaching.'); return out; }
+  if(cs.state==='under'){
+    out.push(`Projected ${cs.proj} lb — about ${Math.abs(cs.gap)} lb under your ${cs.target} lb target.`);
+    if(cs.reqAdg!=null) out.push(`You now need ${cs.reqAdg} lb/day to hit target; you're averaging ${cs.actAdg??'—'} lb/day.`);
+    out.push('Push gain: raise energy density, add a feeding, and rule out health, water or heat holding him back.');
+  } else if(cs.state==='over'){
+    out.push(`Projected ${cs.proj} lb — about ${cs.gap} lb over your ${cs.target} lb target.`);
+    out.push('Ease the throttle: trim the top-end ration or add exercise so you finish on weight, not past it.');
+    if(cs.reqAdg!=null && cs.reqAdg>0) out.push(`Aim for about ${cs.reqAdg} lb/day the rest of the way.`);
+  } else if(cs.state==='ontrack'){
+    out.push(`Projected ${cs.proj} lb — right on your ${cs.target} lb target. Hold the current program.`);
+    if(cs.reqAdg!=null) out.push(`Maintain about ${cs.reqAdg} lb/day for the last ${cs.daysLeft} day${cs.daysLeft===1?'':'s'}.`);
+  }
+  if(cs.paceDelta!=null) out.push(cs.paceDelta>=0?`You're ${cs.paceDelta} lb ahead of the straight-line pace today.`:`You're ${Math.abs(cs.paceDelta)} lb behind the straight-line pace today.`);
+  if(cs.daysLeft>=0 && cs.daysLeft<=14) out.push(`${cs.daysLeft} day${cs.daysLeft===1?'':'s'} out — lock in hair/hide work, exercise and a tight weigh-in cadence.`);
+  return out;
+}
+function coachMilestones(a,cs){
+  if(cs.st.startW==null || !cs.st.startD) return [];
+  const start=parseD(cs.st.startD); const total=daysBetween(cs.st.startD,cs.tdate); if(!(total>7)) return [];
+  const ws=weightsFor(a.id); const marks=[];
+  for(let d=7; d<total; d+=7){ const date=new Date(start.getTime()+d*86400000).toISOString().slice(0,10); const ideal=Math.round(cs.st.startW+(cs.target-cs.st.startW)*(d/total)); marks.push({date,ideal}); }
+  marks.push({date:cs.tdate,ideal:cs.target});
+  marks.forEach(m=>{ let best=null,bd=5; ws.forEach(w=>{const dd=Math.abs(daysBetween(w.date,m.date)); if(dd<bd){bd=dd;best=w;}}); m.actual=best?+best.weight:null; m.future=m.date>todayISO(); });
+  return marks;
+}
+function ringSVG(pct,color,label,sub){
+  const r=26,c=2*Math.PI*r,off=c*(1-clamp((pct||0)/100,0,1));
+  return `<svg viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--line-2)" stroke-width="7"/>
+    <circle cx="32" cy="32" r="${r}" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 32 32)"/>
+    <text x="32" y="31" text-anchor="middle" font-size="15" font-weight="800" fill="var(--ink)">${label}</text>${sub?`<text x="32" y="43" text-anchor="middle" font-size="8" fill="var(--muted)">${sub}</text>`:''}</svg>`;
+}
+function coachSummary(){ const list=activeAnimals().filter(coachEligible).map(coachStatus);
+  return {total:list.length, under:list.filter(c=>c.state==='under').length, over:list.filter(c=>c.state==='over').length, ontrack:list.filter(c=>c.state==='ontrack').length}; }
+route('coach',()=>{
+  const v=setView('','more'); const wrap=el('div');
+  const active=activeAnimals();
+  const planned=active.filter(coachEligible).map(a=>({a,cs:coachStatus(a)}));
+  const noGoal=active.filter(a=>!coachEligible(a));
+  const order={under:0,over:1,nodata:2,ontrack:3,past:4};
+  planned.sort((x,y)=>(order[x.cs.state]-order[y.cs.state])||(x.cs.daysLeft-y.cs.daysLeft));
+  const sum=coachSummary();
+  wrap.innerHTML=pageHeader('Game Plan');
+  wrap.append(htmlToFrag(`<div class="help" style="margin-bottom:12px">${ICON.info}<span>Set a target weight and show date on an animal and the app coaches you to it — required daily gain, projected finish, and whether you're on pace, behind or getting heavy.</span></div>`));
+  if(planned.length){
+    wrap.append(htmlToFrag(`<div class="grid g4" style="margin-bottom:4px">
+      <div class="stat"><div class="k">On plan</div><div class="v tnum">${planned.length}</div><div class="sub">with a goal</div></div>
+      <div class="stat"><div class="k">On track</div><div class="v tnum" style="color:var(--good)">${sum.ontrack}</div></div>
+      <div class="stat"><div class="k">Behind</div><div class="v tnum" style="color:var(--bad)">${sum.under}</div></div>
+      <div class="stat"><div class="k">Heavy</div><div class="v tnum" style="color:var(--warn)">${sum.over}</div></div></div>`));
+    const L=el('div'); L.style.marginTop='6px';
+    planned.forEach(({a,cs})=>{
+      const card=el('div','card pad'); card.style.marginBottom='10px'; card.style.cursor='pointer';
+      const ringLabel=cs.pct!=null?Math.round(cs.pct)+'%':'—';
+      card.innerHTML=`<div style="display:flex;gap:14px;align-items:center">
+        <div style="flex:none">${ringSVG(cs.pct,cs.color,ringLabel,'to goal')}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px"><div style="font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.name)}</div><span class="pill" style="background:${cs.color}22;color:${cs.color};font-size:10px;flex:none">${cs.label}</span></div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:3px">${cs.cur!=null?cs.cur+' lb now':'no weight'} → ${cs.target} lb by ${fmtShort(cs.tdate)}${cs.daysLeft>=0?' · '+cs.daysLeft+'d':''}</div>
+          <div style="display:flex;gap:14px;margin-top:6px;font-size:12px">
+            <span><span style="color:var(--muted)">Need </span><b class="tnum">${cs.reqAdg!=null?cs.reqAdg:'—'}</b><span style="color:var(--muted)"> lb/d</span></span>
+            <span><span style="color:var(--muted)">Now </span><b class="tnum">${cs.actAdg!=null?cs.actAdg:'—'}</b><span style="color:var(--muted)"> lb/d</span></span>
+            <span><span style="color:var(--muted)">Proj </span><b class="tnum">${cs.proj!=null?cs.proj:'—'}</b></span>
+          </div>
+        </div><span style="color:var(--muted);flex:none">${ICON.chev}</span></div>`;
+      card.onclick=()=>openGamePlanSheet(a.id); L.append(card);
+    });
+    wrap.append(L);
+  } else {
+    wrap.append(htmlToFrag(emptyState(ICON.target,'No game plans yet','Set a target weight and show date on an animal to start coaching toward it.')));
+  }
+  if(noGoal.length){
+    wrap.append(htmlToFrag(`<div class="section-title">Set a goal</div>`));
+    const L=el('div','list');
+    noGoal.forEach(a=>{ const li=animalRow(a,`<button class="btn sm teal" data-goal>Set goal</button>`, animalStats(a).curW!=null?animalStats(a).curW+' lb · no target':'no weights yet');
+      $('[data-goal]',li).onclick=(e)=>{e.stopPropagation();openGamePlanSheet(a.id);}; L.append(li); });
+    wrap.append(L);
+  }
+  wrap.append(htmlToFrag('<div style="height:8px"></div>'));
+  v.append(wrap);
+});
+function openGamePlanSheet(animalId){
+  const a=getAnimal(animalId); if(!a) return;
+  a.plan=a.plan||{};
+  const body=el('div');
+  const draw=()=>{
+    const cs=coachStatus(a); const eligible=coachEligible(a); const advice=eligible?coachAdvice(a,cs):[];
+    const marks=eligible?coachMilestones(a,cs):[];
+    const upcoming=marks.filter(m=>m.future).slice(0,1)[0];
+    body.innerHTML=`
+      ${eligible?`<div class="card pad" style="margin-bottom:12px;border-color:${cs.color}55">
+        <div style="display:flex;gap:14px;align-items:center">
+          <div style="flex:none">${ringSVG(cs.pct,cs.color,cs.pct!=null?Math.round(cs.pct)+'%':'—','to goal')}</div>
+          <div style="flex:1">
+            <span class="pill" style="background:${cs.color}22;color:${cs.color};font-size:11px">${cs.label}</span>
+            <div style="font-size:13px;color:var(--muted);margin-top:6px">${cs.cur!=null?cs.cur+' lb now':'no weight'} → <b style="color:var(--ink)">${cs.target} lb</b> by ${fmtShort(cs.tdate)}${cs.daysLeft>=0?` · ${cs.daysLeft} days`:''}</div>
+          </div>
+        </div>
+        <div class="grid g3" style="margin-top:12px">
+          <div class="stat"><div class="k">Need</div><div class="v tnum" style="font-size:20px">${cs.reqAdg!=null?cs.reqAdg:'—'}<small> lb/d</small></div></div>
+          <div class="stat"><div class="k">Averaging</div><div class="v tnum" style="font-size:20px">${cs.actAdg!=null?cs.actAdg:'—'}<small> lb/d</small></div></div>
+          <div class="stat"><div class="k">Projected</div><div class="v tnum" style="font-size:20px">${cs.proj!=null?cs.proj:'—'}<small> lb</small></div></div>
+        </div>
+      </div>
+      ${advice.length?`<div class="section-title">Coach's read</div><div class="card pad" style="font-size:13.5px;line-height:1.6">${advice.map(t=>`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="color:${cs.color};flex:none;width:16px;height:16px;margin-top:1px">${ICON.trend}</span><span>${esc(t)}</span></div>`).join('')}</div>`:''}
+      ${upcoming?`<div class="section-title">Next checkpoint</div><div class="card pad"><div style="display:flex;justify-content:space-between;font-size:13.5px"><span style="color:var(--muted);font-weight:700">${fmtDate(upcoming.date)}</span><span style="font-weight:800" class="tnum">aim ${upcoming.ideal} lb</span></div></div>`:''}
+      ${marks.length?`<div class="section-title">Pace checkpoints</div><div class="card pad">${marks.map(m=>{ const hit=m.actual!=null; const good=hit&&m.actual>=m.ideal-cs.tol; return `<div class="kv"><span class="k">${fmtShort(m.date)}${m.future?' <span style="color:var(--muted)">·upcoming</span>':''}</span><span class="v">aim ${m.ideal}${hit?` · <span style="color:${good?'var(--good)':'var(--bad)'}">${m.actual} lb</span>`:m.future?'':' · —'}</span></div>`; }).join('')}</div>`:''}
+      `:`<div class="help" style="margin-bottom:12px">${ICON.info}<span>Set a target weight and show date below to turn on coaching for ${esc(a.name)}.</span></div>`}
+      <div class="section-title">Goal</div>
+      <div class="field-row"><div class="field" style="flex:1"><label>Target weight (lb)</label><input class="control" type="number" inputmode="decimal" id="gpW" value="${a.targetWeight||''}"></div><div class="field" style="flex:1"><label>Show date</label><input class="control" type="date" id="gpD" value="${a.targetDate||''}"></div></div>
+      <div class="field"><label>Feed strategy</label><textarea class="control" id="gpFeed" placeholder="e.g. full feed 2× + top dress last 3 weeks">${esc(a.plan.feed||'')}</textarea></div>
+      <div class="field"><label>Exercise &amp; conditioning</label><textarea class="control" id="gpEx" placeholder="e.g. walk 15 min daily, brace work M/W/F">${esc(a.plan.exercise||'')}</textarea></div>
+      <div class="field"><label>Notes / focus</label><textarea class="control" id="gpNotes" placeholder="Hair, hide, feet, showmanship…">${esc(a.plan.notes||'')}</textarea></div>`;
+    // rebind save each redraw
+    if(sh){ const btn=$('[data-save]',sh); if(btn) btn.onclick=onSave; }
+  };
+  const onSave=()=>{
+    const w=$('#gpW',body).value, d=$('#gpD',body).value;
+    a.targetWeight=w===''?null:+w; a.targetDate=d||null;
+    a.plan={ feed:$('#gpFeed',body).value.trim(), exercise:$('#gpEx',body).value.trim(), notes:$('#gpNotes',body).value.trim(), updatedAt:nowISO() };
+    touch(a); logAct('plan','Updated game plan',a.id); save();
+    toast('Game plan saved','good'); draw();
+  };
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">Save game plan</button>`;
+  const sh=openSheet({title:a.name+' — Game plan',body,foot});
+  $('[data-save]',sh).onclick=onSave;
+  draw();
+}
+
+/* ===================================================================
+   SHOW-DAY MODE — a focused day-of screen: countdown, per-animal
+   weigh-in targets, a pack/prep checklist, your class schedule and notes.
+   Checklist lives on the show record (show.checklist), seeded once.
+   =================================================================== */
+const SHOW_CHECKLIST_DEFAULT = [
+  ['Papers','Entry confirmation / exhibitor number'],
+  ['Papers','Health papers / registration'],
+  ['Animal','Halter, show stick / whip, comb'],
+  ['Animal','Wash supplies, towels, brushes'],
+  ['Animal','Adhesive / touch-up / show sheen'],
+  ['Animal','Feed, hay & water buckets'],
+  ['Pen','Bedding, fan, extension cord'],
+  ['Pen','Muck fork & pan'],
+  ['Exhibitor','Show clothes & number pins'],
+  ['Exhibitor','Water, snacks, sunscreen'],
+];
+function ensureChecklist(s){ if(!s.checklist){ s.checklist=SHOW_CHECKLIST_DEFAULT.map(([cat,text])=>({id:uid('ck'),cat,text,done:false})); } return s.checklist; }
+route('showday',(parts)=>{
+  const s=DB.shows.find(x=>x.id===parts[1]); if(!s){ go('/shows'); return; }
+  if(!s.checklist){ ensureChecklist(s); save(); }   // persist the seeded checklist once
+  const v=setView('','shows'); const wrap=el('div'); v.append(wrap);
+  const entries=DB.entries.filter(e=>e.showId===s.id);
+  const draw=()=>{
+    const list=ensureChecklist(s); const done=list.filter(c=>c.done).length;
+    const dleft=daysBetween(todayISO(),s.start);
+    const when=dleft===0?'Today':dleft===1?'Tomorrow':dleft>0?dleft+' days out':Math.abs(dleft)+'d ago';
+    wrap.innerHTML=`${pageHeader('Show day','/show/'+s.id)}
+      <div class="card pad" style="background:linear-gradient(135deg,var(--purple),var(--purple-3));color:#fff;border:none;box-shadow:var(--shadow-lg)">
+        <div style="font-size:11px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.5px">${esc(when)}</div>
+        <div style="font-size:20px;font-weight:800;margin-top:2px">${esc(s.name)}</div>
+        <div style="font-size:12.5px;opacity:.9">${fmtDate(s.start)}${s.location?' · '+esc(s.location):''}${s.weighIn?' · weigh-in '+fmtShort(s.weighIn):''}</div>
+        <div style="margin-top:10px;height:7px;background:rgba(255,255,255,.25);border-radius:5px;overflow:hidden"><div style="height:100%;width:${list.length?Math.round(done/list.length*100):0}%;background:#fff;border-radius:5px"></div></div>
+        <div style="font-size:11.5px;opacity:.9;margin-top:5px">${done}/${list.length} checklist items ready</div>
+      </div>
+      <div class="section-title">Weigh-in targets</div><div id="sdWeigh"></div>
+      <div class="section-title">Checklist <button class="more" id="sdAdd">+ Item</button></div><div id="sdCheck"></div>
+      <div class="section-title">Your classes <button class="more" id="sdEnt">Add entry</button></div><div id="sdEnt2"></div>
+      <div class="section-title">Show-day notes</div>
+      <div class="field"><textarea class="control" id="sdNotes" placeholder="Ring order, judge, reminders…">${esc(s.dayNotes||'')}</textarea></div>`;
+    // weigh-in targets
+    const wc=$('#sdWeigh',wrap);
+    if(!entries.length){ wc.innerHTML='<div class="empty" style="padding:14px">No entries yet. Add your animals to this show.</div>'; }
+    else { const L=el('div','list'); entries.forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const st=animalStats(a);
+      const proj=(a.targetDate===s.start||!a.targetDate)&&st.adgLife!=null&&st.curW!=null?Math.round(st.curW+st.adgLife*Math.max(0,daysBetween(st.curD,s.start))):st.projWeight;
+      const tgt=e.showWeight||a.targetWeight; const cur=st.curW;
+      let flag=''; if(tgt&&proj!=null){ const g=proj-tgt; const tol=Math.max(5,Math.round(tgt*0.03)); flag=Math.abs(g)<=tol?'<span class="pill good" style="font-size:10px">on weight</span>':g>0?`<span class="pill warn" style="font-size:10px">+${g} over</span>`:`<span class="pill bad" style="font-size:10px">${g} under</span>`; }
+      const li=el('div','li');
+      li.innerHTML=`<div class="thumb">${esc(initials(a.name))}</div><div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${cur!=null?cur+' lb now':'no weight'}${proj!=null?' · proj '+proj+' lb':''}${tgt?' · target '+tgt+' lb':''}</div></div><div class="r" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">${flag}<button class="btn sm teal" data-weigh>Weigh</button></div>`;
+      $('[data-weigh]',li).onclick=(ev)=>{ev.stopPropagation();openWeightSheet(a.id);}; li.onclick=()=>go('/animal/'+a.id); L.append(li); }); wc.innerHTML=''; wc.append(L); }
+    // checklist grouped by category
+    const cc=$('#sdCheck',wrap); const cats=[...new Set(list.map(c=>c.cat))];
+    cc.innerHTML=cats.map(cat=>`<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:10px 0 4px">${esc(cat)}</div>`+
+      `<div class="list">${list.filter(c=>c.cat===cat).map(c=>`<label class="li" style="cursor:pointer"><button class="thumb" style="background:${c.done?'var(--good)':'var(--line-2)'};color:${c.done?'#fff':'var(--purple)'}" data-ck="${c.id}">${c.done?ICON.check:ICON.clipboard}</button><div class="main"><div class="t1" style="font-size:14px;${c.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(c.text)}</div></div><button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-ckdel="${c.id}">${ICON.x}</button></label>`).join('')}</div>`).join('');
+    $$('[data-ck]',cc).forEach(b=>b.onclick=(e)=>{e.preventDefault();const c=list.find(x=>x.id===b.dataset.ck);c.done=!c.done;save();draw();});
+    $$('[data-ckdel]',cc).forEach(b=>b.onclick=(e)=>{e.preventDefault();s.checklist=list.filter(x=>x.id!==b.dataset.ckdel);save();draw();});
+    // classes
+    const ec=$('#sdEnt2',wrap);
+    if(!entries.length){ ec.innerHTML='<div class="empty" style="padding:14px">No classes entered.</div>'; }
+    else { const L=el('div','list'); entries.slice().sort((x,y)=>(x.cls||'')<(y.cls||'')?-1:1).forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const r=e.result||{}; const li=el('div','li');
+      li.innerHTML=`<div class="thumb" style="color:var(--purple)">${ICON.shows}</div><div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${esc(e.division||'')}${e.cls?' · '+esc(e.cls):''}${e.showWeight?' · '+e.showWeight+' lb':''}</div></div><div class="r">${r.placing?`<span class="pill p" style="font-size:10px">${esc(r.placing)}${r.inClass?'/'+r.inClass:''}</span>`:'<button class="btn sm teal" data-res>Result</button>'}</div>`;
+      if(r.placing)li.onclick=()=>go('/animal/'+a.id+'/shows'); else $('[data-res]',li).onclick=(ev)=>{ev.stopPropagation();openResultSheet(e.id);}; L.append(li); }); ec.innerHTML=''; ec.append(L); }
+    $('#sdAdd',wrap).onclick=()=>{ const t=prompt('Checklist item'); if(t){ list.push({id:uid('ck'),cat:'Custom',text:t,done:false}); save(); draw(); } };
+    $('#sdEnt',wrap).onclick=()=>openEntrySheet(entries[0]?entries[0].animalId:(activeAnimals()[0]||{}).id);
+    const nt=$('#sdNotes',wrap); nt.onchange=()=>{ s.dayNotes=nt.value; save(); };
+  };
+  draw();
+});
+
+/* ===================================================================
+   RECORD BOOK — a compiled career achievement record. Team-wide, or per
+   animal (?animal=id). Printable for a physical record book / sale packet.
+   =================================================================== */
+function isBanner(r){ const t=((r.divisionPlacing||'')+' '+(r.bannerNote||'')).toLowerCase(); return /champ|grand|reserve|banner|division|supreme|premier/.test(t); }
+function isClassWin(r){ return String(r.placing||'').trim()==='1'; }
+function recordEntries(animalId){ return DB.entries.filter(e=>e.result&&e.result.placing&&(!animalId||e.animalId===animalId)); }
+function recordStats(animalId){
+  const res=recordEntries(animalId);
+  const shows=new Set(res.map(e=>e.showId));
+  const banners=res.filter(e=>isBanner(e.result));
+  const wins=res.filter(e=>isClassWin(e.result));
+  const premium=res.reduce((s,e)=>s+(+e.result.premium||0),0);
+  const sale=res.reduce((s,e)=>s+(+e.result.salePrice||0),0);
+  const points=res.reduce((s,e)=>s+(+e.result.points||0),0);
+  return {count:res.length, shows:shows.size, banners:banners.length, wins:wins.length, premium, sale, points, res, bannerList:banners};
+}
+route('records',(parts,q)=>{
+  const animalId=q&&q.get('animal'); const a=animalId?getAnimal(animalId):null;
+  const v=setView('','more'); const wrap=el('div'); v.append(wrap);
+  const st=recordStats(animalId);
+  const animals=activeAnimalsWithResults();
+  wrap.innerHTML=`${pageHeader(a?a.name+' — Record book':'Record Book', a?'/records':null, `<button class="btn sm" id="rbPrint">${ICON.download} Print</button>`)}
+    ${!a&&animals.length?`<div class="chips" style="flex-wrap:wrap;white-space:normal;margin-bottom:12px"><button class="chip active" data-af="">All animals</button>${animals.map(x=>`<button class="chip" data-af="${x.id}">${esc(x.name)}</button>`).join('')}</div>`:''}
+    ${st.count?`<div class="grid g4">
+      <div class="stat"><div class="k">Wins</div><div class="v tnum">${st.wins}</div><div class="sub">class firsts</div></div>
+      <div class="stat"><div class="k">Banners</div><div class="v tnum" style="color:var(--purple-3)">${st.banners}</div><div class="sub">champ/division</div></div>
+      <div class="stat"><div class="k">Shows</div><div class="v tnum">${st.shows}</div></div>
+      <div class="stat"><div class="k">Placings</div><div class="v tnum">${st.count}</div></div>
+    </div>
+    ${(st.premium||st.sale||st.points)?`<div class="grid g3" style="margin-top:4px">${st.premium?`<div class="stat"><div class="k">Premiums</div><div class="v tnum" style="font-size:18px">${money(st.premium)}</div></div>`:''}${st.sale?`<div class="stat"><div class="k">Sale total</div><div class="v tnum" style="font-size:18px">${money(st.sale)}</div></div>`:''}${st.points?`<div class="stat"><div class="k">Points</div><div class="v tnum">${round(st.points,1)}</div></div>`:''}</div>`:''}`:''}
+    ${st.bannerList.length?`<div class="section-title">Banners &amp; champions</div><div id="rbBanners"></div>`:''}
+    <div class="section-title">${a?'Results':'All results'}</div><div id="rbResults"></div>`;
+  if(!st.count){ $('#rbResults',wrap).innerHTML=emptyState(ICON.medal,'No results yet','Record show placings from an animal’s Shows tab and they’ll build a career record here.'); }
+  else {
+    if(st.bannerList.length){ const L=el('div','list'); st.bannerList.sort((x,y)=>showDateOf(y)<showDateOf(x)?-1:1).forEach(e=>{ const an=getAnimal(e.animalId); const sh=DB.shows.find(s=>s.id===e.showId); const li=el('div','li');
+      li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.rosette}</div><div class="main"><div class="t1">${esc(e.result.divisionPlacing||e.result.bannerNote)}</div><div class="t2">${esc(an?an.name:'')} · ${esc(sh?sh.name:'')} · ${sh?fmtShort(sh.start):''}</div></div>`;
+      li.onclick=()=>go('/animal/'+e.animalId+'/shows'); L.append(li); }); $('#rbBanners',wrap).append(L); }
+    // results grouped by show, newest first
+    const byShow={}; st.res.forEach(e=>{ (byShow[e.showId]=byShow[e.showId]||[]).push(e); });
+    const showIds=Object.keys(byShow).sort((x,y)=>{ const sx=DB.shows.find(s=>s.id===x),sy=DB.shows.find(s=>s.id===y); return (sy?sy.start:'')<(sx?sx.start:'')?-1:1; });
+    const rc=$('#rbResults',wrap);
+    showIds.forEach(sid=>{ const sh=DB.shows.find(s=>s.id===sid); rc.append(htmlToFrag(`<div style="font-size:12px;font-weight:800;color:var(--muted);margin:12px 0 4px">${esc(sh?sh.name:'Show')} · ${sh?fmtShort(sh.start):''}</div>`));
+      const card=el('div','card pad'); card.innerHTML=byShow[sid].map(e=>{ const an=getAnimal(e.animalId); const r=e.result;
+        return `<div class="kv"><span class="k">${esc(an?an.name:'')}${e.cls?' · '+esc(e.cls):e.division?' · '+esc(e.division):''}</span><span class="v">${isBanner(r)?ICON.rosette.replace('width="24" height="24"','width="14" height="14"'):''} ${esc(r.placing)}${r.inClass?'/'+r.inClass:''}${r.divisionPlacing?' · '+esc(r.divisionPlacing):''}</span></div>`;
+      }).join(''); rc.append(card); });
+  }
+  $('#rbPrint',wrap).onclick=()=>printRecordBook(animalId);
+  $$('[data-af]',wrap).forEach(b=>b.onclick=()=>{ const id=b.dataset.af; go(id?'/records?animal='+id:'/records'); });
+});
+function activeAnimalsWithResults(){ const ids=new Set(DB.entries.filter(e=>e.result&&e.result.placing).map(e=>e.animalId)); return DB.animals.filter(a=>ids.has(a.id)); }
+function showDateOf(e){ const sh=DB.shows.find(s=>s.id===e.showId); return sh?sh.start:''; }
+function printRecordBook(animalId){
+  const a=animalId?getAnimal(animalId):null; const st=recordStats(animalId);
+  const byShow={}; st.res.forEach(e=>{ (byShow[e.showId]=byShow[e.showId]||[]).push(e); });
+  const showIds=Object.keys(byShow).sort((x,y)=>{ const sx=DB.shows.find(s=>s.id===x),sy=DB.shows.find(s=>s.id===y); return (sy?sy.start:'')<(sx?sx.start:'')?-1:1; });
+  const w=window.open('','_blank');
+  const rows=showIds.map(sid=>{ const sh=DB.shows.find(s=>s.id===sid); return `<h3>${esc(sh?sh.name:'Show')} <span class="muted">${sh?fmtDate(sh.start):''}${sh&&sh.location?' · '+esc(sh.location):''}</span></h3><table>${byShow[sid].map(e=>{const an=getAnimal(e.animalId);const r=e.result;return `<tr><td>${esc(an?an.name:'')}</td><td>${esc(e.division||'')}${e.cls?' · '+esc(e.cls):''}</td><td>${esc(r.placing||'')}${r.inClass?'/'+r.inClass:''}</td><td>${esc(r.divisionPlacing||'')}${r.bannerNote?' · '+esc(r.bannerNote):''}</td><td>${r.salePrice?money(r.salePrice):''}</td></tr>`;}).join('')}</table>`; }).join('');
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(a?a.name:'Team')} — Record Book</title>
+    <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:820px;margin:20px auto;padding:0 20px;line-height:1.5}
+    h1{color:#4C1D95;margin-bottom:2px}h3{color:#0D9488;margin:22px 0 6px;font-size:15px}
+    .head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #4C1D95;padding-bottom:10px}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px}td,th{padding:6px 8px;border-bottom:1px solid #eee;text-align:left}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.box{background:#f5f5f7;border-radius:10px;padding:10px}.box b{display:block;font-size:22px;color:#4C1D95}
+    .muted{color:#777;font-size:12px;font-weight:400}@media print{.noprint{display:none}}</style></head>
+    <body><div class="head"><h1>${esc(a?a.name:'Devitt Family Show Team')}<br><span class="muted">Record Book</span></h1><div style="text-align:right"><b>Devitt Family Show Team</b><div class="muted">${fmtDate(todayISO())}</div></div></div>
+    <div class="grid"><div class="box"><span class="muted">Class wins</span><b>${st.wins}</b></div><div class="box"><span class="muted">Banners</span><b>${st.banners}</b></div><div class="box"><span class="muted">Shows</span><b>${st.shows}</b></div><div class="box"><span class="muted">Placings</span><b>${st.count}</b></div></div>
+    ${(st.premium||st.sale)?`<p class="muted">Premiums ${money(st.premium)} · Sale total ${money(st.sale)}${st.points?' · '+round(st.points,1)+' points':''}</p>`:''}
+    ${st.bannerList.length?`<h3>Banners &amp; Champions</h3><table>${st.bannerList.map(e=>{const an=getAnimal(e.animalId);const sh=DB.shows.find(s=>s.id===e.showId);return `<tr><td>${esc(e.result.divisionPlacing||e.result.bannerNote)}</td><td>${esc(an?an.name:'')}</td><td>${esc(sh?sh.name:'')}</td><td>${sh?fmtDate(sh.start):''}</td></tr>`;}).join('')}</table>`:''}
+    ${rows||'<p class="muted">No results recorded yet.</p>'}
+    <p class="noprint" style="margin-top:24px"><button onclick="window.print()" style="background:#4C1D95;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700">Print / Save as PDF</button></p>
+    </body></html>`;
+  w.document.write(html); w.document.close();
+}
 
 /* ===================================================================
    START
