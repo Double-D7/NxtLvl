@@ -31,6 +31,8 @@ marked and removable any time from **More → Remove demo data**.
 | **Progress media** | Photos & videos stored privately **on-device** (IndexedDB), with gallery / timeline / **before-and-after** views that show weight Δ, days between, and ADG for the period. |
 | **Shows** | Shows, entries (division/class/weight/exhibitor), and full results (placing, champion/banner, showmanship, sale price, premiums, judge comments, lessons). |
 | **Layover / Care Log** | Staging periods at a breeder's central barn before big shows. Log the breeder's time-specific directions per animal — water, snack, feed, supplement, wash/rinse, walk, blow-out, etc. — each **timestamped** (planned vs actual). Day-by-day timeline, one-tap quick log, active-layover dashboard banner, and a per-animal care history so you build a routine you can review and repeat. |
+| **Growth reel** | Turn an animal's weekly photos into a shareable **timelapse video** (name/date/weight overlay), right from the Media tab. Speed + angle controls; saves to Photos / shares via the native share sheet. |
+| **Shareable page** | A beautiful, **public read-only link** per animal (profile, weight chart, progress photos, pedigree, results) for buyers/sponsors — you choose what's shown, and health/prices/expenses/notes are never included. Links can expire and be revoked. *(Cloud only; run `supabase/shares.sql` once — see below.)* |
 | **Calendar & tasks** | Shared month view + task list with priorities, recurrence and animal links. |
 | **Health · Exercise · Measurements** | Treatments/vaccinations with **withdrawal tracking** (never suggests dosages), exercise logs, and body measurements with charts. |
 | **Expenses & income** | Per-animal cost tracking, cost of gain, and net result. |
@@ -87,6 +89,8 @@ upgraded later (e.g. to per-record tables) without touching any screen. See the
 - `config.js` — Supabase keys (empty = local-only; fill in to enable cloud)
 - `vendor/supabase.js` — vendored Supabase JS client (offline-capable)
 - `supabase/schema.sql` + `supabase/SETUP.md` — one-time cloud setup
+- `supabase/shares.sql` — optional: run once to enable public shareable animal pages
+- `share.html` — the public read-only page shareable links open
 - `sw.js` — service worker (network-first HTML, cache-first same-origin assets;
   never caches Supabase API calls or touches user data)
 - `manifest.webmanifest`, `icon.svg`, `icon-*.png`, `apple-touch-icon.png` — PWA install assets

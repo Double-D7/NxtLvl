@@ -1202,6 +1202,7 @@ route('animal',(parts)=>{
       <div class="ov"></div>
       <button class="iconbtn no-print" style="position:absolute;left:12px;top:calc(var(--safe-t) + 8px);z-index:3" onclick="history.length>1?history.back():go('/animals')">${ICON.back}</button>
       <button class="iconbtn no-print" style="position:absolute;right:12px;top:calc(var(--safe-t) + 8px);z-index:3" data-edit>${ICON.edit}</button>
+      <button class="iconbtn no-print" style="position:absolute;right:58px;top:calc(var(--safe-t) + 8px);z-index:3" data-share>${ICON.share}</button>
       ${can('addRecord')?`<button class="no-print" data-setphoto style="position:absolute;right:12px;bottom:12px;z-index:3;display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.42);color:#fff;border:1px solid rgba(255,255,255,.35);padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:700;backdrop-filter:blur(4px)"><span style="width:16px;height:16px">${ICON.camera}</span>${a.profileMediaId?'Change photo':'Add photo'}</button>`:''}
       <div class="meta">
         <div style="display:flex;gap:8px;margin-bottom:6px"><span class="pill ${STATUS_COLOR[a.status]||'gray'}">${esc(a.status)}</span>${a.archived?'<span class="pill gray">Archived</span>':''}${a.demo?'<span class="pill" style="background:rgba(255,255,255,.2);color:#fff">Demo</span>':''}</div>
@@ -1214,6 +1215,7 @@ route('animal',(parts)=>{
   v.append(hero);
   if(a.profileMediaId) Media.url(a.profileMediaId).then(u=>{ if(u){ const c=$('[data-cover]',hero); c.classList.remove('ph'); c.style.backgroundImage=`url(${u})`; c.innerHTML=''; }});
   $('[data-edit]',hero).onclick=()=>openAnimalForm(a.id);
+  if($('[data-share]',hero)) $('[data-share]',hero).onclick=()=>openShareSheet(a.id);
   if($('[data-setphoto]',hero)) $('[data-setphoto]',hero).onclick=()=>uploadProfilePhoto(a.id);
   $$('[data-tab]',hero).forEach(b=>b.onclick=()=>{ go('/animal/'+id+'/'+b.dataset.tab); });
   // keep active tab visible
@@ -1694,6 +1696,78 @@ function openReelSheet(animalId){
       toast('Reel ready!','good');
     }catch(e){ out.innerHTML=`<div class="help" style="color:var(--bad)">${ICON.info}<span>${esc(e.message||'Could not build the reel')}</span></div>`; }
     btn.disabled=false;
+  };
+}
+
+/* ===================================================================
+   SHARE — public read-only animal page (cloud only; needs supabase/shares.sql)
+   =================================================================== */
+function shareBaseUrl(){ const dir=location.pathname.replace(/[^/]*$/,''); return location.origin+dir+'share.html#'; }
+function randToken(){ return 'shr_'+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,8); }
+function buildSharePayload(a, opts){
+  const st=animalStats(a);
+  const p={ v:1, name:a.name, barnName:a.barnName||'', species:speciesName(a.species), breed:a.breed||'', sex:a.sex||'', status:a.status,
+    curWeight:st.curW, startWeight:st.startW, adg:st.adgLife, gainTotal:st.gainTotal, targetWeight:a.targetWeight||null,
+    team:{name:DB.team.name}, generatedAt:nowISO() };
+  if(opts.pedigree){ p.breeder=a.breeder||''; p.sire=a.sire||''; p.dam=a.dam||''; p.sireOfDam=a.sireOfDam||''; }
+  if(opts.weights){ p.weights=weightsFor(a.id).map(w=>({date:w.date,weight:+w.weight})); }
+  if(opts.results){ p.results=DB.entries.filter(e=>e.animalId===a.id&&e.result&&e.result.placing).map(e=>{ const sh=DB.shows.find(s=>s.id===e.showId); return {show:sh?sh.name:'',division:e.division||'',placing:String(e.result.placing),note:e.result.divisionPlacing||e.result.bannerNote||''}; }); }
+  return p;
+}
+async function createShare(a, opts){
+  if(!Cloud.enabled || !Cloud.teamId){ toast('Connect to cloud first — sharing needs it','bad'); return null; }
+  const token=randToken(); const payload=buildSharePayload(a, opts);
+  // upload images to the public shares bucket at <teamId>/<token>/<blobId>
+  const pub=(blobId)=>Cloud.sb.storage.from('shares').getPublicUrl(Cloud.teamId+'/'+token+'/'+blobId).data.publicUrl;
+  const upload=async(blobId)=>{ try{ const bl=await Media.blob(blobId); if(!bl) return null; await Cloud.sb.storage.from('shares').upload(Cloud.teamId+'/'+token+'/'+blobId, bl, {upsert:true, contentType:bl.type||'image/jpeg'}); return pub(blobId); }catch(e){ console.error('share upload',e); return null; } };
+  if(a.profileMediaId){ payload.profileUrl=await upload(a.profileMediaId); }
+  if(opts.photos){ const photos=mediaFor(a.id).filter(m=>m.kind!=='video').slice(0,12); payload.photos=[];
+    for(const m of photos){ const url=await upload(m.blobId); if(url) payload.photos.push({url,date:m.captured||m.date,view:m.view||''}); } }
+  const row={ id:token, team_id:Cloud.teamId, animal_id:a.id, title:a.name, data:payload, revoked:false, expires_at:opts.expires||null, created_by:DB.currentUserId };
+  const {error}=await Cloud.sb.from('shares').insert(row);
+  if(error){ console.error(error); toast('Sharing not set up yet — run supabase/shares.sql','bad'); return null; }
+  DB.shares=DB.shares||[]; DB.shares.push({id:token, animalId:a.id, title:a.name, createdAt:nowISO(), expiresAt:opts.expires||null});
+  logAct('share','Created a share link for '+a.name,a.id); save();
+  return shareBaseUrl()+token;
+}
+async function revokeShare(token){
+  DB.shares=(DB.shares||[]).filter(s=>s.id!==token); save();
+  if(Cloud.enabled){ try{ await Cloud.sb.from('shares').update({revoked:true}).eq('id',token); }catch(e){} }
+}
+function openShareSheet(animalId){
+  const a=getAnimal(animalId);
+  if(!Cloud.enabled){ const body=el('div'); body.innerHTML=`<div class="help">${ICON.info}<span>Public share links need cloud sync. Turn it on in <b>More → Connect to cloud</b>, then run <b>supabase/shares.sql</b> once.</span></div>`; openSheet({title:'Share',body}); return; }
+  const existing=(DB.shares||[]).filter(s=>s.animalId===animalId);
+  const body=el('div');
+  let opts={ weights:true, photos:true, pedigree:true, results:true, expires:null };
+  const row=(k,label,sub)=>`<label class="li" style="border:1px solid var(--line);border-radius:12px;margin-bottom:8px"><div class="main"><div class="t1" style="font-size:14px">${label}</div>${sub?`<div class="t2">${sub}</div>`:''}</div><input type="checkbox" data-opt="${k}" ${opts[k]?'checked':''} style="width:22px;height:22px"></label>`;
+  body.innerHTML=`
+    <p style="font-size:13px;color:var(--muted);margin:2px 0 12px">Create a public, view-only page for <b style="color:var(--ink)">${esc(a.name)}</b> to send to buyers, sponsors or family. You choose what's shown — health, prices, expenses and private notes are never included.</p>
+    ${row('weights','Weight chart','Growth over time')}
+    ${row('photos','Progress photos','Up to 12 photos')}
+    ${row('pedigree','Pedigree','Breeder, sire, dam')}
+    ${row('results','Show results','Placings & banners')}
+    <div class="field" style="margin-top:6px"><label>Link expires</label><select class="control" id="shExp"><option value="">Never (until revoked)</option><option value="7">In 7 days</option><option value="30">In 30 days</option><option value="90">In 90 days</option></select></div>
+    <div id="shOut"></div>
+    ${existing.length?`<div class="section-title">Active links</div><div id="shList"></div>`:''}`;
+  $$('[data-opt]',body).forEach(c=>c.onchange=()=>{ opts[c.dataset.opt]=c.checked; });
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-make style="flex:1">${ICON.share} Create share link</button>`;
+  const sh=openSheet({title:'Share '+a.name,body,foot});
+  const paintList=()=>{ const lc=$('#shList',body); if(!lc)return; const list=(DB.shares||[]).filter(s=>s.animalId===animalId); lc.innerHTML='';
+    list.forEach(s=>{ const li=el('div','li'); li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.share}</div><div class="main"><div class="t1" style="font-size:13.5px">${shareBaseUrl().replace('https://','').replace(location.hash,'')}${s.id.slice(0,10)}…</div><div class="t2">${s.expiresAt?'expires '+fmtShort(s.expiresAt):'never expires'}</div></div><button class="btn sm ghost" data-copy>${ICON.copy}</button><button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-rev>${ICON.trash}</button>`;
+      $('[data-copy]',li).onclick=()=>{ navigator.clipboard&&navigator.clipboard.writeText(shareBaseUrl()+s.id); toast('Link copied','good'); };
+      $('[data-rev]',li).onclick=async()=>{ await revokeShare(s.id); toast('Link turned off','good'); paintList(); };
+      lc.append(li); }); };
+  paintList();
+  $('[data-make]',sh).onclick=async()=>{ const btn=$('[data-make]',sh); btn.disabled=true; const orig=btn.textContent; btn.textContent='Creating…';
+    const days=$('#shExp',body).value; opts.expires = days? new Date(Date.now()+ (+days)*864e5).toISOString() : null;
+    const link=await createShare(a, opts);
+    btn.disabled=false; btn.textContent=orig;
+    if(link){ $('#shOut',body).innerHTML=`<div class="card pad" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);margin-top:4px"><div style="font-weight:800;margin-bottom:6px">Link ready 🎉</div><div style="font-size:12.5px;word-break:break-all;color:var(--ink-2)">${esc(link)}</div><div class="btn-row" style="margin-top:10px"><button class="btn primary" id="shCopy" style="flex:1">${ICON.copy} Copy link</button><button class="btn" id="shShare">${ICON.share}</button></div></div>`;
+      $('#shCopy',body).onclick=()=>{ navigator.clipboard&&navigator.clipboard.writeText(link); toast('Copied','good'); };
+      $('#shShare',body).onclick=async()=>{ if(navigator.share){ try{ await navigator.share({title:a.name+' — Devitt Family Show Team', url:link}); }catch(e){} } else { navigator.clipboard&&navigator.clipboard.writeText(link); toast('Copied','good'); } };
+      if(!$('#shList',body)){ /* add list section */ } paintList();
+    }
   };
 }
 

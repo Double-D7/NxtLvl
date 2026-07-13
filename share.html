@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0D13">
+<title>Devitt Family Show Team</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<style>
+:root{--purple:#8B5CF6;--teal:#2DD4BF;--ink:#E9EBF1;--muted:#7C8497;--line:#242a36;--bg:#0A0D13;--card:#141922}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 0 60px}
+.hero{position:relative;min-height:300px;background:linear-gradient(180deg,#3B1B6E,#1E0C3C);display:flex;align-items:flex-end}
+.hero .cover{position:absolute;inset:0;background-size:cover;background-position:center}
+.hero .ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,13,19,.15),rgba(10,13,19,.9))}
+.hero .meta{position:relative;padding:22px 20px}
+.hero h1{font-size:30px;font-weight:800;letter-spacing:-.5px}
+.hero .sub{color:rgba(255,255,255,.8);font-weight:600;font-size:14px;margin-top:3px}
+.pill{display:inline-block;background:rgba(139,92,246,.22);color:#C4B5FD;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;margin-bottom:8px}
+.section{padding:22px 20px 0}
+.h{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:12px}
+.grid{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.stat .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.stat .v{font-size:26px;font-weight:800;margin-top:3px}
+.stat .v small{font-size:13px;color:var(--muted);font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:14px}
+.kv:last-child{border:0}.kv .k2{color:var(--muted)}.kv .v2{font-weight:700}
+.gallery{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.gallery img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;background:var(--card)}
+.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 20px 0}
+.foot b{color:var(--ink)}
+.brand{display:inline-flex;align-items:center;gap:8px;margin-bottom:8px}
+.brand img{width:26px;height:26px;border-radius:7px}
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted)}
+.tnum{font-variant-numeric:tabular-nums}
+a{color:var(--purple)}
+</style>
+</head>
+<body>
+<div id="app"><div class="center">Loading…</div></div>
+<script src="config.js"></script>
+<script src="vendor/supabase.js"></script>
+<script>
+(async function(){
+  const app=document.getElementById('app');
+  const fail=(msg)=>{ app.innerHTML='<div class="center">'+msg+'</div>'; };
+  const token=(location.hash||'').replace(/^#/,'').trim();
+  if(!token){ return fail('This share link is missing its code.'); }
+  const cfg=window.DFST_CONFIG||{};
+  if(!cfg.supabaseUrl||!cfg.supabaseAnonKey||!window.supabase){ return fail('Sharing isn’t configured yet.'); }
+  const sb=window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  let row;
+  try{ const {data,error}=await sb.from('shares').select('data,revoked,expires_at').eq('id',token).single();
+    if(error||!data) return fail('This share link is no longer available.');
+    if(data.revoked) return fail('This share link has been turned off by the owner.');
+    if(data.expires_at && new Date(data.expires_at) < new Date()) return fail('This share link has expired.');
+    row=data.data;
+  }catch(e){ return fail('Could not load this share.'); }
+  render(row);
+
+  function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function fmtD(iso){ if(!iso)return''; const d=new Date(iso+(iso.length<=10?'T00:00:00':'')); return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }
+  function fmtS(iso){ if(!iso)return''; const d=new Date(iso+(iso.length<=10?'T00:00:00':'')); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
+  function chart(weights,target){ if(!weights||weights.length<2)return'';
+    const W=700,H=200,pad={l:34,r:12,t:12,b:22}; const xs=weights.map(w=>+new Date(w.date)); const ys=weights.map(w=>w.weight).concat(target?[target]:[]);
+    let minX=Math.min(...xs),maxX=Math.max(...xs); if(minX===maxX)maxX=minX+8.64e7; let minY=Math.min(...ys),maxY=Math.max(...ys); const py=(maxY-minY)*.12||5; minY=Math.floor(minY-py); maxY=Math.ceil(maxY+py);
+    const sx=x=>pad.l+((+new Date(x)-minX)/(maxX-minX))*(W-pad.l-pad.r), sy=y=>H-pad.b-((y-minY)/(maxY-minY))*(H-pad.t-pad.b);
+    let g=''; for(let i=0;i<=3;i++){const yv=minY+(maxY-minY)*i/3,yy=sy(yv); g+='<line x1="'+pad.l+'" y1="'+yy+'" x2="'+(W-pad.r)+'" y2="'+yy+'" stroke="#242a36"/><text x="4" y="'+(yy+3)+'" font-size="9" fill="#7C8497">'+Math.round(yv)+'</text>';}
+    if(target){const ty=sy(target); g+='<line x1="'+pad.l+'" y1="'+ty+'" x2="'+(W-pad.r)+'" y2="'+ty+'" stroke="#2DD4BF" stroke-dasharray="5 4"/>';}
+    const d=weights.map((w,i)=>(i?'L':'M')+sx(w.date).toFixed(1)+' '+sy(w.weight).toFixed(1)).join(' ');
+    g+='<path d="'+d+'" fill="none" stroke="#8B5CF6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>';
+    weights.forEach(w=>{g+='<circle cx="'+sx(w.date).toFixed(1)+'" cy="'+sy(w.weight).toFixed(1)+'" r="2.6" fill="#141922" stroke="#8B5CF6" stroke-width="2"/>';});
+    g+='<text x="'+pad.l+'" y="'+(H-6)+'" font-size="9" fill="#7C8497">'+fmtS(weights[0].date)+'</text><text x="'+(W-pad.r)+'" y="'+(H-6)+'" font-size="9" fill="#7C8497" text-anchor="end">'+fmtS(weights[weights.length-1].date)+'</text>';
+    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+g+'</svg>';
+  }
+  function render(a){
+    const stat=(k,v,s)=> v==null||v===''?'':'<div class="stat"><div class="k">'+k+'</div><div class="v tnum">'+v+(s?'<small> '+s+'</small>':'')+'</div></div>';
+    const ped=[['Breeder',a.breeder],['Sire',a.sire],['Dam',a.dam],['Sire of dam',a.sireOfDam]].filter(r=>r[1]);
+    document.title=a.name+' — Devitt Family Show Team';
+    app.innerHTML=
+    '<div class="wrap">'+
+      '<div class="hero">'+(a.profileUrl?'<div class="cover" style="background-image:url('+esc(a.profileUrl)+')"></div>':'')+'<div class="ov"></div>'+
+        '<div class="meta">'+(a.status?'<span class="pill">'+esc(a.status)+'</span><br>':'')+'<h1>'+esc(a.name)+(a.barnName?' <span style="font-weight:600;opacity:.8;font-size:20px">“'+esc(a.barnName)+'”</span>':'')+'</h1>'+
+        '<div class="sub">'+[a.species,a.breed,a.sex].filter(Boolean).map(esc).join(' · ')+'</div></div></div>'+
+      '<div class="section"><div class="grid">'+
+        stat('Current weight', a.curWeight!=null?a.curWeight:'', 'lb')+
+        stat('Avg daily gain', a.adg!=null?a.adg:'', 'lb/d')+
+        stat('Total gain', a.gainTotal!=null?a.gainTotal:'', 'lb')+
+        stat('Target', a.targetWeight!=null?a.targetWeight:'', 'lb')+
+      '</div></div>'+
+      (a.weights&&a.weights.length>1?'<div class="section"><div class="h">Growth</div><div class="card">'+chart(a.weights,a.targetWeight)+'</div></div>':'')+
+      (a.photos&&a.photos.length?'<div class="section"><div class="h">Progress photos</div><div class="gallery">'+a.photos.map(p=>'<img loading="lazy" src="'+esc(p.url)+'" alt="">').join('')+'</div></div>':'')+
+      (ped.length?'<div class="section"><div class="h">Pedigree</div><div class="card">'+ped.map(r=>'<div class="kv"><span class="k2">'+esc(r[0])+'</span><span class="v2">'+esc(r[1])+'</span></div>').join('')+'</div></div>':'')+
+      (a.results&&a.results.length?'<div class="section"><div class="h">Show results</div><div class="card">'+a.results.map(r=>'<div class="kv"><span class="k2">'+esc(r.show)+(r.division?' · '+esc(r.division):'')+'</span><span class="v2">'+esc(r.placing)+(r.note?' · '+esc(r.note):'')+'</span></div>').join('')+'</div></div>':'')+
+      '<div class="foot"><div class="brand"><img src="icon-192.png" alt=""><b>'+esc((a.team&&a.team.name)||'Devitt Family Show Team')+'</b></div><div>Shared from the Devitt Family Show Team app'+(a.generatedAt?' · '+fmtD(a.generatedAt.slice(0,10)):'')+'</div></div>'+
+    '</div>';
+  }
+})();
+</script>
+</body>
+</html>
