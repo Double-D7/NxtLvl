@@ -15,7 +15,7 @@ const I = (p, o) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none"
 const ICON = {
   dash:I('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
   animals:I('<path d="M4 14c0-3 2-5 4-5m8 0c2 0 4 2 4 5"/><circle cx="7.5" cy="8" r="1.6"/><circle cx="16.5" cy="8" r="1.6"/><path d="M9 18c0-2 1.4-3 3-3s3 1 3 3-1.4 3-3 3-3-1-3-3z"/><path d="M5 19c-1.2 0-2-1-1.6-2M19 19c1.2 0 2-1 1.6-2"/>'),
-  plus:I('<path d="M12 5v14M5 12h14"/'),
+  plus:I('<path d="M12 5v14M5 12h14"/>'),
   cal:I('<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/>'),
   more:I('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'),
   weight:I('<path d="M6.5 8h11l2.2 11a1 1 0 0 1-1 1.2H5.3a1 1 0 0 1-1-1.2L6.5 8z"/><circle cx="12" cy="5" r="2.2"/><path d="M10 8a2.5 2.5 0 0 1 4 0"/>'),
@@ -49,7 +49,7 @@ const ICON = {
   share:I('<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.6M8.2 13.2l7.6 4.6"/>'),
   logout:I('<path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3M10 12h9M16 8l3 4-3 4"/>'),
   paw:I('<ellipse cx="12" cy="15" rx="4.5" ry="3.5"/><circle cx="6.5" cy="10" r="1.8"/><circle cx="17.5" cy="10" r="1.8"/><circle cx="9" cy="6.5" r="1.6"/><circle cx="15" cy="6.5" r="1.6"/>'),
-  info:I('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/'),
+  info:I('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
   download:I('<path d="M12 3v11M8 10l4 4 4-4M4 20h16"/>'),
   upload:I('<path d="M12 20V9M8 13l4-4 4 4M4 4h16"/>'),
   star:I('<path d="M12 3l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8L6.4 19.6l1-6L3 9.4l6-.9L12 3z"/>'),
@@ -71,6 +71,8 @@ const ICON = {
   rest:I('<path d="M20 14A8 8 0 1 1 10 4a6.5 6.5 0 0 0 10 10z"/>'),
   dry:I('<path d="M3 8h10a3 3 0 1 0-3-3M3 12h14a3 3 0 1 1-3 3M3 16h8a2.5 2.5 0 1 1-2.5 2.5"/>'),
   clip:I('<path d="M6 6l12 12M6 18L18 6"/><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/>'),
+  car:I('<path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/><path d="M3 13h18"/><circle cx="7" cy="16" r="1"/><circle cx="17" cy="16" r="1"/>'),
+  calPlus:I('<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4M12 12v5M9.5 14.5h5"/>'),
 };
 const spIcon = key => ({swine:ICON.pig, sheep:ICON.sheep, goat:ICON.goat, cattle:ICON.cow}[key] || ICON.paw);
 
@@ -181,6 +183,19 @@ const CARE_CATS = [
   {key:'Other',      icon:'note',  color:'#94A3B8'},
 ];
 const careCat = k => CARE_CATS.find(c=>c.key===k) || CARE_CATS[CARE_CATS.length-1];
+/* Calendar event categories */
+const EVENT_CATS = [
+  {key:'Visit',       icon:'team',   color:'#8B5CF6'},
+  {key:'Showmanship', icon:'star',   color:'#2DD4BF'},
+  {key:'Vet',         icon:'health', color:'#F87171'},
+  {key:'Clip/Groom',  icon:'clip',   color:'#F472B6'},
+  {key:'Weigh day',   icon:'weight', color:'#8B5CF6'},
+  {key:'Feed pickup', icon:'feed',   color:'#2DD4BF'},
+  {key:'Travel',      icon:'car',    color:'#FB923C'},
+  {key:'Meeting',     icon:'team',   color:'#60A5FA'},
+  {key:'Other',       icon:'cal',    color:'#94A3B8'},
+];
+const eventCat = k => EVENT_CATS.find(c=>c.key===k) || EVENT_CATS[EVENT_CATS.length-1];
 const NOTE_TYPES = ['General','Feed','Weight','Health','Exercise','Showmanship','Structure','Movement','Breeder feedback','Advisor feedback','Show result','Family discussion','Other'];
 const EXP_CATS = ['Purchase price','Feed','Supplements','Medication','Veterinary','Entry fees','Bedding','Equipment','Transportation','Fuel','Hotels','Meals','Grooming supplies','Show supplies','Breeding','Registration','Other'];
 const MEDIA_VIEWS = ['Profile','Side view','Front view','Rear view','Top view','Walking video','Driving video','Showmanship video','Feeding video','Health','General'];
@@ -201,7 +216,7 @@ function blankDB(){
     animals:[], weights:[], feed:[], media:[], measurements:[], exercise:[],
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
-    layovers:[], care:[], helpers:[],
+    layovers:[], care:[], helpers:[], events:[],
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
   };
 }
@@ -380,6 +395,7 @@ function seedDemo(db){
   db.tasks.push(stamp({id:uid('t'),title:'Review lamb weight targets',date:T,done:false,priority:'Low'}));
   db.tasks.push(stamp({id:uid('t'),title:'Order feed',date:ago(-2),done:false,priority:'High'}));
   db.income.push(stamp({id:uid('in'),animalId:db.animals[0].id,source:'Premium',amount:2100,date:ago(-22),demo:true}));
+  db.events.push(stamp({id:uid('ev'),demo:true,title:'Kade — showmanship + pig look',category:'Showmanship',date:ago(-1),startTime:'18:00',endTime:'19:30',location:'Home barn',animalIds:[db.animals[0].id,db.animals[1].id],showId:show.id,notes:'Work the kids on showmanship and evaluate the pigs going to the fair.'}));
   // demo layover (active today) with a few of the breeder's directions on Batman & Bandit
   const lay=stamp({id:uid('lay'),demo:true,name:'State Fair Layover',breeder:'Ratliff Show Pigs',location:'Central Barn · Row C',showId:null,start:ago(1),end:ago(-3),animalIds:[db.animals[0].id,db.animals[1].id],notes:'Breeder has them for 5 days before move-in.'});
   db.layovers.push(lay);
@@ -394,7 +410,7 @@ function seedDemo(db){
   db.seeded=true;
   logAct('seed','Loaded demo show team data');
 }
-const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory','layovers','care','helpers'];
+const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory','layovers','care','helpers','events'];
 function removeDemo(){
   DEMO_ARRAYS.forEach(k=>{ DB[k]=DB[k].filter(r=>!r.demo && !(r.animalId && (DB.animals.find(a=>a.id===r.animalId)||{}).demo)); });
   DB.animals=DB.animals.filter(a=>!a.demo);
@@ -892,6 +908,7 @@ route('dashboard', ()=>{
   const alertAnimals=active.filter(a=>weightAlerts(a).some(x=>x.k==='bad'||x.k==='warn'));
   const recentMedia=DB.media.slice().sort((a,b)=>a.createdAt<b.createdAt?1:-1).slice(0,6);
   const todayTasks=DB.tasks.filter(t=>!t.done && t.date<=todayISO()).sort((a,b)=>a.date<b.date?-1:1).slice(0,6);
+  const soonEvents=(DB.events||[]).filter(e=>e.date>=todayISO() && daysBetween(todayISO(),e.date)<=2).sort((a,b)=>(a.date+(a.startTime||'99'))<(b.date+(b.startTime||'99'))?-1:1).slice(0,4);
   const recentFeed=DB.feed.slice().sort((a,b)=>a.createdAt<b.createdAt?1:-1).slice(0,3);
 
   const v=setView('','dashboard');
@@ -930,6 +947,16 @@ route('dashboard', ()=>{
 
   // Today in the barn
   wrap.append(htmlToFrag(`<div class="section-title">Today in the barn <button class="more" onclick="go('/calendar')">Calendar</button></div>`));
+  if(soonEvents.length){
+    const el2=el('div','list'); el2.style.marginBottom='10px';
+    soonEvents.forEach(ev=>{ const cat=eventCat(ev.category); const li=el('div','li');
+      li.innerHTML=`<div class="thumb" style="color:${cat.color}">${ICON[cat.icon]}</div>
+        <div class="main"><div class="t1">${esc(ev.title)}</div><div class="t2">${daysBetween(todayISO(),ev.date)===0?'Today':daysBetween(todayISO(),ev.date)===1?'Tomorrow':fmtShort(ev.date)}${ev.allDay?'':ev.startTime?' · '+timeLabel(ev.startTime):''}${ev.location?' · '+esc(ev.location):''}</div></div>
+        <button class="iconbtn" style="background:var(--line-2);color:var(--purple-3)" data-ics title="Add to Calendar">${ICON.calPlus}</button>`;
+      $('[data-ics]',li).onclick=(e)=>{e.stopPropagation(); addToCalendar(ev);};
+      li.onclick=()=>openEventSheet(ev.id); el2.append(li); });
+    wrap.append(el2);
+  }
   if(todayTasks.length){
     const list=el('div','list');
     todayTasks.forEach(t=>{
@@ -942,7 +969,7 @@ route('dashboard', ()=>{
       list.append(li);
     });
     wrap.append(list);
-  } else wrap.append(htmlToFrag(emptyState(ICON.check,'All caught up','No tasks due today. Add one from the Calendar.')));
+  } else if(!soonEvents.length) wrap.append(htmlToFrag(emptyState(ICON.check,'All caught up','No tasks due today. Add one from the Calendar.')));
 
   // Alerts
   if(alertAnimals.length){
@@ -1758,7 +1785,7 @@ function tabActivity(box,a){
    =================================================================== */
 function openQuickAdd(){
   const body=el('div');
-  const acts=[['Add weight',ICON.weight,'var(--purple-3)','weight'],['Log care',ICON.layover,'#38BDF8','care'],['Upload photo',ICON.camera,'var(--info)','photo'],['Upload video',ICON.video,'var(--teal-3)','video'],['Change feed',ICON.feed,'var(--teal-3)','feed'],['Health record',ICON.health,'var(--bad)','health'],['Log exercise',ICON.run,'var(--warn)','exercise'],['Add note',ICON.note,'var(--muted)','note'],['New animal',ICON.animals,'var(--purple)','animal'],['New task',ICON.check,'var(--good)','task']];
+  const acts=[['Add weight',ICON.weight,'var(--purple-3)','weight'],['Log care',ICON.layover,'#38BDF8','care'],['Upload photo',ICON.camera,'var(--info)','photo'],['Upload video',ICON.video,'var(--teal-3)','video'],['Change feed',ICON.feed,'var(--teal-3)','feed'],['Health record',ICON.health,'var(--bad)','health'],['Log exercise',ICON.run,'var(--warn)','exercise'],['Add note',ICON.note,'var(--muted)','note'],['New event',ICON.cal,'#60A5FA','event'],['New animal',ICON.animals,'var(--purple)','animal'],['New task',ICON.check,'var(--good)','task']];
   const recent=(DB._recentAnimals||[]).map(getAnimal).filter(Boolean).slice(0,6);
   const active=activeAnimals();
   body.innerHTML=`<div class="grid g3" style="gap:10px">${acts.map(([l,ic,c,k])=>`<button class="card" data-act="${k}" style="padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="width:30px;height:30px;color:${c}">${ic}</span><span style="font-size:12px;font-weight:700;line-height:1.2">${l}</span></button>`).join('')}</div>
@@ -1774,6 +1801,7 @@ function openQuickAdd(){
   $$('[data-act]',body).forEach(b=>b.onclick=()=>{ const k=b.dataset.act;
     if(k==='animal'){ closeSheet(); openAnimalForm(); }
     else if(k==='task'){ closeSheet(); openTaskSheet(); }
+    else if(k==='event'){ closeSheet(); openEventSheet(null, todayISO()); }
     else pickAnimal(k); });
 }
 function runQuick(kind,id){ DB._recentAnimals=[id,...(DB._recentAnimals||[]).filter(x=>x!==id)].slice(0,8); save();
@@ -1870,56 +1898,92 @@ function openResultSheet(id){
 /* ===================================================================
    CALENDAR + TASKS
    =================================================================== */
+let calMonth=null; // Date of first-of-displayed-month
+function calItems(){
+  const items=[];
+  (DB.events||[]).forEach(e=>items.push({date:e.date,time:e.startTime||'',kind:'event',title:e.title,ref:e,cat:e.category}));
+  DB.tasks.forEach(t=>items.push({date:t.date,time:t.time||'',kind:'task',title:t.title,ref:t,done:t.done,priority:t.priority,animalId:t.animalId}));
+  DB.shows.forEach(s=>{ items.push({date:s.start,time:'',kind:'show',title:s.name,ref:s});
+    if(s.entryDeadline)items.push({date:s.entryDeadline,time:'',kind:'deadline',title:'Entry deadline · '+s.name,ref:s}); });
+  DB.health.forEach(h=>{ if(h.withdrawal){const a=getAnimal(h.animalId);items.push({date:h.withdrawal,kind:'withdrawal',title:(a?a.name+' ':'')+'withdrawal ends',animalId:h.animalId});} if(h.followup){const a=getAnimal(h.animalId);items.push({date:h.followup,kind:'health',title:(a?a.name+' ':'')+'health follow-up',animalId:h.animalId});} });
+  return items;
+}
+const itemSort=(a,b)=>{ const ka=a.date+(a.time||'99:99'), kb=b.date+(b.time||'99:99'); return ka<kb?-1:ka>kb?1:0; };
 route('calendar',()=>{
   const v=setView('','calendar');
+  if(!calMonth){ const n=new Date(); calMonth=new Date(n.getFullYear(),n.getMonth(),1); }
   const wrap=el('div'); v.append(wrap);
   const draw=()=>{
-    // build events: tasks + shows + deadlines + withdrawals
-    const events=[];
-    DB.tasks.forEach(t=>events.push({date:t.date,kind:'task',title:t.title,ref:t,done:t.done,priority:t.priority,animalId:t.animalId}));
-    DB.shows.forEach(s=>{ events.push({date:s.start,kind:'show',title:s.name,ref:s});
-      if(s.entryDeadline)events.push({date:s.entryDeadline,kind:'deadline',title:'Entry deadline · '+s.name,ref:s}); });
-    DB.health.forEach(h=>{ if(h.withdrawal){const a=getAnimal(h.animalId);events.push({date:h.withdrawal,kind:'withdrawal',title:(a?a.name+' ':'')+'withdrawal ends',animalId:h.animalId});} if(h.followup){const a=getAnimal(h.animalId);events.push({date:h.followup,kind:'health',title:(a?a.name+' ':'')+'health follow-up',animalId:h.animalId});} });
-    const upcoming=events.filter(e=>e.date>=todayISO()).sort((a,b)=>a.date<b.date?-1:1);
-    const overdue=events.filter(e=>e.kind==='task'&&!e.done&&e.date<todayISO()).sort((a,b)=>a.date<b.date?-1:1);
-    wrap.innerHTML=`${pageHeader('Calendar',null,`<button class="btn primary sm" id="addT">${ICON.plus} Task</button>`)}
-      ${miniMonth(events)}
+    const items=calItems();
+    const upcoming=items.filter(e=>e.date>=todayISO()).sort(itemSort);
+    const overdue=items.filter(e=>e.kind==='task'&&!e.done&&e.date<todayISO()).sort(itemSort);
+    wrap.innerHTML=`${pageHeader('Calendar',null,`<div style="display:flex;gap:8px"><button class="btn sm" id="addT">${ICON.check}</button><button class="btn primary sm" id="addE">${ICON.plus} Event</button></div>`)}
+      <div id="monthWrap"></div>
+      <div class="btn-row" style="margin:2px 0 10px"><button class="btn sm ghost" id="exportCal">${ICON.calPlus} Export to Apple / Outlook</button></div>
       ${overdue.length?`<div class="section-title" style="color:var(--bad)">Overdue</div><div id="ovd"></div>`:''}
       <div class="section-title">Upcoming</div><div id="upc"></div>`;
+    $('#monthWrap',wrap).innerHTML=miniMonth(items, calMonth);
+    $('#addE',wrap).onclick=()=>openEventSheet(null, todayISO());
     $('#addT',wrap).onclick=()=>openTaskSheet();
-    if($('#ovd',wrap))$('#ovd',wrap).append(eventList(overdue));
-    const uc=$('#upc',wrap); if(upcoming.length)uc.append(eventList(upcoming.slice(0,40))); else uc.innerHTML=emptyState(ICON.cal,'Nothing scheduled','Add tasks, weigh days and shows to your team calendar.');
+    $('#exportCal',wrap).onclick=()=>exportCalendarICS();
+    $('#calPrev',wrap).onclick=()=>{ calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1); draw(); };
+    $('#calNext',wrap).onclick=()=>{ calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1); draw(); };
+    $$('[data-cal-day]',wrap).forEach(c=>c.onclick=()=>openDaySheet(c.dataset.calDay));
+    if($('#ovd',wrap))$('#ovd',wrap).append(itemList(overdue));
+    const uc=$('#upc',wrap); if(upcoming.length)uc.append(itemList(upcoming.slice(0,50))); else uc.innerHTML=emptyState(ICON.cal,'Nothing scheduled','Tap a day, or Add Event, to put visits, weigh days and shows on the calendar.');
   };
   draw();
 });
-function miniMonth(events){
-  const now=new Date(); const y=now.getFullYear(),m=now.getMonth();
+function miniMonth(items, ref){
+  const y=ref.getFullYear(), m=ref.getMonth();
   const first=new Date(y,m,1).getDay(); const days=new Date(y,m+1,0).getDate();
-  const evByDay={}; events.forEach(e=>{ const d=parseD(e.date); if(d&&d.getFullYear()===y&&d.getMonth()===m)(evByDay[d.getDate()]=evByDay[d.getDate()]||[]).push(e); });
+  const byDay={}; items.forEach(e=>{ const d=parseD(e.date); if(d&&d.getFullYear()===y&&d.getMonth()===m)(byDay[d.getDate()]=byDay[d.getDate()]||[]).push(e); });
+  const todayS=todayISO();
+  const dotColor=e=>({event:eventCat(e.cat).color, show:'var(--purple-3)', deadline:'var(--bad)', task:'var(--good)', withdrawal:'var(--warn)', health:'var(--bad)'}[e.kind]||'var(--teal-3)');
   let cells=''; for(let i=0;i<first;i++)cells+='<div></div>';
-  for(let d=1;d<=days;d++){ const isToday=d===now.getDate(); const ev=evByDay[d]||[];
-    cells+=`<div style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;position:relative;font-size:13px;font-weight:700;${isToday?'background:var(--purple);color:#fff':ev.length?'background:var(--line-2)':''}">${d}${ev.length?`<div style="display:flex;gap:2px;margin-top:2px">${ev.slice(0,3).map(e=>`<span style="width:4px;height:4px;border-radius:50%;background:${isToday?'#fff':e.kind==='show'?'var(--purple-3)':e.kind==='deadline'?'var(--bad)':'var(--teal-3)'}"></span>`).join('')}</div>`:''}</div>`; }
-  return `<div class="card pad"><div style="text-align:center;font-weight:800;margin-bottom:10px">${now.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</div>
+  for(let d=1;d<=days;d++){ const iso=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; const isToday=iso===todayS; const ev=byDay[d]||[];
+    cells+=`<button data-cal-day="${iso}" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;position:relative;font-size:13px;font-weight:700;color:${isToday?'#fff':'var(--ink)'};background:${isToday?'var(--purple)':ev.length?'var(--line-2)':'transparent'}">${d}${ev.length?`<div style="display:flex;gap:2px;margin-top:2px">${ev.slice(0,3).map(e=>`<span style="width:4px;height:4px;border-radius:50%;background:${isToday?'#fff':dotColor(e)}"></span>`).join('')}</div>`:''}</button>`; }
+  return `<div class="card pad">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button class="iconbtn" style="background:var(--line-2);color:var(--ink)" id="calPrev">${ICON.back}</button>
+      <div style="font-weight:800">${ref.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</div>
+      <button class="iconbtn" style="background:var(--line-2);color:var(--ink)" id="calNext">${ICON.chev}</button></div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:10px;color:var(--muted);font-weight:700;text-align:center;margin-bottom:4px">${['S','M','T','W','T','F','S'].map(d=>`<div>${d}</div>`).join('')}</div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${cells}</div></div>`;
 }
-function eventList(events){
+function timeLabel(t){ if(!t) return ''; const [h,mi]=t.split(':').map(Number); const ap=h<12?'AM':'PM'; const h12=(h%12)||12; return h12+(mi?':'+String(mi).padStart(2,'0'):'')+' '+ap; }
+function itemList(items){
   const L=el('div','list');
-  events.forEach(e=>{ const a=e.animalId?getAnimal(e.animalId):null; const li=el('div','li');
-    const ic={task:ICON.check,show:ICON.shows,deadline:ICON.flag,withdrawal:ICON.health,health:ICON.health}[e.kind]||ICON.cal;
-    const col={task:'var(--good)',show:'var(--purple-3)',deadline:'var(--bad)',withdrawal:'var(--warn)',health:'var(--bad)'}[e.kind];
+  items.forEach(e=>{ const a=e.animalId?getAnimal(e.animalId):null; const li=el('div','li');
+    const cat=e.kind==='event'?eventCat(e.cat):null;
+    const ic=e.kind==='event'?ICON[cat.icon]:({task:ICON.check,show:ICON.shows,deadline:ICON.flag,withdrawal:ICON.health,health:ICON.health}[e.kind]||ICON.cal);
+    const col=e.kind==='event'?cat.color:({task:'var(--good)',show:'var(--purple-3)',deadline:'var(--bad)',withdrawal:'var(--warn)',health:'var(--bad)'}[e.kind]);
+    const timeStr=e.kind==='event'?(e.ref.allDay?'All day':timeLabel(e.time)):'';
+    const loc=e.kind==='event'&&e.ref.location?' · '+esc(e.ref.location):'';
     li.innerHTML=`<button class="thumb" style="color:${col}" ${e.kind==='task'?'data-done':''}>${e.kind==='task'&&e.done?ICON.check:ic}</button>
-      <div class="main"><div class="t1" style="${e.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(e.title)}</div><div class="t2">${fmtDate(e.date)} · ${relDays(e.date)}${a?' · '+esc(a.name):''}</div></div>
-      ${e.priority==='High'?'<span class="pill bad" style="font-size:10px">High</span>':''}`;
+      <div class="main"><div class="t1" style="${e.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(e.title)}</div><div class="t2">${fmtShort(e.date)}${timeStr?' · '+timeStr:''} · ${relDays(e.date)}${a?' · '+esc(a.name):''}${loc}</div></div>
+      ${e.kind==='event'?`<button class="iconbtn" style="background:var(--line-2);color:var(--purple-3)" data-ics title="Add to Calendar">${ICON.calPlus}</button>`:e.priority==='High'?'<span class="pill bad" style="font-size:10px">High</span>':''}`;
     if(e.kind==='task'){ $('[data-done]',li).onclick=(ev)=>{ev.stopPropagation();e.ref.done=!e.ref.done;if(e.ref.done)logAct('task','Completed: '+e.ref.title,e.animalId);save();render();};
       li.onclick=()=>openTaskSheet(e.ref.id); }
+    else if(e.kind==='event'){ $('[data-ics]',li).onclick=(ev)=>{ev.stopPropagation();addToCalendar(e.ref);}; li.onclick=()=>openEventSheet(e.ref.id); }
     else if(e.kind==='show'||e.kind==='deadline'){ li.onclick=()=>go('/show/'+e.ref.id); }
     else if(a){ li.onclick=()=>go('/animal/'+a.id); }
     L.append(li); });
   return L;
 }
-function openTaskSheet(id){
-  const t=id?{...DB.tasks.find(x=>x.id===id)}:{title:'',date:todayISO(),priority:'Normal',done:false,recur:''};
+function openDaySheet(date){
+  const items=calItems().filter(e=>e.date===date).sort(itemSort);
+  const body=el('div');
+  body.innerHTML=`<div class="btn-row" style="margin-bottom:12px"><button class="btn primary" id="dayAddE" style="flex:1">${ICON.plus} Event</button><button class="btn" id="dayAddT">${ICON.check} Task</button></div><div id="dayList"></div>`;
+  const sh=openSheet({title:fmtDate(date,{weekday:'long',month:'long',day:'numeric'}),body});
+  $('#dayAddE',body).onclick=()=>{ closeSheet(); openEventSheet(null, date); };
+  $('#dayAddT',body).onclick=()=>{ closeSheet(); openTaskSheet(null, date); };
+  const dl=$('#dayList',body);
+  if(!items.length) dl.innerHTML='<div class="empty" style="padding:16px">Nothing scheduled this day.</div>';
+  else { const L=itemList(items); dl.append(L); }
+}
+function openTaskSheet(id, presetDate){
+  const t=id?{...DB.tasks.find(x=>x.id===id)}:{title:'',date:presetDate||todayISO(),priority:'Normal',done:false,recur:''};
   const body=el('div');
   body.innerHTML=`<div class="field"><label>Task *</label><input class="control" id="tkTitle" value="${esc(t.title)}" placeholder="Weigh Batman"></div>
     <div class="field-row"><div class="field" style="flex:1"><label>Date</label><input class="control" type="date" id="tkDate" value="${t.date}"></div>
@@ -1931,6 +1995,98 @@ function openTaskSheet(id){
   $('[data-save]',sh).onclick=()=>{ const data={title:$('#tkTitle',body).value.trim(),date:$('#tkDate',body).value,priority:$('#tkPri',body).value,animalId:$('#tkAnimal',body).value||null,recur:$('#tkRecur',body).value}; if(!data.title){toast('Name the task','bad');return;}
     if(id){Object.assign(DB.tasks.find(x=>x.id===id),data);}else{DB.tasks.push(stamp({id:uid('t'),done:false,...data}));} save(); closeSheet(); toast('Task saved','good'); render(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete task','Remove this task?','Delete',true)){DB.tasks=DB.tasks.filter(x=>x.id!==id);save();closeSheet();render();} };
+}
+
+/* ---- calendar event sheet ---- */
+function openEventSheet(id, presetDate){
+  if(!can('addRecord')){ toast('Your role can’t add events','bad'); return; }
+  const e = id?{...(DB.events||[]).find(x=>x.id===id), animalIds:[...((DB.events||[]).find(x=>x.id===id).animalIds||[])]}
+    : { title:'', category:'Visit', date:presetDate||todayISO(), startTime:'18:00', endTime:'', allDay:false, location:'', notes:'', animalIds:[], showId:null };
+  const body=el('div');
+  const draw=()=>{
+    body.innerHTML=`
+      <div class="field"><label>What's happening? *</label><input class="control" id="evTitle" value="${esc(e.title)}" placeholder="Kade over for showmanship"></div>
+      <div class="field"><label>Type</label><div class="chips" id="evCats" style="flex-wrap:wrap;white-space:normal">${EVENT_CATS.map(c=>`<button type="button" class="chip ${e.category===c.key?'active':''}" data-cat="${c.key}"><span style="width:15px;height:15px;color:${e.category===c.key?'#fff':c.color}">${ICON[c.icon]}</span>${c.key}</button>`).join('')}</div></div>
+      <div class="field-row"><div class="field" style="flex:1"><label>Date</label><input class="control" type="date" id="evDate" value="${e.date}"></div>
+        <div class="field" style="flex:1"><label>&nbsp;</label><label class="control" style="display:flex;align-items:center;gap:8px;min-height:48px"><input type="checkbox" id="evAllDay" ${e.allDay?'checked':''} style="width:20px;height:20px"> All day</label></div></div>
+      <div class="field-row" id="evTimes" style="${e.allDay?'display:none':''}"><div class="field" style="flex:1"><label>Start</label><input class="control" type="time" id="evStart" value="${e.startTime||'18:00'}"></div>
+        <div class="field" style="flex:1"><label>End (optional)</label><input class="control" type="time" id="evEnd" value="${e.endTime||''}"></div></div>
+      <div class="field"><label>Location</label><input class="control" id="evLoc" value="${esc(e.location||'')}" placeholder="Home barn"></div>
+      <div class="field"><label>Link a show (optional)</label><select class="control" id="evShow"><option value="">— none —</option>${DB.shows.map(s=>`<option value="${s.id}" ${e.showId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Animals involved</label><div class="chips" id="evAnimals" style="flex-wrap:wrap;white-space:normal">${activeAnimals().map(a=>`<button type="button" class="chip ${e.animalIds.includes(a.id)?'active':''}" data-an="${a.id}">${esc(a.name)}</button>`).join('')||'<span style="font-size:12px;color:var(--muted)">No active animals</span>'}</div></div>
+      <div class="field"><label>Notes</label><textarea class="control" id="evNotes" placeholder="What's the plan?">${esc(e.notes||'')}</textarea></div>`;
+    $$('[data-cat]',body).forEach(b=>b.onclick=()=>{ e.category=b.dataset.cat; collect(); draw(); });
+    $$('[data-an]',body).forEach(b=>b.onclick=()=>{ const id=b.dataset.an; if(e.animalIds.includes(id))e.animalIds=e.animalIds.filter(x=>x!==id); else e.animalIds.push(id); b.classList.toggle('active'); });
+    $('#evAllDay',body).onchange=()=>{ e.allDay=$('#evAllDay',body).checked; $('#evTimes',body).style.display=e.allDay?'none':''; };
+  };
+  const collect=()=>{ e.title=$('#evTitle',body).value.trim(); e.date=$('#evDate',body).value; e.allDay=$('#evAllDay',body).checked; e.startTime=$('#evStart',body)?$('#evStart',body).value:e.startTime; e.endTime=$('#evEnd',body)?$('#evEnd',body).value:''; e.location=$('#evLoc',body).value.trim(); e.showId=$('#evShow',body).value||null; e.notes=$('#evNotes',body).value; };
+  draw();
+  const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn" data-cal>${ICON.calPlus}</button><button class="btn primary" data-save style="flex:1">${id?'Save':'Add event'}</button>`;
+  const sh=openSheet({title:id?'Edit event':'New event',body,foot});
+  const persist=()=>{ collect(); if(!e.title){toast('Add a title','bad');return null;}
+    if(id){ Object.assign((DB.events).find(x=>x.id===id),e); touch((DB.events).find(x=>x.id===id)); }
+    else { const rec=stamp({id:uid('ev'),...e}); DB.events.push(rec); id=rec.id; }
+    logAct('event','Event: '+e.title); save(); return (DB.events).find(x=>x.id===id); };
+  $('[data-save]',sh).onclick=()=>{ const rec=persist(); if(rec){ closeSheet(); toast('Event saved','good'); render(); } };
+  $('[data-cal]',sh).onclick=()=>{ const rec=persist(); if(rec){ addToCalendar(rec); } };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete event','Remove this event?','Delete',true)){ DB.events=DB.events.filter(x=>x.id!==id); save(); closeSheet(); render(); } };
+}
+
+/* ===================================================================
+   ADD TO CALENDAR — iCalendar (.ics) for Apple/Outlook + web links
+   =================================================================== */
+function icsEsc(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n'); }
+function pad2(n){ return String(n).padStart(2,'0'); }
+function evEndTime(ev){ if(ev.endTime) return ev.endTime; if(!ev.startTime) return '19:00'; const [h,m]=ev.startTime.split(':').map(Number); return pad2((h+1)%24)+':'+pad2(m||0); }
+function icsStamp(){ const d=new Date(); return d.getUTCFullYear()+pad2(d.getUTCMonth()+1)+pad2(d.getUTCDate())+'T'+pad2(d.getUTCHours())+pad2(d.getUTCMinutes())+pad2(d.getUTCSeconds())+'Z'; }
+function eventDescription(ev){ const parts=[]; if(ev.notes)parts.push(ev.notes);
+  const ans=(ev.animalIds||[]).map(id=>(getAnimal(id)||{}).name).filter(Boolean); if(ans.length)parts.push('Animals: '+ans.join(', '));
+  const sh=ev.showId?DB.shows.find(s=>s.id===ev.showId):null; if(sh)parts.push('Show: '+sh.name);
+  return parts.join('\n'); }
+function buildICS(events){
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Devitt Family Show Team//EN','CALSCALE:GREGORIAN'];
+  events.forEach(ev=>{ const d=ev.date.replace(/-/g,'');
+    lines.push('BEGIN:VEVENT'); lines.push('UID:'+(ev.id||uid('ev'))+'@dfst'); lines.push('DTSTAMP:'+icsStamp());
+    if(ev.allDay){ const next=new Date(parseD(ev.date)); next.setDate(next.getDate()+1); const nd=next.getFullYear()+pad2(next.getMonth()+1)+pad2(next.getDate());
+      lines.push('DTSTART;VALUE=DATE:'+d); lines.push('DTEND;VALUE=DATE:'+nd); }
+    else { const st=(ev.startTime||'18:00').replace(':',''); const en=evEndTime(ev).replace(':','');
+      lines.push('DTSTART:'+d+'T'+st+'00'); lines.push('DTEND:'+d+'T'+en+'00'); }
+    lines.push('SUMMARY:'+icsEsc(ev.title));
+    if(ev.location) lines.push('LOCATION:'+icsEsc(ev.location));
+    const desc=eventDescription(ev); if(desc) lines.push('DESCRIPTION:'+icsEsc(desc));
+    lines.push('BEGIN:VALARM','TRIGGER:-PT1H','ACTION:DISPLAY','DESCRIPTION:'+icsEsc(ev.title),'END:VALARM');
+    lines.push('END:VEVENT'); });
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+function downloadICS(filename, events){ const ics=buildICS(events); const blob=new Blob([ics],{type:'text/calendar;charset=utf-8'}); const url=URL.createObjectURL(blob);
+  const a=el('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},1500); }
+function googleCalUrl(ev){ const d=ev.date.replace(/-/g,'');
+  let dates; if(ev.allDay){ const n=new Date(parseD(ev.date)); n.setDate(n.getDate()+1); dates=d+'/'+(n.getFullYear()+pad2(n.getMonth()+1)+pad2(n.getDate())); }
+  else dates=d+'T'+(ev.startTime||'18:00').replace(':','')+'00/'+d+'T'+evEndTime(ev).replace(':','')+'00';
+  const p=new URLSearchParams({action:'TEMPLATE',text:ev.title||'Event',dates,details:eventDescription(ev)||'',location:ev.location||''});
+  return 'https://calendar.google.com/calendar/render?'+p.toString(); }
+function outlookCalUrl(ev){ const iso=(t)=>ev.date+'T'+(t||'18:00')+':00';
+  const p=new URLSearchParams({path:'/calendar/action/compose',rru:'addevent',subject:ev.title||'Event',body:eventDescription(ev)||'',location:ev.location||'',
+    startdt:ev.allDay?ev.date:iso(ev.startTime), enddt:ev.allDay?ev.date:iso(evEndTime(ev)), allday:String(!!ev.allDay)});
+  return 'https://outlook.live.com/calendar/0/deeplink/compose?'+p.toString(); }
+function addToCalendar(ev){
+  const body=el('div');
+  body.innerHTML=`<p style="font-size:13px;color:var(--muted);margin:2px 0 12px">Add “<b style="color:var(--ink)">${esc(ev.title)}</b>” — ${fmtDate(ev.date)}${ev.allDay?' · all day':(ev.startTime?' · '+timeLabel(ev.startTime):'')}${ev.location?' · '+esc(ev.location):''}</p>
+    <button class="btn primary block" id="icsBtn" style="margin-bottom:10px">${aicon()} <span style="margin-left:2px"></span> Apple Calendar / download .ics</button>
+    <button class="btn block" id="gBtn" style="margin-bottom:10px">${gicon()} Google Calendar</button>
+    <button class="btn block" id="oBtn">Outlook.com</button>
+    <div class="help" style="margin-top:12px">${ICON.info}<span>On iPhone, the .ics opens Apple Calendar with “Add Event.” Google/Outlook open the web composer. (Live two-way sync is a future option.)</span></div>`;
+  const sh=openSheet({title:'Add to Calendar',body});
+  $('#icsBtn',body).onclick=()=>{ downloadICS((ev.title||'event').replace(/[^\w]+/g,'-').slice(0,40)+'.ics',[ev]); toast('Calendar file created','good'); };
+  $('#gBtn',body).onclick=()=>{ window.open(googleCalUrl(ev),'_blank'); };
+  $('#oBtn',body).onclick=()=>{ window.open(outlookCalUrl(ev),'_blank'); };
+}
+function exportCalendarICS(){
+  const evs=[]; (DB.events||[]).filter(e=>e.date>=todayISO()).forEach(e=>evs.push(e));
+  DB.shows.filter(s=>s.start>=todayISO()).forEach(s=>evs.push({id:s.id,title:'Show: '+s.name,date:s.start,allDay:true,location:s.location||s.city||'',notes:s.notes||''}));
+  if(!evs.length){ toast('Nothing upcoming to export','bad'); return; }
+  downloadICS('dfst-calendar.ics', evs); toast(`Exported ${evs.length} to calendar`,'good');
 }
 
 /* ===================================================================
