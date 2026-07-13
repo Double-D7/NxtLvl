@@ -141,7 +141,17 @@ const Media = (()=>{
     try{ await Cloud.sb.storage.from('media').upload(Cloud.teamId+'/'+id, blob, {upsert:true, contentType:blob.type||'application/octet-stream'}); }
     catch(e){ console.error('media upload',e); }
   }
-  return {put,get,del,url,upload};
+  async function blob(id){ // return the raw Blob (from cache, or fetched from cloud)
+    if(!id) return null; let b=await get(id); if(b) return b;
+    if(typeof Cloud!=='undefined' && Cloud.enabled && Cloud.teamId){
+      try{ const {data}=await Cloud.sb.storage.from('media').createSignedUrl(Cloud.teamId+'/'+id,3600); if(data){ b=await (await fetch(data.signedUrl)).blob(); put(id,b).catch(()=>{}); return b; } }catch(e){}
+    }
+    return null;
+  }
+  // A guaranteed SAME-ORIGIN object URL (fetches the blob), so images drawn to
+  // canvas don't taint it — needed for the growth-reel video export.
+  async function objectURL(id){ const b=await blob(id); return b?URL.createObjectURL(b):null; }
+  return {put,get,del,url,upload,blob,objectURL};
 })();
 /* ===================================================================
    DATA LAYER — single source of truth in localStorage.
@@ -1493,12 +1503,15 @@ function openFeedSheet(animalId, feedId, dupFrom){
 /* ---------- MEDIA TAB ---------- */
 function tabMedia(box,a){
   const items=mediaFor(a.id);
+  const photoCount=items.filter(m=>m.kind!=='video').length;
   box.innerHTML=`<div class="btn-row"><button class="btn primary" id="upPhoto" style="flex:1">${ICON.camera} Photo</button><button class="btn teal" id="upVideo" style="flex:1">${ICON.video} Video</button></div>
+    ${photoCount>=2?`<button class="btn block" id="makeReel" style="margin-top:10px;background:linear-gradient(135deg,var(--purple-3),var(--teal-3));color:#fff;border:none">${ICON.video} Create growth reel</button>`:''}
     <div class="seg" id="mView" style="margin-top:12px"><button class="on" data-v="gallery">Gallery</button><button data-v="timeline">Timeline</button><button data-v="compare">Before / After</button></div>
     <div id="mBody" style="margin-top:12px"></div>`;
   const photoIn=hiddenFile('image/*',(files)=>addMedia(a.id,files,'photo'));
   const videoIn=hiddenFile('video/*',(files)=>addMedia(a.id,files,'video'));
   $('#upPhoto',box).onclick=()=>photoIn.click(); $('#upVideo',box).onclick=()=>videoIn.click();
+  if($('#makeReel',box))$('#makeReel',box).onclick=()=>openReelSheet(a.id);
   let view='gallery';
   const draw=()=>{ const mb=$('#mBody',box);
     if(!items.length){ mb.innerHTML=emptyState(ICON.media,'No media yet','Upload weekly side, front, rear and walking media to document progress.'); return; }
@@ -1573,6 +1586,115 @@ function drawCompare(box,a,items){
     const days=daysBetween(A.captured||A.date,B.captured||B.date); const dw=(A.contextWeight!=null&&B.contextWeight!=null)?round(B.contextWeight-A.contextWeight,1):null; const adg=(dw!=null&&days>0)?round(dw/days,2):null;
     $('#cmpStats',box).innerHTML=`<div style="display:flex;justify-content:space-around;text-align:center"><div><div style="font-size:11px;color:var(--muted);font-weight:700">DAYS</div><div style="font-weight:800;font-size:18px" class="tnum">${Math.abs(days)}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">WEIGHT Δ</div><div style="font-weight:800;font-size:18px" class="tnum">${dw!=null?(dw>0?'+':'')+dw+' lb':'—'}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">ADG</div><div style="font-weight:800;font-size:18px;color:var(--purple-3)" class="tnum">${adg??'—'}</div></div></div>`; };
   $('#cmpA',box).onchange=paint; $('#cmpB',box).onchange=paint; paint();
+}
+
+/* ===================================================================
+   GROWTH REEL — stitch an animal's weekly photos into a timelapse video
+   (canvas + MediaRecorder, fully client-side).
+   =================================================================== */
+function reelMimeType(){
+  // Prefer webm (reliable everywhere it's supported). iOS Safari doesn't support
+  // webm in MediaRecorder, so it falls through to mp4, which iOS encodes natively.
+  const cands=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4;codecs=avc1.42E01E','video/mp4'];
+  if(typeof MediaRecorder==='undefined'||!MediaRecorder.isTypeSupported) return '';
+  return cands.find(c=>MediaRecorder.isTypeSupported(c)) || '';
+}
+function reelSupported(){ try{ const c=document.createElement('canvas'); return typeof MediaRecorder!=='undefined' && typeof c.captureStream==='function'; }catch(e){ return false; } }
+function loadImage(url){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; }); }
+function drawCover(ctx,img,W,H){ const ir=img.width/img.height, cr=W/H; let dw,dh,dx,dy; if(ir>cr){ dh=H; dw=H*ir; dx=(W-dw)/2; dy=0; } else { dw=W; dh=W/ir; dx=0; dy=(H-dh)/2; } ctx.drawImage(img,dx,dy,dw,dh); }
+async function generateReel(a, items, opts, onProgress){
+  const S=720; const canvas=document.createElement('canvas'); canvas.width=S; canvas.height=S; const ctx=canvas.getContext('2d');
+  // preload as SAME-ORIGIN object URLs (avoid canvas taint)
+  const frames=[]; for(const m of items){ const url=await Media.objectURL(m.blobId); if(url){ try{ const img=await loadImage(url); frames.push({img,m}); }catch(e){} } }
+  if(frames.length<2) throw new Error('Need at least two photos.');
+  const per=opts.holdMs||850, fade=Math.min(280, per*0.35), endHold=900;
+  const total=frames.length*per+endHold;
+  const stream=canvas.captureStream(30); const mime=reelMimeType();
+  const rec=new MediaRecorder(stream, mime?{mimeType:mime, videoBitsPerSecond:4_000_000}:undefined);
+  const chunks=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+  return await new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=()=>{ if(settled)return; settled=true; try{stream.getTracks().forEach(t=>t.stop());}catch(e){} resolve(new Blob(chunks,{type:(mime?mime.split(';')[0]:'video/webm')})); };
+    rec.onstop=finish;
+    rec.onerror=e=>{ if(!settled){ settled=true; reject((e&&e.error)||new Error('record error')); } };
+    const t0=performance.now();
+    const watchdog=setTimeout(()=>{ try{ if(rec.state!=='inactive') rec.stop(); }catch(e){} setTimeout(finish,600); }, total+5000);
+    function draw(now){
+      const t=Math.min(now-t0, total);
+      const idx=Math.max(0, Math.min(frames.length-1, Math.floor(t/per))); const localT=t-idx*per;
+      const cur=frames[idx]; if(!cur){ if(t>=total){ clearTimeout(watchdog); try{rec.stop();}catch(e){finish();} } else requestAnimationFrame(draw); return; }
+      ctx.fillStyle='#0A0D13'; ctx.fillRect(0,0,S,S);
+      drawCover(ctx,cur.img,S,S);
+      if(idx>0 && frames[idx-1] && localT<fade){ ctx.globalAlpha=1-(localT/fade); drawCover(ctx,frames[idx-1].img,S,S); ctx.globalAlpha=1; }
+      // gradient + overlay
+      const g=ctx.createLinearGradient(0,S*0.55,0,S); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.72)'); ctx.fillStyle=g; ctx.fillRect(0,S*0.55,S,S*0.45);
+      // top-left brand
+      ctx.fillStyle='rgba(0,0,0,.35)'; roundRect(ctx,20,20,'auto',0);
+      ctx.font='700 26px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.fillStyle='#fff'; ctx.textBaseline='top';
+      ctx.fillText(a.name, 26, 26);
+      ctx.font='600 18px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.fillStyle='rgba(255,255,255,.85)';
+      ctx.fillText('Devitt Family Show Team', 26, 58);
+      if(opts.labels!==false){ const m=frames[idx].m; const dd=fmtDate(m.captured||m.date);
+        ctx.textBaseline='bottom'; ctx.font='800 40px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.fillStyle='#fff';
+        const wt=(m.contextWeight!=null)?(m.contextWeight+' lb'):''; if(wt) ctx.fillText(wt, 26, S-58);
+        ctx.font='700 24px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.fillStyle='rgba(255,255,255,.9)';
+        ctx.fillText(dd, 26, S-26);
+      }
+      // progress bar
+      ctx.fillStyle='rgba(255,255,255,.25)'; ctx.fillRect(0,S-6,S,6);
+      ctx.fillStyle='#8B5CF6'; ctx.fillRect(0,S-6, S*(t/total), 6);
+      if(onProgress) onProgress(t/total);
+      if(t<total) requestAnimationFrame(draw); else { clearTimeout(watchdog); setTimeout(()=>{ try{rec.stop();}catch(e){finish();} },120); }
+    }
+    try{ rec.start(1000); }catch(e){ try{rec.start();}catch(e2){ reject(e2); return; } }
+    requestAnimationFrame(draw);
+  });
+}
+function roundRect(){ /* reserved for future styling */ }
+function openReelSheet(animalId){
+  const a=getAnimal(animalId);
+  const photos=mediaFor(animalId).filter(m=>m.kind!=='video').slice().sort((x,y)=>(x.captured||x.date)<(y.captured||y.date)?-1:1);
+  const views=[...new Set(photos.map(m=>m.view).filter(Boolean))];
+  const body=el('div');
+  let opts={ view:'', speed:'normal', labels:true };
+  const draw=()=>{
+    const chosen=opts.view?photos.filter(m=>m.view===opts.view):photos;
+    body.innerHTML=`
+      <p style="font-size:13px;color:var(--muted);margin:2px 0 12px">Turn ${a.name}'s progress photos into a shareable growth timelapse.</p>
+      ${views.length>1?`<div class="field"><label>Angle</label><div class="chips" style="flex-wrap:wrap;white-space:normal"><button class="chip ${!opts.view?'active':''}" data-view="">All (${photos.length})</button>${views.map(v=>`<button class="chip ${opts.view===v?'active':''}" data-view="${esc(v)}">${esc(v)} (${photos.filter(m=>m.view===v).length})</button>`).join('')}</div><div class="hint">Tip: pick one angle (e.g. Side view) for the smoothest reel.</div></div>`:''}
+      <div class="field"><label>Speed</label><div class="seg" id="reelSpeed">${[['slow','Slow'],['normal','Normal'],['fast','Fast']].map(([k,l])=>`<button class="${opts.speed===k?'on':''}" data-speed="${k}">${l}</button>`).join('')}</div></div>
+      <label class="li" style="border:1px solid var(--line);border-radius:12px"><div class="main"><div class="t1" style="font-size:14px">Show date & weight labels</div></div><input type="checkbox" id="reelLabels" ${opts.labels?'checked':''} style="width:22px;height:22px"></label>
+      <div class="help" style="margin-top:12px">${ICON.info}<span>${chosen.length} photo${chosen.length===1?'':'s'} · about ${Math.round((chosen.length*(opts.speed==='fast'?0.6:opts.speed==='slow'?1.1:0.85))+0.9)}s. It records in real time, so hang tight while it builds.</span></div>
+      <div id="reelOut" style="margin-top:12px"></div>`;
+    $$('[data-view]',body).forEach(b=>b.onclick=()=>{ opts.view=b.dataset.view; draw(); });
+    $$('[data-speed]',body).forEach(b=>b.onclick=()=>{ opts.speed=b.dataset.speed; $$('[data-speed]',body).forEach(x=>x.classList.toggle('on',x===b)); });
+    $('#reelLabels',body).onchange=()=>{ opts.labels=$('#reelLabels',body).checked; };
+  };
+  draw();
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-gen style="flex:1">${ICON.video} Generate reel</button>`;
+  const sh=openSheet({title:'Growth reel',body,foot});
+  $('[data-gen]',sh).onclick=async()=>{
+    if(!reelSupported()){ toast('This browser can’t build video. Try Safari/Chrome on your phone.','bad'); return; }
+    const chosen=opts.view?photos.filter(m=>m.view===opts.view):photos;
+    if(chosen.length<2){ toast('Need at least two photos','bad'); return; }
+    const out=$('#reelOut',body); const btn=$('[data-gen]',sh); btn.disabled=true;
+    out.innerHTML=`<div class="card pad"><div style="font-weight:700;margin-bottom:8px">Building your reel…</div><div style="height:9px;background:var(--line-2);border-radius:6px;overflow:hidden"><div id="reelBar" style="height:100%;width:0;background:linear-gradient(90deg,var(--purple-3),var(--teal-3));transition:width .1s"></div></div></div>`;
+    const holdMs=opts.speed==='fast'?600:opts.speed==='slow'?1100:850;
+    try{
+      const blob=await generateReel(a, chosen, {holdMs, labels:opts.labels}, p=>{ const bar=$('#reelBar',body); if(bar)bar.style.width=Math.round(p*100)+'%'; });
+      const url=URL.createObjectURL(blob); const ext=(blob.type.includes('mp4'))?'mp4':'webm';
+      const fname=(a.name||'animal').replace(/[^\w]+/g,'-')+'-growth-reel.'+ext;
+      out.innerHTML=`<video src="${url}" controls playsinline style="width:100%;border-radius:14px;background:#000"></video>
+        <div class="btn-row" style="margin-top:10px"><button class="btn primary" id="reelShare" style="flex:1">${ICON.share} Save / Share</button><button class="btn" id="reelDl">${ICON.download}</button></div>
+        <div class="hint" style="margin-top:6px">${(blob.size/1048576).toFixed(1)} MB · ${ext.toUpperCase()}</div>`;
+      const file=new File([blob], fname, {type:blob.type});
+      $('#reelShare',body).onclick=async()=>{ if(navigator.canShare && navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file], title:a.name+' — growth reel'}); }catch(e){} } else { const x=el('a'); x.href=url; x.download=fname; x.click(); toast('Saved','good'); } };
+      $('#reelDl',body).onclick=()=>{ const x=el('a'); x.href=url; x.download=fname; x.click(); };
+      logAct('media','Created a growth reel',a.id);
+      toast('Reel ready!','good');
+    }catch(e){ out.innerHTML=`<div class="help" style="color:var(--bad)">${ICON.info}<span>${esc(e.message||'Could not build the reel')}</span></div>`; }
+    btn.disabled=false;
+  };
 }
 
 /* ---------- Generic record sheet ---------- */
