@@ -2245,7 +2245,7 @@ function openEntrySheet(animalId,id){
     <div class="field-row"><div class="field" style="flex:1"><label>Division</label><input class="control" id="enDiv" value="${esc(ent.division||'')}"></div><div class="field" style="flex:1"><label>Class</label><input class="control" id="enCls" value="${esc(ent.cls||'')}"></div></div>
     <div class="field-row"><div class="field" style="flex:1"><label>Show weight</label><input class="control" type="number" id="enW" value="${ent.showWeight||''}"></div><div class="field" style="flex:1"><label>Exhibitor</label><input class="control" id="enEx" value="${esc(ent.exhibitor||'')}"></div></div>`;
   const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">Save entry</button>`;
-  const sh=openSheet({title:id?'Edit entry':'Show entry',body,foot});
+  const sh=openSheet({title:id?'Edit entry — '+((getAnimal(ent.animalId)||{}).name||''):'Show entry',body,foot});
   $('[data-save]',sh).onclick=()=>{ const data={showId:$('#enShow',body).value,division:$('#enDiv',body).value.trim(),cls:$('#enCls',body).value.trim(),showWeight:$('#enW',body).value||null,exhibitor:$('#enEx',body).value.trim()};
     if(id){Object.assign(DB.entries.find(e=>e.id===id),data);}else{DB.entries.push(stamp({id:uid('en'),animalId,result:{},...data}));} logAct('show','Entered show',animalId); save(); closeSheet(); toast('Entry saved','good'); render(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Remove entry','Remove this show entry?','Remove',true)){DB.entries=DB.entries.filter(e=>e.id!==id);save();closeSheet();render();} };
@@ -2597,22 +2597,45 @@ route('show',(parts)=>{
       ${[['Dates',fmtDate(s.start)+(s.end&&s.end!==s.start?' – '+fmtDate(s.end):'')],['Location',s.location||s.city],['Entry deadline',s.entryDeadline?fmtDate(s.entryDeadline):''],['Weigh-in',s.weighIn?fmtDate(s.weighIn):''],['Judge',s.judge],['Organization',s.org],['Entry fee',s.fee?money(s.fee):'']].filter(r=>r[1]).map(r=>`<div class="kv"><span class="k">${r[0]}</span><span class="v">${esc(r[1])}</span></div>`).join('')}
     </div>
     <div class="btn-row" style="margin:12px 0 4px"><button class="btn primary" id="showDayBtn" style="flex:1">${ICON.clipboard} Show-day mode</button><button class="btn ghost" id="showRecBtn">${ICON.medal} Record book</button></div>
-    <div class="section-title">Entries <button class="more" id="addEnt2">Add entry</button></div>
+    <div class="section-title">Who's going <button class="more" id="addEnt2">${ICON.plus} Choose animals</button></div>
     <div id="shEntries"></div>`;
   v.append(wrap);
   $('#edShow',wrap).onclick=()=>openShowSheet(s.id);
   $('#showDayBtn',wrap).onclick=()=>go('/showday/'+s.id);
   $('#showRecBtn',wrap).onclick=()=>go('/records');
-  $('#addEnt2',wrap).onclick=()=>{ // pick animal then entry
-    const body=el('div'); const L=el('div','list'); activeAnimals().forEach(a=>{ const li=animalRow(a,''); li.onclick=()=>{closeSheet();openEntrySheet(a.id);}; L.append(li); }); body.append(L); openSheet({title:'Add entry — pick animal',body}); };
+  $('#addEnt2',wrap).onclick=()=>openShowRoster(s.id);
   const ec=$('#shEntries',wrap);
-  if(!entries.length){ ec.innerHTML=emptyState(ICON.animals,'No entries','Assign animals to this show.'); return; }
-  const L=el('div','list'); entries.forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const r=e.result||{}; const li=el('div','li');
-    li.innerHTML=`<div class="thumb">${esc(initials(a.name))}</div><div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${esc(e.division||'')}${e.cls?' · '+esc(e.cls):''}${e.showWeight?' · '+e.showWeight+' lb':''}</div></div>
-      <div class="r">${r.placing?`<span class="pill p" style="font-size:10px">${esc(r.placing)}${r.inClass?'/'+r.inClass:''}</span>`:'<button class="btn sm teal" data-res>Result</button>'}</div>`;
-    if(r.placing)li.onclick=()=>go('/animal/'+a.id+'/shows'); else $('[data-res]',li).onclick=()=>openResultSheet(e.id); L.append(li); });
+  if(!entries.length){ ec.innerHTML=`<div class="card"><div class="empty">${ICON.animals}<div class="h">No animals yet</div><div class="p">Tap “Choose animals” to set who's going — you can fill in division, class and weight later.</div></div></div>`; return; }
+  const L=el('div','list'); entries.forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const r=e.result||{}; const li=el('div','li'); li.style.cursor='pointer';
+    const details=[e.division,e.cls,e.showWeight?e.showWeight+' lb':''].filter(Boolean).map(esc).join(' · ');
+    li.innerHTML=`<div class="thumb">${esc(initials(a.name))}</div><div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${details||'<span style="color:var(--warn)">Tap to add division / class / weight</span>'}</div></div>
+      <div class="r" style="display:flex;align-items:center;gap:6px">${r.placing?`<button class="pill p" style="font-size:10px;border:none;cursor:pointer" data-res>${esc(r.placing)}${r.inClass?'/'+r.inClass:''}</button>`:'<button class="btn sm teal" data-res>Result</button>'}<span style="color:var(--muted)">${ICON.chev}</span></div>`;
+    li.onclick=()=>openEntrySheet(e.animalId,e.id);
+    $('[data-res]',li).onclick=(ev)=>{ev.stopPropagation();openResultSheet(e.id);};
+    L.append(li); });
   ec.append(L);
 });
+/* Pick which animals are going to a show, all at once (with Select all /
+   by species). Adds entries for newly-picked animals; removes de-selected
+   ones that don't yet have a recorded result. */
+function openShowRoster(showId){
+  const s=DB.shows.find(x=>x.id===showId); if(!s) return;
+  if(!activeAnimals().length){ toast('Add some animals first','bad'); return; }
+  const entered=DB.entries.filter(e=>e.showId===showId);
+  const sel=entered.map(e=>e.animalId).filter(id=>getAnimal(id));
+  const body=el('div');
+  body.innerHTML=`<div class="help" style="margin-bottom:10px">${ICON.info}<span>Pick who's going to <b>${esc(s.name)}</b>. Fill in division, class and weight per animal afterward — just tap an entry.</span></div><div id="rosterPick"></div>`;
+  mountAnimalPicker($('#rosterPick',body), sel);
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">Save roster</button>`;
+  const sh=openSheet({title:'Who’s going',body,foot});
+  $('[data-save]',sh).onclick=()=>{
+    let added=0, removed=0, keptResult=0;
+    sel.forEach(aid=>{ if(!entered.some(e=>e.animalId===aid)){ DB.entries.push(stamp({id:uid('en'),animalId:aid,showId,division:'',cls:'',showWeight:'',exhibitor:me().name,result:{}})); added++; } });
+    entered.forEach(e=>{ if(!sel.includes(e.animalId)){ if(e.result&&e.result.placing){ keptResult++; } else { DB.entries=DB.entries.filter(x=>x.id!==e.id); removed++; } } });
+    logAct('show','Updated roster: '+s.name); save(); closeSheet();
+    toast(`${added} added${removed?' · '+removed+' removed':''}${keptResult?' · '+keptResult+' kept (has result)':''}`,'good'); render();
+  };
+}
 function openShowSheet(id){
   const s=id?{...DB.shows.find(x=>x.id===id)}:{name:'',start:todayISO(),type:'Jackpot'};
   const body=el('div');
@@ -3355,11 +3378,11 @@ route('showday',(parts)=>{
     // classes
     const ec=$('#sdEnt2',wrap);
     if(!entries.length){ ec.innerHTML='<div class="empty" style="padding:14px">No classes entered.</div>'; }
-    else { const L=el('div','list'); entries.slice().sort((x,y)=>(x.cls||'')<(y.cls||'')?-1:1).forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const r=e.result||{}; const li=el('div','li');
-      li.innerHTML=`<div class="thumb" style="color:var(--purple)">${ICON.shows}</div><div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${esc(e.division||'')}${e.cls?' · '+esc(e.cls):''}${e.showWeight?' · '+e.showWeight+' lb':''}</div></div><div class="r">${r.placing?`<span class="pill p" style="font-size:10px">${esc(r.placing)}${r.inClass?'/'+r.inClass:''}</span>`:'<button class="btn sm teal" data-res>Result</button>'}</div>`;
-      if(r.placing)li.onclick=()=>go('/animal/'+a.id+'/shows'); else $('[data-res]',li).onclick=(ev)=>{ev.stopPropagation();openResultSheet(e.id);}; L.append(li); }); ec.innerHTML=''; ec.append(L); }
+    else { const L=el('div','list'); entries.slice().sort((x,y)=>(x.cls||'')<(y.cls||'')?-1:1).forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const r=e.result||{}; const li=el('div','li'); li.style.cursor='pointer';
+      li.innerHTML=`<div class="thumb" style="color:var(--purple)">${ICON.shows}</div><div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${[e.division,e.cls,e.showWeight?e.showWeight+' lb':''].filter(Boolean).map(esc).join(' · ')||'<span style="color:var(--warn)">Tap to add details</span>'}</div></div><div class="r" style="display:flex;align-items:center;gap:6px">${r.placing?`<button class="pill p" style="font-size:10px;border:none" data-res>${esc(r.placing)}${r.inClass?'/'+r.inClass:''}</button>`:'<button class="btn sm teal" data-res>Result</button>'}<span style="color:var(--muted)">${ICON.chev}</span></div>`;
+      li.onclick=()=>openEntrySheet(e.animalId,e.id); $('[data-res]',li).onclick=(ev)=>{ev.stopPropagation();openResultSheet(e.id);}; L.append(li); }); ec.innerHTML=''; ec.append(L); }
     $('#sdAdd',wrap).onclick=()=>{ const t=prompt('Checklist item'); if(t){ list.push({id:uid('ck'),cat:'Custom',text:t,done:false}); save(); draw(); } };
-    $('#sdEnt',wrap).onclick=()=>openEntrySheet(entries[0]?entries[0].animalId:(activeAnimals()[0]||{}).id);
+    $('#sdEnt',wrap).onclick=()=>openShowRoster(s.id);
     const nt=$('#sdNotes',wrap); nt.onchange=()=>{ s.dayNotes=nt.value; save(); };
   };
   draw();
