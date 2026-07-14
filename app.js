@@ -803,8 +803,61 @@ async function boot(){
     }catch(e){ console.error('cloud boot',e); }
   }
   render();
-  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+  if('serviceWorker' in navigator){ Push.swReg = navigator.serviceWorker.register('sw.js').catch(()=>null); Push.syncOnLoad(); }
 }
+
+/* ===================================================================
+   WEB PUSH — real notifications that reach the phone with the app closed.
+   The browser subscribes here and the subscription is stored in Supabase;
+   a scheduled Edge Function (supabase/functions/push-reminders) sends the
+   pushes. Needs cloud sync on + a VAPID public key in config. iOS requires
+   the app be added to the Home Screen first (iOS 16.4+).
+   =================================================================== */
+const Push = {
+  swReg:null,
+  vapid(){ const c=cloudConfig(); return (window.DFST_CONFIG&&window.DFST_CONFIG.vapidPublicKey)|| (c&&c.vapidPublicKey) || ''; },
+  supported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; },
+  ready(){ return Cloud.enabled && Cloud.teamId && this.supported() && !!this.vapid(); },
+  permission(){ return (typeof Notification!=='undefined') ? Notification.permission : 'denied'; },
+  async registration(){ try{ return (this.swReg && await this.swReg) || await navigator.serviceWorker.ready; }catch(e){ return null; } },
+  async current(){ const r=await this.registration(); if(!r||!r.pushManager) return null; try{ return await r.pushManager.getSubscription(); }catch(e){ return null; } },
+  b64ToU8(b64){ const pad='='.repeat((4-b64.length%4)%4); const s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(s); const arr=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; },
+  subJSON(sub){ const j=sub.toJSON(); return { endpoint:j.endpoint, p256dh:j.keys&&j.keys.p256dh, auth:j.keys&&j.keys.auth }; },
+  async enable(){
+    if(!this.ready()){ toast('Turn on cloud sync first','bad'); return false; }
+    const perm = await Notification.requestPermission();
+    if(perm!=='granted'){ toast(perm==='denied'?'Notifications are blocked in your browser settings':'Notifications not enabled','bad'); return false; }
+    const reg=await this.registration(); if(!reg){ toast('Service worker not ready — reload and retry','bad'); return false; }
+    let sub=await this.current();
+    if(!sub){ try{ sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:this.b64ToU8(this.vapid()) }); }
+      catch(e){ console.error('subscribe',e); toast('Could not subscribe to push','bad'); return false; } }
+    const ok=await this.save(sub);
+    if(ok){ toast('Push notifications on for this device','good'); } return ok;
+  },
+  async disable(){
+    const sub=await this.current();
+    if(sub){ const j=this.subJSON(sub); try{ await sub.unsubscribe(); }catch(e){}
+      if(Cloud.enabled&&Cloud.teamId){ try{ await Cloud.sb.from('push_subscriptions').delete().eq('endpoint',j.endpoint); }catch(e){} } }
+    toast('Push notifications off for this device',''); return true;
+  },
+  async save(sub){
+    if(!(Cloud.enabled&&Cloud.teamId)) return false;
+    const j=this.subJSON(sub);
+    const row={ endpoint:j.endpoint, p256dh:j.p256dh, auth:j.auth, team_id:Cloud.teamId, user_id:(Cloud.user&&Cloud.user.id)||null,
+      prefs:DB.notifPrefs||{}, ua:(navigator.userAgent||'').slice(0,180), updated_at:new Date().toISOString() };
+    try{ const {error}=await Cloud.sb.from('push_subscriptions').upsert(row,{onConflict:'endpoint'}); if(error)throw error; return true; }
+    catch(e){ console.error('save sub',e); toast('Couldn’t save subscription (run supabase/push.sql?)','bad'); return false; }
+  },
+  // keep the stored prefs/token fresh whenever the app loads while subscribed
+  async syncOnLoad(){ try{ if(!this.ready()||this.permission()!=='granted') return; const sub=await this.current(); if(sub) this.save(sub); }catch(e){} },
+  // fire a local notification so the user can confirm the pipe before the server is set up
+  async test(){
+    if(this.permission()!=='granted'){ const p=await Notification.requestPermission(); if(p!=='granted'){ toast('Allow notifications first','bad'); return; } }
+    const reg=await this.registration(); if(!reg){ toast('Service worker not ready','bad'); return; }
+    reg.showNotification('Devitt Family Show Team', { body:'Test notification — you’re all set. Reminders will look like this.', icon:'icon-192.png', badge:'favicon-32.png', vibrate:[40,30,40], data:{url:'./'} });
+    toast('Sent a test notification','good');
+  }
+};
 
 /* ===================================================================
    LOGIN (local accounts — cloud auth is the backend phase; see README)
@@ -2890,9 +2943,29 @@ function openBreeds(){ const body=el('div');
 }
 function openNotif(){ const body=el('div'); const p=DB.notifPrefs;
   const items=[['weightDue','Weekly weight due'],['missingPhoto','Missing progress photo'],['upcomingShow','Upcoming show & deadline'],['health','Health follow-up & withdrawal'],['advisor','Advisor comments'],['mentions','Mentions & tasks']];
-  body.innerHTML=`<p style="font-size:13px;color:var(--muted);margin-bottom:12px">Choose what you're notified about. Delivery: in-app now; email & push in the cloud build.</p>`+
-    items.map(([k,l])=>`<label class="li" style="border:1px solid var(--line);border-radius:12px;margin-bottom:8px"><div class="main"><div class="t1" style="font-size:14px">${l}</div></div><input type="checkbox" data-n="${k}" ${p[k]?'checked':''} style="width:22px;height:22px"></label>`).join('');
-  $$('[data-n]',body).forEach(c=>c.onchange=()=>{p[c.dataset.n]=c.checked;save();}); openSheet({title:'Notifications',body});
+  const draw=(pushState)=>{
+    body.innerHTML=`<div id="pushBox"></div>
+      <div class="section-title" style="margin-top:6px">Notify me about</div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Applies to phone push and in-app alerts.</p>`+
+      items.map(([k,l])=>`<label class="li" style="border:1px solid var(--line);border-radius:12px;margin-bottom:8px"><div class="main"><div class="t1" style="font-size:14px">${l}</div></div><input type="checkbox" data-n="${k}" ${p[k]?'checked':''} style="width:22px;height:22px"></label>`).join('');
+    $$('[data-n]',body).forEach(c=>c.onchange=()=>{p[c.dataset.n]=c.checked;save(); if(Push.ready()&&Push.permission()==='granted')Push.syncOnLoad();});
+    drawPush(pushState);
+  };
+  const drawPush=async(state)=>{
+    const box=$('#pushBox',body); if(!box) return;
+    if(!Push.supported()){ box.innerHTML=`<div class="help">${ICON.info}<span>This browser doesn’t support push notifications. On iPhone, add the app to your Home Screen first (Share → Add to Home Screen), then open it from there.</span></div>`; return; }
+    if(!Push.ready()){ box.innerHTML=`<div class="help">${ICON.info}<span>Phone push needs cloud sync${Push.vapid()?'':' and a push key'}. Turn on <b>More → Connect to cloud</b>${Push.vapid()?'':', then finish <b>supabase/PUSH_SETUP.md</b>'}.</span></div>`; return; }
+    const perm=Push.permission(); const sub= state!==undefined? state : await Push.current();
+    const on = perm==='granted' && !!sub;
+    box.innerHTML=`<div class="card pad" style="${on?'background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.4)':''}">
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:22px;height:22px;color:${on?'var(--good)':'var(--purple-3)'}">${ICON.bell}</span>
+        <div style="flex:1"><div style="font-weight:800;font-size:14.5px">Phone push${on?' · on':''}</div><div style="font-size:12px;color:var(--muted)">${perm==='denied'?'Blocked in browser settings':on?'This device will get reminders even when the app is closed':'Get reminders on this device even when the app is closed'}</div></div></div>
+      <div class="btn-row" style="margin-top:10px">${on?`<button class="btn ghost" data-poff style="flex:1">Turn off</button><button class="btn" data-ptest>Send test</button>`:`<button class="btn primary" data-pon style="flex:1">${ICON.bell} Enable on this device</button>`}</div></div>`;
+    if($('[data-pon]',box))$('[data-pon]',box).onclick=async()=>{ const ok=await Push.enable(); drawPush(ok?await Push.current():undefined); };
+    if($('[data-poff]',box))$('[data-poff]',box).onclick=async()=>{ await Push.disable(); drawPush(null); };
+    if($('[data-ptest]',box))$('[data-ptest]',box).onclick=()=>Push.test();
+  };
+  draw(); openSheet({title:'Notifications',body});
 }
 function openTeamSettings(){ const body=el('div');
   body.innerHTML=`<div class="field"><label>Team name</label><input class="control" id="tsName" value="${esc(DB.team.name)}"></div>

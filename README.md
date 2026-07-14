@@ -37,6 +37,7 @@ marked and removable any time from **More → Remove demo data**.
 | **Growth reel** | Turn an animal's weekly photos into a shareable **timelapse video** (name/date/weight overlay), right from the Media tab. Speed + angle controls; saves to Photos / shares via the native share sheet. |
 | **Shareable page** | A beautiful, **public read-only link** per animal (profile, weight chart, progress photos, pedigree, results) for buyers/sponsors — you choose what's shown, and health/prices/expenses/notes are never included. Links can expire and be revoked. *(Cloud only; run `supabase/shares.sql` once — see below.)* |
 | **Calendar & tasks** | Shared month view + task list with priorities, recurrence and animal links. |
+| **Phone push reminders** | Real notifications that reach your phone **with the app closed** — weigh-ins due, shows & entry deadlines within 3 days, withdrawal endings, tasks and open layover care. One tidy daily "Today in the barn" digest per device, honouring each person's toggles. *(Cloud only; run `supabase/push.sql` + deploy the Edge Function — see `supabase/PUSH_SETUP.md`.)* |
 | **Health · Exercise · Measurements** | Treatments/vaccinations with **withdrawal tracking** (never suggests dosages), exercise logs, and body measurements with charts. |
 | **Feed & bedding costs** | Buy feed **in bulk** and log the lot ("1 ton for $640") — the app derives a **weighted-average cost per pound** across all your purchases. Because rations are dated and versioned, feed cost then **flows into each animal automatically** (daily lb × $/lb × days on that program) even when you change feed constantly — no hand-entering feed expenses. Same model for **shavings/bedding**, attributed per animal, split across a pen, or held as barn overhead. Drives true **cost of gain** per animal and across the herd. |
 | **Expenses & income** | Per-animal cost tracking, cost of gain, and net result — feed & bedding auto-fill from purchases + rations, so you only log the extras (vet, entry fees, transport). |
@@ -94,6 +95,7 @@ upgraded later (e.g. to per-record tables) without touching any screen. See the
 - `vendor/supabase.js` — vendored Supabase JS client (offline-capable)
 - `supabase/schema.sql` + `supabase/SETUP.md` — one-time cloud setup
 - `supabase/shares.sql` — optional: run once to enable public shareable animal pages
+- `supabase/push.sql` + `supabase/functions/push-reminders/` + `supabase/PUSH_SETUP.md` — optional: phone push notifications
 - `share.html` — the public read-only page shareable links open
 - `sw.js` — service worker (network-first HTML, cache-first same-origin assets;
   never caches Supabase API calls or touches user data)
