@@ -3,7 +3,7 @@
    - Static assets (app.js/icons/manifest): cache-first for speed
    - Fully offline-capable via cache fallback
    NOTE: user data (localStorage + IndexedDB) is never touched by this cache. */
-const VERSION = 'dfst-v20';
+const VERSION = 'dfst-v21';
 const ASSETS = ['index.html', 'app.js', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'favicon-32.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -19,6 +19,38 @@ self.addEventListener('activate', e => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+  );
+});
+
+/* ---- Web push: show the notification the Edge Function sent ---- */
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; }
+  catch (_) { d = { title: 'Devitt Family Show Team', body: (e.data && e.data.text()) || '' }; }
+  const title = d.title || 'Devitt Family Show Team';
+  const opts = {
+    body: d.body || '',
+    icon: 'icon-192.png',
+    badge: 'favicon-32.png',
+    data: d.data || {},
+    tag: d.tag || undefined,        // same tag replaces an earlier notification
+    renotify: !!d.tag,
+    vibrate: [40, 30, 40]
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+/* ---- Tapping a notification focuses (or opens) the app at the right screen ---- */
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) {
+        if ('focus' in c) { if (c.navigate && target) { try { c.navigate(target); } catch (_) {} } return c.focus(); }
+      }
+      return self.clients.openWindow(target);
+    })
   );
 });
 
