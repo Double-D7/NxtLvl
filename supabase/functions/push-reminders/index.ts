@@ -72,6 +72,8 @@ function linesForTeam(data: any, prefs: Record<string, boolean>): string[] {
   if (prefs.mentions !== false) {
     const tasks = (data.tasks || []).filter((t: any) => {
       if (!t.date || t.date > today) return false;
+      const ids = t.animalIds || (t.animalId ? [t.animalId] : []);
+      if (ids.length) { const p = (t.progress && t.progress[today]) || []; return !ids.every((id: string) => p.includes(id)); }
       return t.recur ? !((t.doneDates || []).includes(today)) : !t.done;
     }).length;
     if (tasks > 0) out.push(`✅ ${tasks} task${tasks === 1 ? "" : "s"} due`);

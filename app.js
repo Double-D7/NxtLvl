@@ -792,8 +792,12 @@ async function boot(){
     let healed=false; DB.species.forEach(sp=>{ if(!sp.active && DB.animals.some(a=>a.species===sp.id)){ sp.active=true; healed=true; } });
     // self-heal: inventory products gain a category + base unit for costing
     (DB.inventory||[]).forEach(p=>{ if(!p.category)p.category='feed'; if(!p.unit)p.unit=(p.category==='bedding'?'bag':'lb'); });
-    // self-heal: tasks move from a single animalId to an animalIds array
-    (DB.tasks||[]).forEach(t=>{ if(!t.animalIds){ t.animalIds = (t.animalId!=null&&t.animalId!=='')?[t.animalId]:[]; delete t.animalId; } });
+    // self-heal: tasks move from a single animalId to an animalIds array,
+    // and gain per-animal progress (seeded from any prior whole-task completion)
+    (DB.tasks||[]).forEach(t=>{ if(!t.animalIds){ t.animalIds = (t.animalId!=null&&t.animalId!=='')?[t.animalId]:[]; delete t.animalId; }
+      if(t.animalIds.length && !t.progress){ t.progress={};
+        if(t.recur && (t.doneDates||[]).length){ t.doneDates.forEach(d=>t.progress[d]=[...t.animalIds]); }
+        else if(!t.recur && t.done){ t.progress[t.date]=[...t.animalIds]; } } });
     save(true); }
   if(Cloud.init()){
     try{
@@ -1109,12 +1113,15 @@ route('dashboard', ()=>{
   if(todayTasks.length){
     const list=el('div','list');
     todayTasks.forEach(({t,date})=>{
-      const ids=taskAnimalIds(t); const who=animalsLabel(ids);
+      const ids=taskAnimalIds(t).filter(id=>getAnimal(id)); const multi=ids.length>=2;
+      const dn=multi?taskProgress(t,date).filter(id=>ids.includes(id)).length:0;
+      const who=multi?`${dn}/${ids.length} animals`:animalsLabel(ids);
       const li=el('div','li');
       li.innerHTML=`<button class="thumb" style="background:var(--line-2);color:var(--purple)" data-done>${t.priority==='High'?ICON.flag:ICON.clock}</button>
-        <div class="main"><div class="t1">${esc(t.title)}</div><div class="t2">${who?esc(who)+' · ':''}${date<todayISO()?'<span style="color:var(--bad)">Overdue</span>':'Due today'}${t.recur?' · repeats '+t.recur:''}</div></div>`;
+        <div class="main"><div class="t1">${esc(t.title)}</div><div class="t2">${who?esc(who)+' · ':''}${date<todayISO()?'<span style="color:var(--bad)">Overdue</span>':'Due today'}${t.recur?' · repeats '+t.recur:''}</div>${multi?`<div style="height:5px;background:var(--line-2);border-radius:4px;overflow:hidden;margin-top:6px;max-width:180px"><div style="height:100%;width:${Math.round(dn/ids.length*100)}%;background:var(--purple-3);border-radius:4px"></div></div>`:''}</div>
+        ${multi?`<span style="color:var(--muted)">${ICON.chev}</span>`:''}`;
       $('[data-done]',li).onclick=(e)=>{e.stopPropagation(); setTaskDone(t,date,true); logAct('task','Completed: '+t.title,ids[0]||null); save(); render(); };
-      li.onclick=()=>{ if(ids.length===1)go('/animal/'+ids[0]); else openTaskSheet(t.id); };
+      li.onclick=()=>{ if(multi)openTaskProgressSheet(t.id,date); else if(ids.length===1)go('/animal/'+ids[0]); else openTaskSheet(t.id); };
       list.append(li);
     });
     wrap.append(list);
@@ -2280,9 +2287,19 @@ function taskOccurrences(t, fromISO, toISO){
 }
 const taskAnimalIds = t => t.animalIds || (t.animalId!=null&&t.animalId!==''?[t.animalId]:[]);
 function animalsLabel(ids){ ids=(ids||[]).filter(id=>getAnimal(id)); if(ids.length===1) return (getAnimal(ids[0])||{}).name||''; return ids.length>1 ? ids.length+' animals' : ''; }
-const taskDoneOn = (t,date) => t.recur ? (t.doneDates||[]).includes(date) : !!t.done;
+// Per-animal completion for a given date lives in t.progress[date] = [animalIds done].
+const taskProgress = (t,date) => (t.progress && t.progress[date]) || [];
+function setTaskAnimalDone(t,date,animalId,val){ t.progress=t.progress||{}; const arr=t.progress[date]||(t.progress[date]=[]);
+  const i=arr.indexOf(animalId); if(val&&i<0)arr.push(animalId); else if(!val&&i>=0)arr.splice(i,1); if(!arr.length)delete t.progress[date]; touch(t); }
+// An occurrence is "done" when every assigned animal is checked (or, with no
+// animals, the whole task is marked done for that date).
+const taskDoneOn = (t,date) => { const ids=taskAnimalIds(t);
+  if(ids.length){ const p=(t.progress&&t.progress[date])||[]; return ids.every(id=>p.includes(id)); }
+  return t.recur ? (t.doneDates||[]).includes(date) : !!t.done; };
 function setTaskDone(t,date,val){
-  if(t.recur){ t.doneDates=t.doneDates||[]; const has=t.doneDates.includes(date);
+  const ids=taskAnimalIds(t);
+  if(ids.length){ t.progress=t.progress||{}; if(val) t.progress[date]=[...ids]; else delete t.progress[date]; }
+  else if(t.recur){ t.doneDates=t.doneDates||[]; const has=t.doneDates.includes(date);
     if(val&&!has) t.doneDates.push(date); else if(!val&&has) t.doneDates=t.doneDates.filter(x=>x!==date); }
   else t.done=!!val;
   touch(t);
@@ -2357,7 +2374,8 @@ function timeLabel(t){ if(!t) return ''; const [h,mi]=t.split(':').map(Number); 
 function itemList(items){
   const L=el('div','list');
   items.forEach(e=>{ const a=e.animalId?getAnimal(e.animalId):null; const li=el('div','li');
-    const taskWho=e.kind==='task'?animalsLabel(e.animalIds):'';
+    const taskIds=e.kind==='task'?(e.animalIds||[]).filter(id=>getAnimal(id)):[];
+    const taskWho=e.kind!=='task'?'':(taskIds.length>=2? taskProgress(e.ref,e.occDate||e.date).filter(id=>taskIds.includes(id)).length+'/'+taskIds.length+' animals' : animalsLabel(taskIds));
     const cat=e.kind==='event'?eventCat(e.cat):null;
     const ic=e.kind==='event'?ICON[cat.icon]:({task:ICON.check,show:ICON.shows,deadline:ICON.flag,withdrawal:ICON.health,health:ICON.health}[e.kind]||ICON.cal);
     const col=e.kind==='event'?cat.color:({task:'var(--good)',show:'var(--purple-3)',deadline:'var(--bad)',withdrawal:'var(--warn)',health:'var(--bad)'}[e.kind]);
@@ -2367,8 +2385,8 @@ function itemList(items){
     li.innerHTML=`<button class="thumb" style="color:${col}" ${e.kind==='task'?'data-done':''}>${e.kind==='task'&&e.done?ICON.check:ic}</button>
       <div class="main"><div class="t1" style="${e.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(e.title)}</div><div class="t2">${fmtShort(e.date)}${timeStr?' · '+timeStr:''} · ${relDays(e.date)}${a?' · '+esc(a.name):''}${taskWho?' · '+esc(taskWho):''}${loc}${recurLbl}</div></div>
       ${e.kind==='event'?`<button class="iconbtn" style="background:var(--line-2);color:var(--purple-3)" data-ics title="Add to Calendar">${ICON.calPlus}</button>`:e.priority==='High'?'<span class="pill bad" style="font-size:10px">High</span>':''}`;
-    if(e.kind==='task'){ $('[data-done]',li).onclick=(ev)=>{ev.stopPropagation(); const nd=!e.done; setTaskDone(e.ref, e.occDate||e.date, nd); if(nd)logAct('task','Completed: '+e.ref.title,(e.animalIds||[])[0]||null); save();render();};
-      li.onclick=()=>openTaskSheet(e.ref.id); }
+    if(e.kind==='task'){ $('[data-done]',li).onclick=(ev)=>{ev.stopPropagation(); const nd=!e.done; setTaskDone(e.ref, e.occDate||e.date, nd); if(nd)logAct('task','Completed: '+e.ref.title,taskIds[0]||null); save();render();};
+      li.onclick=()=> taskIds.length>=2 ? openTaskProgressSheet(e.ref.id, e.occDate||e.date) : openTaskSheet(e.ref.id); }
     else if(e.kind==='event'){ $('[data-ics]',li).onclick=(ev)=>{ev.stopPropagation();addToCalendar(e.ref);}; li.onclick=()=>openEventSheet(e.ref.id); }
     else if(e.kind==='show'||e.kind==='deadline'){ li.onclick=()=>go('/show/'+e.ref.id); }
     else if(a){ li.onclick=()=>go('/animal/'+a.id); }
@@ -2422,6 +2440,39 @@ function openTaskSheet(id, presetDate){
   $('[data-save]',sh).onclick=()=>{ const data={title:$('#tkTitle',body).value.trim(),date:$('#tkDate',body).value,priority:$('#tkPri',body).value,animalIds:[...sel],recur:$('#tkRecur',body).value}; if(!data.title){toast('Name the task','bad');return;}
     if(id){const T=DB.tasks.find(x=>x.id===id); Object.assign(T,data); delete T.animalId;}else{DB.tasks.push(stamp({id:uid('t'),done:false,doneDates:[],...data}));} save(); closeSheet(); toast(data.recur?'Repeating task saved — it’s on every '+({daily:'day',weekly:'week',biweekly:'2 weeks'}[data.recur]||'time'):'Task saved','good'); render(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete task','Remove this task?','Delete',true)){DB.tasks=DB.tasks.filter(x=>x.id!==id);save();closeSheet();render();} };
+}
+/* Per-animal check-off for a multi-animal task on a given date — work through
+   the group one animal at a time and watch the progress bar fill. */
+function openTaskProgressSheet(taskId, date){
+  const t=DB.tasks.find(x=>x.id===taskId); if(!t) return;
+  const ids=taskAnimalIds(t).filter(id=>getAnimal(id));
+  if(ids.length<2){ openTaskSheet(taskId); return; }
+  date = date || (t.recur?todayISO():t.date);
+  const body=el('div');
+  const draw=()=>{
+    const done=taskProgress(t,date).filter(id=>ids.includes(id)); const pct=Math.round(done.length/ids.length*100); const all=done.length===ids.length;
+    body.innerHTML=`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-weight:800;font-size:15px;flex:1">${esc(t.title)}</div>${t.recur?`<span class="pill" style="font-size:10px">repeats ${t.recur}</span>`:''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:var(--muted);margin-bottom:6px"><span>${fmtDate(date)}${t.recur&&date===todayISO()?' · today':''}</span><span style="font-weight:800;color:${all?'var(--good)':'var(--ink)'};font-size:15px" class="tnum">${done.length}/${ids.length}</span></div>
+      <div style="height:9px;background:var(--line-2);border-radius:6px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:${all?'var(--good)':'var(--purple-3)'};border-radius:6px;transition:width .2s"></div></div>
+      <div class="btn-row" style="margin-bottom:10px"><button class="btn sm ghost" data-all style="flex:1">${ICON.check} Mark all done</button>${done.length?'<button class="btn sm ghost" data-none style="flex:1">Reset</button>':''}</div>
+      <div class="list" id="taList"></div>`;
+    const L=$('#taList',body);
+    ids.map(getAnimal).forEach(a=>{ const on=done.includes(a.id); const li=el('div','li'); li.style.cursor='pointer';
+      li.innerHTML=`<button class="thumb" style="background:${on?'var(--good)':'var(--line-2)'};color:${on?'#fff':'var(--purple-3)'}" data-tk>${on?ICON.check:`<span style="width:20px;height:20px">${spIcon(a.species)}</span>`}</button>
+        <div class="main"><div class="t1" style="${on?'color:var(--muted);text-decoration:line-through':''}">${esc(a.name)}</div><div class="t2">${esc(speciesName(a.species))}${a.penLocation?' · '+esc(a.penLocation):''}</div></div>
+        ${on?'<span class="pill good" style="font-size:10px">done</span>':''}`;
+      const toggle=()=>{ setTaskAnimalDone(t,date,a.id,!on); save(); draw(); };
+      $('[data-tk]',li).onclick=(e)=>{e.stopPropagation();toggle();}; li.onclick=toggle;
+      L.append(li); });
+    $('[data-all]',body).onclick=()=>{ setTaskDone(t,date,true); logAct('task','Completed all: '+t.title,ids[0]); save(); draw(); };
+    if($('[data-none]',body))$('[data-none]',body).onclick=()=>{ setTaskDone(t,date,false); save(); draw(); };
+  };
+  draw();
+  const foot=el('div'); foot.innerHTML=`<button class="btn ghost" data-edit>${ICON.edit}</button><button class="btn primary" data-close style="flex:1">Done</button>`;
+  const sh=openSheet({title:'Work through the list',body,foot,onClose:()=>render()});
+  $('[data-edit]',sh).onclick=()=>{ closeSheet(); openTaskSheet(taskId); };
+  $('[data-close]',sh).onclick=()=>closeSheet();
 }
 
 /* ---- calendar event sheet ---- */
