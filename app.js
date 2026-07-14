@@ -792,6 +792,8 @@ async function boot(){
     let healed=false; DB.species.forEach(sp=>{ if(!sp.active && DB.animals.some(a=>a.species===sp.id)){ sp.active=true; healed=true; } });
     // self-heal: inventory products gain a category + base unit for costing
     (DB.inventory||[]).forEach(p=>{ if(!p.category)p.category='feed'; if(!p.unit)p.unit=(p.category==='bedding'?'bag':'lb'); });
+    // self-heal: tasks move from a single animalId to an animalIds array
+    (DB.tasks||[]).forEach(t=>{ if(!t.animalIds){ t.animalIds = (t.animalId!=null&&t.animalId!=='')?[t.animalId]:[]; delete t.animalId; } });
     save(true); }
   if(Cloud.init()){
     try{
@@ -1107,12 +1109,12 @@ route('dashboard', ()=>{
   if(todayTasks.length){
     const list=el('div','list');
     todayTasks.forEach(({t,date})=>{
-      const a=t.animalId?getAnimal(t.animalId):null;
+      const ids=taskAnimalIds(t); const who=animalsLabel(ids);
       const li=el('div','li');
       li.innerHTML=`<button class="thumb" style="background:var(--line-2);color:var(--purple)" data-done>${t.priority==='High'?ICON.flag:ICON.clock}</button>
-        <div class="main"><div class="t1">${esc(t.title)}</div><div class="t2">${a?esc(a.name)+' · ':''}${date<todayISO()?'<span style="color:var(--bad)">Overdue</span>':'Due today'}${t.recur?' · repeats '+t.recur:''}</div></div>`;
-      $('[data-done]',li).onclick=(e)=>{e.stopPropagation(); setTaskDone(t,date,true); logAct('task','Completed: '+t.title,t.animalId); save(); render(); };
-      li.onclick=()=>{ if(a)go('/animal/'+a.id); };
+        <div class="main"><div class="t1">${esc(t.title)}</div><div class="t2">${who?esc(who)+' · ':''}${date<todayISO()?'<span style="color:var(--bad)">Overdue</span>':'Due today'}${t.recur?' · repeats '+t.recur:''}</div></div>`;
+      $('[data-done]',li).onclick=(e)=>{e.stopPropagation(); setTaskDone(t,date,true); logAct('task','Completed: '+t.title,ids[0]||null); save(); render(); };
+      li.onclick=()=>{ if(ids.length===1)go('/animal/'+ids[0]); else openTaskSheet(t.id); };
       list.append(li);
     });
     wrap.append(list);
@@ -2276,6 +2278,8 @@ function taskOccurrences(t, fromISO, toISO){
   while(d<=toISO && guard++<1000){ if(d>=fromISO) out.push(d); d=addDaysISO(d, step); }
   return out;
 }
+const taskAnimalIds = t => t.animalIds || (t.animalId!=null&&t.animalId!==''?[t.animalId]:[]);
+function animalsLabel(ids){ ids=(ids||[]).filter(id=>getAnimal(id)); if(ids.length===1) return (getAnimal(ids[0])||{}).name||''; return ids.length>1 ? ids.length+' animals' : ''; }
 const taskDoneOn = (t,date) => t.recur ? (t.doneDates||[]).includes(date) : !!t.done;
 function setTaskDone(t,date,val){
   if(t.recur){ t.doneDates=t.doneDates||[]; const has=t.doneDates.includes(date);
@@ -2290,8 +2294,8 @@ function calItems(range){
   (DB.events||[]).forEach(e=>{ if(inR(e.date)) items.push({date:e.date,time:e.startTime||'',kind:'event',title:e.title,ref:e,cat:e.category}); });
   const tFrom=from||todayISO(), tTo=to||addDaysISO(todayISO(),60);
   DB.tasks.forEach(t=>{
-    if(t.recur){ taskOccurrences(t,tFrom,tTo).forEach(d=>items.push({date:d,occDate:d,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,d),priority:t.priority,animalId:t.animalId,recurring:true})); }
-    else if(inR(t.date)) items.push({date:t.date,occDate:t.date,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,t.date),priority:t.priority,animalId:t.animalId});
+    if(t.recur){ taskOccurrences(t,tFrom,tTo).forEach(d=>items.push({date:d,occDate:d,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,d),priority:t.priority,animalIds:taskAnimalIds(t),recurring:true})); }
+    else if(inR(t.date)) items.push({date:t.date,occDate:t.date,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,t.date),priority:t.priority,animalIds:taskAnimalIds(t)});
   });
   DB.shows.forEach(s=>{ if(inR(s.start))items.push({date:s.start,time:'',kind:'show',title:s.name,ref:s});
     if(s.entryDeadline&&inR(s.entryDeadline))items.push({date:s.entryDeadline,time:'',kind:'deadline',title:'Entry deadline · '+s.name,ref:s}); });
@@ -2353,6 +2357,7 @@ function timeLabel(t){ if(!t) return ''; const [h,mi]=t.split(':').map(Number); 
 function itemList(items){
   const L=el('div','list');
   items.forEach(e=>{ const a=e.animalId?getAnimal(e.animalId):null; const li=el('div','li');
+    const taskWho=e.kind==='task'?animalsLabel(e.animalIds):'';
     const cat=e.kind==='event'?eventCat(e.cat):null;
     const ic=e.kind==='event'?ICON[cat.icon]:({task:ICON.check,show:ICON.shows,deadline:ICON.flag,withdrawal:ICON.health,health:ICON.health}[e.kind]||ICON.cal);
     const col=e.kind==='event'?cat.color:({task:'var(--good)',show:'var(--purple-3)',deadline:'var(--bad)',withdrawal:'var(--warn)',health:'var(--bad)'}[e.kind]);
@@ -2360,9 +2365,9 @@ function itemList(items){
     const loc=e.kind==='event'&&e.ref.location?' · '+esc(e.ref.location):'';
     const recurLbl=e.recurring?' · repeats '+e.ref.recur:'';
     li.innerHTML=`<button class="thumb" style="color:${col}" ${e.kind==='task'?'data-done':''}>${e.kind==='task'&&e.done?ICON.check:ic}</button>
-      <div class="main"><div class="t1" style="${e.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(e.title)}</div><div class="t2">${fmtShort(e.date)}${timeStr?' · '+timeStr:''} · ${relDays(e.date)}${a?' · '+esc(a.name):''}${loc}${recurLbl}</div></div>
+      <div class="main"><div class="t1" style="${e.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(e.title)}</div><div class="t2">${fmtShort(e.date)}${timeStr?' · '+timeStr:''} · ${relDays(e.date)}${a?' · '+esc(a.name):''}${taskWho?' · '+esc(taskWho):''}${loc}${recurLbl}</div></div>
       ${e.kind==='event'?`<button class="iconbtn" style="background:var(--line-2);color:var(--purple-3)" data-ics title="Add to Calendar">${ICON.calPlus}</button>`:e.priority==='High'?'<span class="pill bad" style="font-size:10px">High</span>':''}`;
-    if(e.kind==='task'){ $('[data-done]',li).onclick=(ev)=>{ev.stopPropagation(); const nd=!e.done; setTaskDone(e.ref, e.occDate||e.date, nd); if(nd)logAct('task','Completed: '+e.ref.title,e.animalId); save();render();};
+    if(e.kind==='task'){ $('[data-done]',li).onclick=(ev)=>{ev.stopPropagation(); const nd=!e.done; setTaskDone(e.ref, e.occDate||e.date, nd); if(nd)logAct('task','Completed: '+e.ref.title,(e.animalIds||[])[0]||null); save();render();};
       li.onclick=()=>openTaskSheet(e.ref.id); }
     else if(e.kind==='event'){ $('[data-ics]',li).onclick=(ev)=>{ev.stopPropagation();addToCalendar(e.ref);}; li.onclick=()=>openEventSheet(e.ref.id); }
     else if(e.kind==='show'||e.kind==='deadline'){ li.onclick=()=>go('/show/'+e.ref.id); }
@@ -2381,18 +2386,41 @@ function openDaySheet(date){
   if(!items.length) dl.innerHTML='<div class="empty" style="padding:16px">Nothing scheduled this day.</div>';
   else { const L=itemList(items); dl.append(L); }
 }
+/* Reusable multi-animal picker with "Select all / by species / clear" quick
+   actions. `selected` is an array that is mutated in place. Mount it in a
+   container and call the returned paint() to (re)render after quick actions. */
+function mountAnimalPicker(container, selected){
+  const paint=()=>{
+    const species=[...new Set(activeAnimals().map(a=>a.species))];
+    const quick=`<div class="chips" style="flex-wrap:wrap;white-space:normal;margin-bottom:8px">
+      <button type="button" class="chip" data-qk="all" style="font-weight:700">Select all</button>
+      ${species.map(s=>`<button type="button" class="chip" data-qk="sp:${s}">All ${esc(speciesName(s).toLowerCase())}</button>`).join('')}
+      ${selected.length?`<button type="button" class="chip" data-qk="none">Clear (${selected.length})</button>`:''}</div>`;
+    const chips=`<div class="chips" style="flex-wrap:wrap;white-space:normal">${activeAnimals().map(a=>`<button type="button" class="chip ${selected.includes(a.id)?'active':''}" data-an="${a.id}">${esc(a.name)}</button>`).join('')||'<span style="font-size:12px;color:var(--muted)">No active animals</span>'}</div>`;
+    container.innerHTML=quick+chips;
+    $$('[data-an]',container).forEach(b=>b.onclick=()=>{ const id=b.dataset.an; const i=selected.indexOf(id); if(i>=0)selected.splice(i,1); else selected.push(id); paint(); });
+    $$('[data-qk]',container).forEach(b=>b.onclick=()=>{ const v=b.dataset.qk;
+      if(v==='all') selected.splice(0,selected.length,...activeAnimals().map(a=>a.id));
+      else if(v==='none') selected.splice(0,selected.length);
+      else if(v.startsWith('sp:')){ const sp=v.slice(3); activeAnimals().filter(a=>a.species===sp).forEach(a=>{ if(!selected.includes(a.id))selected.push(a.id); }); }
+      paint(); });
+  };
+  paint(); return paint;
+}
 function openTaskSheet(id, presetDate){
   const t=id?{...DB.tasks.find(x=>x.id===id)}:{title:'',date:presetDate||todayISO(),priority:'Normal',done:false,recur:''};
+  const sel=[...taskAnimalIds(t)];
   const body=el('div');
-  body.innerHTML=`<div class="field"><label>Task *</label><input class="control" id="tkTitle" value="${esc(t.title)}" placeholder="Weigh Batman"></div>
+  body.innerHTML=`<div class="field"><label>Task *</label><input class="control" id="tkTitle" value="${esc(t.title)}" placeholder="Rinse, condition & walk pigs"></div>
     <div class="field-row"><div class="field" style="flex:1"><label>Date</label><input class="control" type="date" id="tkDate" value="${t.date}"></div>
       <div class="field" style="flex:1"><label>Priority</label><select class="control" id="tkPri">${['Low','Normal','High'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div></div>
-    <div class="field"><label>Animal</label><select class="control" id="tkAnimal"><option value="">— none —</option>${activeAnimals().map(a=>`<option value="${a.id}" ${t.animalId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+    <div class="field"><label>Animals <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">(optional — pick any, or all)</span></label><div id="tkAnimals"></div></div>
     <div class="field"><label>Repeats</label><select class="control" id="tkRecur">${[['','No'],['weekly','Weekly'],['biweekly','Every 2 weeks'],['daily','Daily']].map(([v,l])=>`<option value="${v}" ${t.recur===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
   const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">Save task</button>`;
   const sh=openSheet({title:id?'Edit task':'New task',body,foot});
-  $('[data-save]',sh).onclick=()=>{ const data={title:$('#tkTitle',body).value.trim(),date:$('#tkDate',body).value,priority:$('#tkPri',body).value,animalId:$('#tkAnimal',body).value||null,recur:$('#tkRecur',body).value}; if(!data.title){toast('Name the task','bad');return;}
-    if(id){Object.assign(DB.tasks.find(x=>x.id===id),data);}else{DB.tasks.push(stamp({id:uid('t'),done:false,doneDates:[],...data}));} save(); closeSheet(); toast(data.recur?'Repeating task saved — it’s on every '+({daily:'day',weekly:'week',biweekly:'2 weeks'}[data.recur]||'time'):'Task saved','good'); render(); };
+  mountAnimalPicker($('#tkAnimals',body), sel);
+  $('[data-save]',sh).onclick=()=>{ const data={title:$('#tkTitle',body).value.trim(),date:$('#tkDate',body).value,priority:$('#tkPri',body).value,animalIds:[...sel],recur:$('#tkRecur',body).value}; if(!data.title){toast('Name the task','bad');return;}
+    if(id){const T=DB.tasks.find(x=>x.id===id); Object.assign(T,data); delete T.animalId;}else{DB.tasks.push(stamp({id:uid('t'),done:false,doneDates:[],...data}));} save(); closeSheet(); toast(data.recur?'Repeating task saved — it’s on every '+({daily:'day',weekly:'week',biweekly:'2 weeks'}[data.recur]||'time'):'Task saved','good'); render(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete task','Remove this task?','Delete',true)){DB.tasks=DB.tasks.filter(x=>x.id!==id);save();closeSheet();render();} };
 }
 
@@ -2412,10 +2440,10 @@ function openEventSheet(id, presetDate){
         <div class="field" style="flex:1"><label>End (optional)</label><input class="control" type="time" id="evEnd" value="${e.endTime||''}"></div></div>
       <div class="field"><label>Location</label><input class="control" id="evLoc" value="${esc(e.location||'')}" placeholder="Home barn"></div>
       <div class="field"><label>Link a show (optional)</label><select class="control" id="evShow"><option value="">— none —</option>${DB.shows.map(s=>`<option value="${s.id}" ${e.showId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Animals involved</label><div class="chips" id="evAnimals" style="flex-wrap:wrap;white-space:normal">${activeAnimals().map(a=>`<button type="button" class="chip ${e.animalIds.includes(a.id)?'active':''}" data-an="${a.id}">${esc(a.name)}</button>`).join('')||'<span style="font-size:12px;color:var(--muted)">No active animals</span>'}</div></div>
+      <div class="field"><label>Animals involved</label><div id="evAnimals"></div></div>
       <div class="field"><label>Notes</label><textarea class="control" id="evNotes" placeholder="What's the plan?">${esc(e.notes||'')}</textarea></div>`;
     $$('[data-cat]',body).forEach(b=>b.onclick=()=>{ e.category=b.dataset.cat; collect(); draw(); });
-    $$('[data-an]',body).forEach(b=>b.onclick=()=>{ const id=b.dataset.an; if(e.animalIds.includes(id))e.animalIds=e.animalIds.filter(x=>x!==id); else e.animalIds.push(id); b.classList.toggle('active'); });
+    mountAnimalPicker($('#evAnimals',body), e.animalIds);
     $('#evAllDay',body).onchange=()=>{ e.allDay=$('#evAllDay',body).checked; $('#evTimes',body).style.display=e.allDay?'none':''; };
   };
   const collect=()=>{ e.title=$('#evTitle',body).value.trim(); e.date=$('#evDate',body).value; e.allDay=$('#evAllDay',body).checked; e.startTime=$('#evStart',body)?$('#evStart',body).value:e.startTime; e.endTime=$('#evEnd',body)?$('#evEnd',body).value:''; e.location=$('#evLoc',body).value.trim(); e.showId=$('#evShow',body).value||null; e.notes=$('#evNotes',body).value; };
