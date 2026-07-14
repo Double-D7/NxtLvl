@@ -1028,7 +1028,12 @@ route('dashboard', ()=>{
   const nextShow=upcoming[0];
   const alertAnimals=active.filter(a=>weightAlerts(a).some(x=>x.k==='bad'||x.k==='warn'));
   const recentMedia=DB.media.slice().sort((a,b)=>a.createdAt<b.createdAt?1:-1).slice(0,6);
-  const todayTasks=DB.tasks.filter(t=>!t.done && t.date<=todayISO()).sort((a,b)=>a.date<b.date?-1:1).slice(0,6);
+  // Occurrence-aware: a repeating task shows today's occurrence (unless done
+  // for today); a one-off shows if due today or overdue.
+  const todayTasks=[];
+  DB.tasks.forEach(t=>{ if(t.recur){ if(t.date<=todayISO() && !taskDoneOn(t,todayISO())) todayTasks.push({t,date:todayISO()}); }
+    else if(!t.done && t.date<=todayISO()) todayTasks.push({t,date:t.date}); });
+  todayTasks.sort((a,b)=>a.date<b.date?-1:1).splice(6);
   const soonEvents=(DB.events||[]).filter(e=>e.date>=todayISO() && daysBetween(todayISO(),e.date)<=2).sort((a,b)=>(a.date+(a.startTime||'99'))<(b.date+(b.startTime||'99'))?-1:1).slice(0,4);
   const recentFeed=DB.feed.slice().sort((a,b)=>a.createdAt<b.createdAt?1:-1).slice(0,3);
 
@@ -1101,12 +1106,12 @@ route('dashboard', ()=>{
   }
   if(todayTasks.length){
     const list=el('div','list');
-    todayTasks.forEach(t=>{
+    todayTasks.forEach(({t,date})=>{
       const a=t.animalId?getAnimal(t.animalId):null;
       const li=el('div','li');
-      li.innerHTML=`<button class="thumb" style="background:${t.done?'var(--good)':'var(--line-2)'};color:${t.done?'#fff':'var(--purple)'}" data-done>${t.done?ICON.check:(t.priority==='High'?ICON.flag:ICON.clock)}</button>
-        <div class="main"><div class="t1" style="${t.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(t.title)}</div><div class="t2">${a?esc(a.name)+' · ':''}${t.date<todayISO()?'<span style="color:var(--bad)">Overdue</span>':'Due today'}${t.recur?' · repeats':''}</div></div>`;
-      $('[data-done]',li).onclick=(e)=>{e.stopPropagation(); t.done=!t.done; if(t.done)logAct('task','Completed: '+t.title,t.animalId); save(); render(); };
+      li.innerHTML=`<button class="thumb" style="background:var(--line-2);color:var(--purple)" data-done>${t.priority==='High'?ICON.flag:ICON.clock}</button>
+        <div class="main"><div class="t1">${esc(t.title)}</div><div class="t2">${a?esc(a.name)+' · ':''}${date<todayISO()?'<span style="color:var(--bad)">Overdue</span>':'Due today'}${t.recur?' · repeats '+t.recur:''}</div></div>`;
+      $('[data-done]',li).onclick=(e)=>{e.stopPropagation(); setTaskDone(t,date,true); logAct('task','Completed: '+t.title,t.animalId); save(); render(); };
       li.onclick=()=>{ if(a)go('/animal/'+a.id); };
       list.append(li);
     });
@@ -2253,13 +2258,44 @@ function openResultSheet(id){
    CALENDAR + TASKS
    =================================================================== */
 let calMonth=null; // Date of first-of-displayed-month
-function calItems(){
+
+/* ---- recurring tasks: one stored record, expanded into dated occurrences ----
+   A repeating task keeps a single row (start `date` + `recur`); its per-day
+   completion lives in `doneDates[]`. Occurrences are generated on demand for a
+   date window so the calendar shows the task on every day it repeats. */
+const RECUR_STEP = { daily:1, weekly:7, biweekly:14 };
+const recurStepDays = r => RECUR_STEP[r] || 0;
+const addDaysISO = (iso,n) => { const d=new Date(iso+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
+const maxISO = (a,b) => a>b?a:b;
+function taskOccurrences(t, fromISO, toISO){
+  const step=recurStepDays(t.recur);
+  if(!step) return (t.date>=fromISO && t.date<=toISO) ? [t.date] : [];
+  let d=t.date;
+  if(d<fromISO){ const jumps=Math.ceil(daysBetween(d,fromISO)/step); d=addDaysISO(d, jumps*step); }
+  const out=[]; let guard=0;
+  while(d<=toISO && guard++<1000){ if(d>=fromISO) out.push(d); d=addDaysISO(d, step); }
+  return out;
+}
+const taskDoneOn = (t,date) => t.recur ? (t.doneDates||[]).includes(date) : !!t.done;
+function setTaskDone(t,date,val){
+  if(t.recur){ t.doneDates=t.doneDates||[]; const has=t.doneDates.includes(date);
+    if(val&&!has) t.doneDates.push(date); else if(!val&&has) t.doneDates=t.doneDates.filter(x=>x!==date); }
+  else t.done=!!val;
+  touch(t);
+}
+function calItems(range){
+  const from=range&&range.from, to=range&&range.to;
+  const inR = d => (!from||d>=from) && (!to||d<=to);
   const items=[];
-  (DB.events||[]).forEach(e=>items.push({date:e.date,time:e.startTime||'',kind:'event',title:e.title,ref:e,cat:e.category}));
-  DB.tasks.forEach(t=>items.push({date:t.date,time:t.time||'',kind:'task',title:t.title,ref:t,done:t.done,priority:t.priority,animalId:t.animalId}));
-  DB.shows.forEach(s=>{ items.push({date:s.start,time:'',kind:'show',title:s.name,ref:s});
-    if(s.entryDeadline)items.push({date:s.entryDeadline,time:'',kind:'deadline',title:'Entry deadline · '+s.name,ref:s}); });
-  DB.health.forEach(h=>{ if(h.withdrawal){const a=getAnimal(h.animalId);items.push({date:h.withdrawal,kind:'withdrawal',title:(a?a.name+' ':'')+'withdrawal ends',animalId:h.animalId});} if(h.followup){const a=getAnimal(h.animalId);items.push({date:h.followup,kind:'health',title:(a?a.name+' ':'')+'health follow-up',animalId:h.animalId});} });
+  (DB.events||[]).forEach(e=>{ if(inR(e.date)) items.push({date:e.date,time:e.startTime||'',kind:'event',title:e.title,ref:e,cat:e.category}); });
+  const tFrom=from||todayISO(), tTo=to||addDaysISO(todayISO(),60);
+  DB.tasks.forEach(t=>{
+    if(t.recur){ taskOccurrences(t,tFrom,tTo).forEach(d=>items.push({date:d,occDate:d,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,d),priority:t.priority,animalId:t.animalId,recurring:true})); }
+    else if(inR(t.date)) items.push({date:t.date,occDate:t.date,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,t.date),priority:t.priority,animalId:t.animalId});
+  });
+  DB.shows.forEach(s=>{ if(inR(s.start))items.push({date:s.start,time:'',kind:'show',title:s.name,ref:s});
+    if(s.entryDeadline&&inR(s.entryDeadline))items.push({date:s.entryDeadline,time:'',kind:'deadline',title:'Entry deadline · '+s.name,ref:s}); });
+  DB.health.forEach(h=>{ if(h.withdrawal&&inR(h.withdrawal)){const a=getAnimal(h.animalId);items.push({date:h.withdrawal,kind:'withdrawal',title:(a?a.name+' ':'')+'withdrawal ends',animalId:h.animalId});} if(h.followup&&inR(h.followup)){const a=getAnimal(h.animalId);items.push({date:h.followup,kind:'health',title:(a?a.name+' ':'')+'health follow-up',animalId:h.animalId});} });
   return items;
 }
 const itemSort=(a,b)=>{ const ka=a.date+(a.time||'99:99'), kb=b.date+(b.time||'99:99'); return ka<kb?-1:ka>kb?1:0; };
@@ -2268,9 +2304,17 @@ route('calendar',()=>{
   if(!calMonth){ const n=new Date(); calMonth=new Date(n.getFullYear(),n.getMonth(),1); }
   const wrap=el('div'); v.append(wrap);
   const draw=()=>{
-    const items=calItems();
-    const upcoming=items.filter(e=>e.date>=todayISO()).sort(itemSort);
-    const overdue=items.filter(e=>e.kind==='task'&&!e.done&&e.date<todayISO()).sort(itemSort);
+    const y=calMonth.getFullYear(), m=calMonth.getMonth(); const last=new Date(y,m+1,0).getDate();
+    const monthEnd=`${y}-${String(m+1).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
+    const to=maxISO(monthEnd, addDaysISO(todayISO(),60));       // cover the shown month + 60 days for recurrence
+    const items=calItems({to});
+    const today=todayISO();
+    // Upcoming: collapse each repeating task to its next occurrence so a daily
+    // task doesn't flood the list; the month grid still shows every day.
+    const seenR=new Set();
+    const upcoming=items.filter(e=>e.date>=today).sort(itemSort).filter(e=>{
+      if(e.kind==='task'&&e.recurring){ if(seenR.has(e.ref.id))return false; seenR.add(e.ref.id); } return true; });
+    const overdue=items.filter(e=>e.kind==='task'&&!e.done&&!e.recurring&&e.date<today).sort(itemSort);
     wrap.innerHTML=`${pageHeader('Calendar',null,`<div style="display:flex;gap:8px"><button class="btn sm" id="addT">${ICON.check}</button><button class="btn primary sm" id="addE">${ICON.plus} Event</button></div>`)}
       <div id="monthWrap"></div>
       <div class="btn-row" style="margin:2px 0 10px"><button class="btn sm ghost" id="exportCal">${ICON.calPlus} Export to Apple / Outlook</button></div>
@@ -2314,10 +2358,11 @@ function itemList(items){
     const col=e.kind==='event'?cat.color:({task:'var(--good)',show:'var(--purple-3)',deadline:'var(--bad)',withdrawal:'var(--warn)',health:'var(--bad)'}[e.kind]);
     const timeStr=e.kind==='event'?(e.ref.allDay?'All day':timeLabel(e.time)):'';
     const loc=e.kind==='event'&&e.ref.location?' · '+esc(e.ref.location):'';
+    const recurLbl=e.recurring?' · repeats '+e.ref.recur:'';
     li.innerHTML=`<button class="thumb" style="color:${col}" ${e.kind==='task'?'data-done':''}>${e.kind==='task'&&e.done?ICON.check:ic}</button>
-      <div class="main"><div class="t1" style="${e.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(e.title)}</div><div class="t2">${fmtShort(e.date)}${timeStr?' · '+timeStr:''} · ${relDays(e.date)}${a?' · '+esc(a.name):''}${loc}</div></div>
+      <div class="main"><div class="t1" style="${e.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(e.title)}</div><div class="t2">${fmtShort(e.date)}${timeStr?' · '+timeStr:''} · ${relDays(e.date)}${a?' · '+esc(a.name):''}${loc}${recurLbl}</div></div>
       ${e.kind==='event'?`<button class="iconbtn" style="background:var(--line-2);color:var(--purple-3)" data-ics title="Add to Calendar">${ICON.calPlus}</button>`:e.priority==='High'?'<span class="pill bad" style="font-size:10px">High</span>':''}`;
-    if(e.kind==='task'){ $('[data-done]',li).onclick=(ev)=>{ev.stopPropagation();e.ref.done=!e.ref.done;if(e.ref.done)logAct('task','Completed: '+e.ref.title,e.animalId);save();render();};
+    if(e.kind==='task'){ $('[data-done]',li).onclick=(ev)=>{ev.stopPropagation(); const nd=!e.done; setTaskDone(e.ref, e.occDate||e.date, nd); if(nd)logAct('task','Completed: '+e.ref.title,e.animalId); save();render();};
       li.onclick=()=>openTaskSheet(e.ref.id); }
     else if(e.kind==='event'){ $('[data-ics]',li).onclick=(ev)=>{ev.stopPropagation();addToCalendar(e.ref);}; li.onclick=()=>openEventSheet(e.ref.id); }
     else if(e.kind==='show'||e.kind==='deadline'){ li.onclick=()=>go('/show/'+e.ref.id); }
@@ -2326,7 +2371,7 @@ function itemList(items){
   return L;
 }
 function openDaySheet(date){
-  const items=calItems().filter(e=>e.date===date).sort(itemSort);
+  const items=calItems({from:date,to:date}).sort(itemSort);
   const body=el('div');
   body.innerHTML=`<div class="btn-row" style="margin-bottom:12px"><button class="btn primary" id="dayAddE" style="flex:1">${ICON.plus} Event</button><button class="btn" id="dayAddT">${ICON.check} Task</button></div><div id="dayList"></div>`;
   const sh=openSheet({title:fmtDate(date,{weekday:'long',month:'long',day:'numeric'}),body});
@@ -2347,7 +2392,7 @@ function openTaskSheet(id, presetDate){
   const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">Save task</button>`;
   const sh=openSheet({title:id?'Edit task':'New task',body,foot});
   $('[data-save]',sh).onclick=()=>{ const data={title:$('#tkTitle',body).value.trim(),date:$('#tkDate',body).value,priority:$('#tkPri',body).value,animalId:$('#tkAnimal',body).value||null,recur:$('#tkRecur',body).value}; if(!data.title){toast('Name the task','bad');return;}
-    if(id){Object.assign(DB.tasks.find(x=>x.id===id),data);}else{DB.tasks.push(stamp({id:uid('t'),done:false,...data}));} save(); closeSheet(); toast('Task saved','good'); render(); };
+    if(id){Object.assign(DB.tasks.find(x=>x.id===id),data);}else{DB.tasks.push(stamp({id:uid('t'),done:false,doneDates:[],...data}));} save(); closeSheet(); toast(data.recur?'Repeating task saved — it’s on every '+({daily:'day',weekly:'week',biweekly:'2 weeks'}[data.recur]||'time'):'Task saved','good'); render(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete task','Remove this task?','Delete',true)){DB.tasks=DB.tasks.filter(x=>x.id!==id);save();closeSheet();render();} };
 }
 
@@ -2406,6 +2451,7 @@ function buildICS(events){
     else { const st=(ev.startTime||'18:00').replace(':',''); const en=evEndTime(ev).replace(':','');
       lines.push('DTSTART:'+d+'T'+st+'00'); lines.push('DTEND:'+d+'T'+en+'00'); }
     lines.push('SUMMARY:'+icsEsc(ev.title));
+    if(ev.recur){ const fr={daily:'DAILY',weekly:'WEEKLY',biweekly:'WEEKLY'}[ev.recur]; if(fr) lines.push('RRULE:FREQ='+fr+(ev.recur==='biweekly'?';INTERVAL=2':'')); }
     if(ev.location) lines.push('LOCATION:'+icsEsc(ev.location));
     const desc=eventDescription(ev); if(desc) lines.push('DESCRIPTION:'+icsEsc(desc));
     lines.push('BEGIN:VALARM','TRIGGER:-PT1H','ACTION:DISPLAY','DESCRIPTION:'+icsEsc(ev.title),'END:VALARM');
@@ -2439,6 +2485,8 @@ function addToCalendar(ev){
 function exportCalendarICS(){
   const evs=[]; (DB.events||[]).filter(e=>e.date>=todayISO()).forEach(e=>evs.push(e));
   DB.shows.filter(s=>s.start>=todayISO()).forEach(s=>evs.push({id:s.id,title:'Show: '+s.name,date:s.start,allDay:true,location:s.location||s.city||'',notes:s.notes||''}));
+  // repeating tasks export once with an RRULE so they recur in Apple/Outlook too
+  DB.tasks.filter(t=>t.recur).forEach(t=>evs.push({id:t.id,title:t.title,date:t.date,allDay:!t.time,startTime:t.time||'07:00',recur:t.recur,notes:''}));
   if(!evs.length){ toast('Nothing upcoming to export','bad'); return; }
   downloadICS('dfst-calendar.ics', evs); toast(`Exported ${evs.length} to calendar`,'good');
 }
