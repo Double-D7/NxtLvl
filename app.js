@@ -78,6 +78,9 @@ const ICON = {
   book:I('<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5z"/><path d="M4 19a2 2 0 0 1 2-2h13"/><path d="M9 7h6M9 10h4"/>'),
   medal:I('<circle cx="12" cy="14" r="5"/><path d="M12 14l0 0M9.5 10L7 3M14.5 10L17 3M10.5 13.5l1.5-1 1.5 1-.6 1.8h-1.8z" stroke-width="1.6"/>'),
   rosette:I('<circle cx="12" cy="9" r="5"/><path d="M9.5 13l-2 8 4.5-2.5L16.5 21l-2-8"/><path d="M12 6.5l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2L9 8.6l2-.3z" stroke-width="1.4"/>'),
+  sack:I('<path d="M8 3h8l-1.5 2.5a5 5 0 0 1 2.5 4.3V17a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4v-7.2a5 5 0 0 1 2.5-4.3L8 3z"/><path d="M9.5 5.5h5"/>'),
+  shavings:I('<path d="M4 8c2-2 4-2 6 0M14 8c2-2 4-2 6 0M4 13c2-2 4-2 6 0M14 13c2-2 4-2 6 0M9 18c2-2 4-2 6 0"/>'),
+  receipt:I('<path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21V3z"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
 };
 const spIcon = key => ({swine:ICON.pig, sheep:ICON.sheep, goat:ICON.goat, cattle:ICON.cow}[key] || ICON.paw);
 
@@ -231,7 +234,7 @@ function blankDB(){
     animals:[], weights:[], feed:[], media:[], measurements:[], exercise:[],
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
-    layovers:[], care:[], helpers:[], events:[],
+    layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[],
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
   };
 }
@@ -344,6 +347,54 @@ function feedProgramStats(f){
   return {days, startW, endW, gain, adg, weighCount:pts.length};
 }
 function feedDailyTotal(f){ let byUnit={}; (f.meals||[]).forEach(m=>(m.items||[]).forEach(it=>{ const u=it.unit||'lb'; byUnit[u]=(byUnit[u]||0)+(+it.amount||0); })); return byUnit; }
+
+/* ===================================================================
+   FEED & BEDDING COSTING — buy in bulk, price per pound, let cost flow
+   into each animal automatically from the (versioned) rations they eat.
+   - A product (DB.inventory, category 'feed'|'bedding') carries a base unit.
+   - Purchase lots (DB.purchases) → a weighted-average cost per base unit,
+     so bulk buys at different prices blend correctly.
+   - Ration items are matched to products by name; daily lb × $/lb = daily
+     feed cost, × days on that (dated) program = the program's cost.
+   - Bedding use (DB.bedding) is priced from bedding lots and attributed
+     per-animal, split across a pen, or held as barn overhead.
+   =================================================================== */
+const PURCHASE_UNITS = ['lb','ton','bag','oz'];
+const BEDDING_UNITS  = ['bag','bale','yd³','scoop','lb'];
+const feedProducts    = () => (DB.inventory||[]).filter(p=>(p.category||'feed')==='feed');
+const beddingProducts = () => (DB.inventory||[]).filter(p=>p.category==='bedding');
+function toLb(qty, unit, perBag){ qty=+qty||0; if(unit==='lb')return qty; if(unit==='oz')return qty/16; if(unit==='ton')return qty*2000; if(unit==='bag')return qty*(+perBag||0); return null; }
+// weighted-average cost per BASE unit of a product (lb for feed; product.unit for bedding)
+function productCost(pid){ const p=(DB.inventory||[]).find(x=>x.id===pid); if(!p) return {perUnit:null,totalCost:0,totalQty:0,unit:'lb'};
+  const lots=(DB.purchases||[]).filter(l=>l.productId===pid);
+  let cost=0, qty=0; const base=p.category==='bedding'?(p.unit||'bag'):'lb';
+  lots.forEach(l=>{ cost+=+l.cost||0; const q=p.category==='bedding'?(+l.qty||0):toLb(l.qty,l.unit||'lb',l.perBag); if(q!=null)qty+=q; });
+  return {perUnit: qty>0?cost/qty:null, totalCost:cost, totalQty:qty, unit:base}; }
+const productByName = name => name?(DB.inventory||[]).find(p=>(p.product||'').trim().toLowerCase()===String(name).trim().toLowerCase()):null;
+// daily $ for a ration; also which line items couldn't be priced
+function feedDailyCost(f){ let cost=0; const uncosted=[];
+  (f.meals||[]).forEach(m=>(m.items||[]).forEach(it=>{ if(!it.product)return;
+    const p=productByName(it.product); const lb=toLb(it.amount,it.unit||'lb');
+    const pc=p?productCost(p.id).perUnit:null;
+    if(p&&pc!=null&&lb!=null){ cost+=lb*pc; }
+    else if((+it.amount||0)>0){ uncosted.push(it.product); }
+  }));
+  return {cost, uncosted:[...new Set(uncosted)]}; }
+const feedProgramDays = f => f.endDate?Math.max(0,daysBetween(f.startDate,f.endDate)):Math.max(0,daysBetween(f.startDate,todayISO()));
+function feedProgramCost(f){ const d=feedProgramDays(f); return (feedDailyCost(f).cost)*d; }
+function feedCostForAnimal(id){ return feedFor(id).reduce((s,f)=>s+feedProgramCost(f),0); }
+// bedding cost attributed to one animal (per-animal, per-pen split, or barn=none)
+function beddingUseCost(b){ const pc=productCost(b.productId).perUnit; return pc!=null?(+b.qty||0)*pc:0; }
+function beddingCostForAnimal(id){ const a=getAnimal(id); if(!a)return 0; let sum=0;
+  (DB.bedding||[]).forEach(b=>{ const c=beddingUseCost(b); if(!c)return;
+    if(b.scope==='animal'&&b.animalId===id) sum+=c;
+    else if(b.scope==='pen'&&b.pen&&a.penLocation&&b.pen===a.penLocation){ const n=activeAnimals().filter(x=>x.penLocation===b.pen).length||1; sum+=c/n; }
+  });
+  return sum; }
+const beddingTotal = () => (DB.bedding||[]).reduce((s,b)=>s+beddingUseCost(b),0);
+// full invested for an animal = logged expenses + auto feed + attributed bedding
+function animalFeedBedding(id){ return { feed:feedCostForAnimal(id), bedding:beddingCostForAnimal(id) }; }
+function animalInvested(id){ const man=DB.expenses.filter(e=>e.animalId===id).reduce((s,e)=>s+(+e.amount||0),0); const fb=animalFeedBedding(id); return man+fb.feed+fb.bedding; }
 
 /* ===================================================================
    SEED — sample team + animals (clearly marked demo, removable in setup)
@@ -739,6 +790,8 @@ async function boot(){
   else { DB=mergeDefaults(DB); if(!DB.breeds || !DB.breeds.length) seedBreeds(DB);
     // self-heal: any species that actually has animals must be selectable
     let healed=false; DB.species.forEach(sp=>{ if(!sp.active && DB.animals.some(a=>a.species===sp.id)){ sp.active=true; healed=true; } });
+    // self-heal: inventory products gain a category + base unit for costing
+    (DB.inventory||[]).forEach(p=>{ if(!p.category)p.category='feed'; if(!p.unit)p.unit=(p.category==='bedding'?'bag':'lb'); });
     save(true); }
   if(Cloud.init()){
     try{
@@ -1417,7 +1470,10 @@ function feedCard(f,showActions){
       ${(f.meals||[]).map(m=>`<div style="background:var(--line-2);border-radius:12px;padding:9px 11px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:4px">${esc(m.time)}</div>${(m.items||[]).map(it=>`<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:1px 0"><span>${esc(it.product)}</span><span class="tnum" style="font-weight:700;color:var(--ink-2)">${it.amount} ${esc(it.unit)}</span></div>`).join('')||'<span style="color:var(--muted);font-size:12px">—</span>'}</div>`).join('')}
     </div>
     ${f.advisorRec?`<div class="help" style="margin-top:10px">${ICON.wand}<span><b>Advisor:</b> ${esc(f.advisorRec)}</span></div>`:''}
-    ${fs.adg!=null?`<div style="display:flex;gap:14px;margin-top:10px;font-size:12px;font-weight:700;color:var(--muted)"><span>Gain <b class="tnum" style="color:var(--ink)">${fs.gain>0?'+':''}${fs.gain} lb</b></span><span>ADG <b class="tnum" style="color:var(--ink)">${fs.adg} lb/d</b></span></div>`:''}
+    ${(()=>{ const dc=feedDailyCost(f); if(dc.cost<=0&&!dc.uncosted.length) return '';
+      const runCost=dc.cost*feedProgramDays(f);
+      return `<div style="display:flex;gap:14px;margin-top:10px;font-size:12px;font-weight:700;color:var(--muted);flex-wrap:wrap">${dc.cost>0?`<span>Feed <b class="tnum" style="color:var(--ink)">${money(dc.cost)}/day</b></span><span>This program <b class="tnum" style="color:var(--ink)">${money(runCost)}</b></span>`:''}${dc.uncosted.length?`<span style="color:var(--warn)">Unpriced: ${esc(dc.uncosted.join(', '))}</span>`:''}</div>`; })()}
+    ${fs.adg!=null?`<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;font-weight:700;color:var(--muted)"><span>Gain <b class="tnum" style="color:var(--ink)">${fs.gain>0?'+':''}${fs.gain} lb</b></span><span>ADG <b class="tnum" style="color:var(--ink)">${fs.adg} lb/d</b></span></div>`:''}
   </div>`;
 }
 function tabFeed(box,a){
@@ -1501,7 +1557,8 @@ function openFeedSheet(animalId, feedId, dupFrom){
       <div class="field-row"><div class="field" style="flex:1"><label>Objective</label><select class="control" id="fObj">${FEED_OBJECTIVES.map(o=>`<option ${f.objective===o?'selected':''}>${o}</option>`).join('')}</select></div>
         <div class="field" style="flex:1"><label>Start date</label><input class="control" type="date" id="fStart" value="${f.startDate}"></div></div>
       <div id="fMeals"></div>
-      <button class="btn sm block" id="addMeal" style="margin:4px 0 12px">${ICON.plus} Add feeding</button>
+      <button class="btn sm block" id="addMeal" style="margin:4px 0 8px">${ICON.plus} Add feeding</button>
+      <div id="fCostEst" style="margin-bottom:12px"></div>
       <div class="field"><label>Reason for change</label><input class="control" id="fReason" value="${esc(f.reason||'')}" placeholder="e.g. adding cover before show"></div>
       <div class="field"><label>Advisor recommendation</label><input class="control" id="fAdv" value="${esc(f.advisorRec||'')}"></div>`;
     const mc=$('#fMeals',body);
@@ -1518,6 +1575,11 @@ function openFeedSheet(animalId, feedId, dupFrom){
     $$('[data-add]',body).forEach(b=>b.onclick=()=>{collectMeals();f.meals[+b.dataset.add].items.push({product:'',amount:'',unit:'lb'});draw();});
     $$('[data-idel]',body).forEach(b=>b.onclick=()=>{collectMeals();const[mi,ii]=b.dataset.idel.split('-').map(Number);f.meals[mi].items.splice(ii,1);draw();});
     $('#addMeal',body).onclick=()=>{collectMeals();f.meals.push({time:'Midday',items:[{product:'',amount:'',unit:'lb'}]});draw();};
+    const updateCost=()=>{ collectMeals(); const dc=feedDailyCost(f); const est=$('#fCostEst',body); if(!est)return;
+      est.innerHTML = dc.cost>0 ? `<div class="help">${ICON.money}<span>Estimated <b>${money(dc.cost)}/day</b> at your current feed prices${dc.uncosted.length?` · unpriced: ${esc(dc.uncosted.join(', '))}`:''}</span></div>`
+        : (dc.uncosted.length?`<div class="help">${ICON.info}<span>Price these in <b>Feed &amp; bedding costs</b> to auto-cost this ration: ${esc(dc.uncosted.join(', '))}</span></div>`:''); };
+    $$('[data-p],[data-a],[data-u]',body).forEach(inp=>inp.addEventListener('input',updateCost));
+    updateCost();
   };
   const collectMeals=()=>{ $$('[data-p]',body).forEach(inp=>{const[mi,ii]=inp.dataset.p.split('-').map(Number);f.meals[mi].items[ii].product=inp.value;});
     $$('[data-a]',body).forEach(inp=>{const[mi,ii]=inp.dataset.a.split('-').map(Number);f.meals[mi].items[ii].amount=inp.value;});
@@ -1954,10 +2016,17 @@ function tabPedigree(box,a){
 function tabExpenses(box,a){
   const exp=DB.expenses.filter(e=>e.animalId===a.id).sort((x,y)=>x.date<y.date?1:-1);
   const inc=DB.income.filter(e=>e.animalId===a.id);
-  const total=exp.reduce((s,e)=>s+(+e.amount||0),0); const incTotal=inc.reduce((s,e)=>s+(+e.amount||0),0);
+  const manual=exp.reduce((s,e)=>s+(+e.amount||0),0); const incTotal=inc.reduce((s,e)=>s+(+e.amount||0),0);
+  const fb=animalFeedBedding(a.id); const total=manual+fb.feed+fb.bedding;
   const st=animalStats(a); const cog=st.gainTotal>0?total/st.gainTotal:null;
   box.innerHTML=`<div class="grid g2"><div class="stat"><div class="k">Invested</div><div class="v tnum" style="font-size:22px">${money(total)}</div></div><div class="stat"><div class="k">Net</div><div class="v tnum" style="font-size:22px;color:${incTotal-total>=0?'var(--good)':'var(--ink)'}">${money(incTotal-total)}</div><div class="sub">${incTotal?money(incTotal)+' income':''}</div></div></div>
-    ${cog?`<div class="help" style="margin-top:10px">${ICON.info}<span>Cost of gain: <b>${money(cog)}/lb</b> over ${st.gainTotal} lb gained</span></div>`:''}
+    ${(fb.feed>0||fb.bedding>0)?`<div class="card pad" style="margin-top:10px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">Cost breakdown</div>
+      ${fb.feed>0?`<div class="kv"><span class="k">Feed (from rations)</span><span class="v tnum">${money(fb.feed)}</span></div>`:''}
+      ${fb.bedding>0?`<div class="kv"><span class="k">Bedding (attributed)</span><span class="v tnum">${money(fb.bedding)}</span></div>`:''}
+      ${manual>0?`<div class="kv"><span class="k">Logged expenses</span><span class="v tnum">${money(manual)}</span></div>`:''}
+      <div class="kv" style="border-top:1px solid var(--line);margin-top:2px;padding-top:8px"><span class="k" style="font-weight:800;color:var(--ink)">Total invested</span><span class="v tnum" style="font-weight:800">${money(total)}</span></div></div>`:''}
+    ${cog?`<div class="help" style="margin-top:10px">${ICON.info}<span>Cost of gain: <b>${money(cog)}/lb</b> over ${st.gainTotal} lb gained${fb.feed>0?' · feed alone '+money(st.gainTotal>0?fb.feed/st.gainTotal:0)+'/lb':''}</span></div>`:''}
+    <div class="help" style="margin-top:10px">${ICON.info}<span>Feed &amp; bedding cost auto-fill from your <b>bulk purchases</b> and rations — set them up in <b>More → Feed &amp; bedding costs</b>. No need to log feed as an expense here.</span></div>
     <div class="btn-row" style="margin-top:12px"><button class="btn primary" id="addExp" style="flex:1">${ICON.plus} Expense</button><button class="btn teal" id="addInc" style="flex:1">${ICON.money} Income</button></div>
     <div id="exList" style="margin-top:12px"></div>`;
   $('#addExp',box).onclick=()=>openExpenseSheet(a.id); $('#addInc',box).onclick=()=>openIncomeSheet(a.id);
@@ -2595,8 +2664,13 @@ function helperSnapshot(id){
 route('reports',()=>{
   const v=setView('','reports'); const active=activeAnimals();
   const adgRows=active.map(a=>({a,st:animalStats(a)})).filter(r=>r.st.adgLife!=null).sort((x,y)=>y.st.adgLife-x.st.adgLife);
-  const totalInvest=DB.expenses.reduce((s,e)=>s+(+e.amount||0),0);
+  const manualExp=DB.expenses.reduce((s,e)=>s+(+e.amount||0),0);
+  const totalFeed=DB.animals.reduce((s,a)=>s+feedCostForAnimal(a.id),0);
+  const totalBed=beddingTotal();
+  const totalInvest=manualExp+totalFeed+totalBed;
   const totalIncome=DB.income.reduce((s,e)=>s+(+e.amount||0),0);
+  const totGain=active.reduce((s,a)=>{const st=animalStats(a);return s+(st.gainTotal>0?st.gainTotal:0);},0);
+  const feedCog=totGain>0?totalFeed/totGain:null;
   const weighedThisWeek=active.filter(a=>{const ws=weightsFor(a.id);return ws.length&&daysBetween(ws[ws.length-1].date,todayISO())<7;}).length;
   const results=DB.entries.filter(e=>e.result&&e.result.placing);
   const wrap=el('div');
@@ -2604,8 +2678,8 @@ route('reports',()=>{
     <div class="grid g2">
       <div class="stat"><div class="k">Weekly weigh-in</div><div class="v tnum">${weighedThisWeek}<small>/${active.length}</small></div><div class="sub">completed this week</div></div>
       <div class="stat"><div class="k">Avg herd ADG</div><div class="v tnum">${adgRows.length?round(adgRows.reduce((s,r)=>s+r.st.adgLife,0)/adgRows.length,2):'—'}</div><div class="sub">lb/day</div></div>
-      <div class="stat"><div class="k">Total invested</div><div class="v tnum" style="font-size:20px">${money(totalInvest)}</div></div>
-      <div class="stat"><div class="k">Net result</div><div class="v tnum" style="font-size:20px;color:${totalIncome-totalInvest>=0?'var(--good)':'var(--ink)'}">${money(totalIncome-totalInvest)}</div></div>
+      <div class="stat"><div class="k">Total invested</div><div class="v tnum" style="font-size:20px">${money(totalInvest)}</div><div class="sub">${totalFeed>0?money(totalFeed)+' feed':''}</div></div>
+      <div class="stat"><div class="k">Net result</div><div class="v tnum" style="font-size:20px;color:${totalIncome-totalInvest>=0?'var(--good)':'var(--ink)'}">${money(totalIncome-totalInvest)}</div><div class="sub">${feedCog!=null?money(feedCog)+'/lb feed cost of gain':''}</div></div>
     </div>
     <div class="section-title">Average daily gain ranking</div>
     <div class="card pad">${adgRows.length?barChart(adgRows.map(r=>({label:r.a.name,value:r.st.adgLife,disp:r.st.adgLife+' lb/d',color:'var(--purple-3)'}))):'<div class="empty" style="padding:14px">Add weights to rank ADG.</div>'}</div>
@@ -2633,7 +2707,8 @@ function openSeasonPicker(){
 }
 function seasonSummary(id){
   const a=getAnimal(id); const st=animalStats(a); const ws=weightsFor(id); const progs=feedFor(id); const ent=DB.entries.filter(e=>e.animalId===id);
-  const exp=DB.expenses.filter(e=>e.animalId===id).reduce((s,e)=>s+(+e.amount||0),0); const inc=DB.income.filter(e=>e.animalId===id).reduce((s,e)=>s+(+e.amount||0),0);
+  const manual=DB.expenses.filter(e=>e.animalId===id).reduce((s,e)=>s+(+e.amount||0),0); const inc=DB.income.filter(e=>e.animalId===id).reduce((s,e)=>s+(+e.amount||0),0);
+  const fb=animalFeedBedding(id); const exp=manual+fb.feed+fb.bedding;
   const w=window.open('','_blank');
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(a.name)} — Season Summary</title>
     <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:800px;margin:20px auto;padding:0 20px;line-height:1.5}
@@ -2649,6 +2724,7 @@ function seasonSummary(id){
     <h2>Feed programs</h2>${progs.slice().reverse().map(f=>{const fs=feedProgramStats(f);return `<div style="margin-bottom:12px"><b>${esc(f.name)}</b> <span class="muted">(${esc(f.objective||'')} · ${fmtShort(f.startDate)}–${f.endDate?fmtShort(f.endDate):'now'} · ${fs.days}d · ADG ${fs.adg??'—'})</span><table>${(f.meals||[]).map(m=>`<tr><td style="width:90px"><b>${esc(m.time)}</b></td><td>${(m.items||[]).map(it=>esc(it.product)+' '+it.amount+' '+esc(it.unit)).join(', ')}</td></tr>`).join('')}</table></div>`;}).join('')||'<p class="muted">None</p>'}
     <h2>Shows & results</h2>${ent.length?`<table><tr><th>Show</th><th>Division</th><th>Placing</th><th>Notes</th></tr>${ent.map(e=>{const sh=DB.shows.find(s=>s.id===e.showId);const r=e.result||{};return `<tr><td>${esc(sh?sh.name:'')}</td><td>${esc(e.division||'')}</td><td>${esc(r.placing||'—')}${r.divisionPlacing?' · '+esc(r.divisionPlacing):''}</td><td>${esc(r.bannerNote||r.judgeComments||'')}</td></tr>`;}).join('')}</table>`:'<p class="muted">No shows</p>'}
     <h2>Financials</h2><div class="grid"><div class="box"><span class="muted">Invested</span><b>${money(exp)}</b></div><div class="box"><span class="muted">Income</span><b>${money(inc)}</b></div><div class="box"><span class="muted">Net</span><b>${money(inc-exp)}</b></div><div class="box"><span class="muted">Cost/lb gain</span><b>${st.gainTotal>0?money(exp/st.gainTotal):'—'}</b></div></div>
+    <p class="muted">Feed ${money(fb.feed)}${fb.bedding?' · Bedding '+money(fb.bedding):''}${manual?' · Other logged '+money(manual):''}</p>
     ${a.archiveInfo?`<h2>Disposition</h2><p>${esc(a.archiveInfo.finalStatus||'')}${a.archiveInfo.buyer?' · Buyer: '+esc(a.archiveInfo.buyer):''}${a.archiveInfo.salePrice?' · '+money(a.archiveInfo.salePrice):''}<br><span class="muted">${esc(a.archiveInfo.notes||'')}</span></p>`:''}
     <p class="noprint" style="margin-top:24px"><button onclick="window.print()" style="background:#4C1D95;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700">Print / Save as PDF</button></p>
     </body></html>`;
@@ -2755,7 +2831,7 @@ route('more',()=>{
       ${moreRow('layovers',ICON.layover,'Layover care')}
       ${moreRow('helpers',ICON.team,'Helpers')}
       ${moreRow('__breeds',ICON.dna,'Species & breeds')}
-      ${moreRow('__inventory',ICON.boxes,'Feed inventory')}
+      ${moreRow('costs',ICON.receipt,'Feed & bedding costs')}
       ${moreRow('__notif',ICON.bell,'Notifications')}
       ${moreRow('__settings',ICON.settings,'Team settings')}
     </div>
@@ -3162,6 +3238,145 @@ function printRecordBook(animalId){
     <p class="noprint" style="margin-top:24px"><button onclick="window.print()" style="background:#4C1D95;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700">Print / Save as PDF</button></p>
     </body></html>`;
   w.document.write(html); w.document.close();
+}
+
+/* ===================================================================
+   FEED & BEDDING COSTS — the management screens for the costing model.
+   =================================================================== */
+route('costs',()=>{
+  const v=setView('','more'); const wrap=el('div'); v.append(wrap);
+  const draw=()=>{
+    const feeds=feedProducts(), beds=beddingProducts();
+    // team totals
+    let feedSpend=0; (DB.purchases||[]).forEach(l=>{ const p=(DB.inventory||[]).find(x=>x.id===l.productId); if(p&&(p.category||'feed')==='feed')feedSpend+=+l.cost||0; });
+    const bedSpend=(DB.purchases||[]).filter(l=>{const p=(DB.inventory||[]).find(x=>x.id===l.productId);return p&&p.category==='bedding';}).reduce((s,l)=>s+(+l.cost||0),0);
+    const active=activeAnimals();
+    const totFeedCost=active.reduce((s,a)=>s+feedCostForAnimal(a.id),0);
+    const totGain=active.reduce((s,a)=>{const st=animalStats(a);return s+(st.gainTotal>0?st.gainTotal:0);},0);
+    const cogFeed=totGain>0?totFeedCost/totGain:null;
+    wrap.innerHTML=`${pageHeader('Feed & bedding costs')}
+      <div class="help" style="margin-bottom:12px">${ICON.info}<span>Log what you <b>buy in bulk</b> and the app works out a cost per pound, then flows it into each animal automatically from the rations they're on — no need to hand-enter feed expenses.</span></div>
+      <div class="grid g3">
+        <div class="stat"><div class="k">Feed bought</div><div class="v tnum" style="font-size:18px">${money(feedSpend)}</div></div>
+        <div class="stat"><div class="k">Bedding bought</div><div class="v tnum" style="font-size:18px">${money(bedSpend)}</div></div>
+        <div class="stat"><div class="k">Feed cost / lb gain</div><div class="v tnum" style="font-size:18px">${cogFeed!=null?money(cogFeed):'—'}</div></div>
+      </div>
+      <div class="section-title">Feed products <button class="more" id="addFeedP">+ Product</button></div><div id="feedList"></div>
+      <div class="section-title">Bedding <button class="more" id="addBedP">+ Product</button></div><div id="bedList"></div>
+      <div class="section-title">Bedding used <button class="more" id="logBed">+ Log use</button></div><div id="bedUse"></div>
+      <div style="height:8px"></div>`;
+    // feed products
+    const fl=$('#feedList',wrap);
+    if(!feeds.length) fl.innerHTML='<div class="empty" style="padding:14px">No feed products yet. Add one, then log a bulk purchase to set its cost per pound.</div>';
+    else { const L=el('div','list'); feeds.forEach(p=>{ const pc=productCost(p.id); const low=(+p.onHand||0)<=(+p.reorder||0)&&(p.reorder!=null&&p.reorder!==''); const li=el('div','li');
+      li.innerHTML=`<div class="thumb" style="color:var(--teal-3)">${ICON.sack}</div><div class="main"><div class="t1">${esc(p.product)}${low?' <span class="pill warn" style="font-size:9px">low</span>':''}</div><div class="t2">${esc(p.brand||'')}${pc.perUnit!=null?' · '+money(pc.perUnit)+'/lb':' · no price yet'}${p.onHand?' · '+p.onHand+' lb on hand':''}</div></div><div class="r"><b class="tnum">${pc.totalCost?money(pc.totalCost):''}</b></div>`;
+      li.onclick=()=>openProductSheet(p.id); L.append(li); }); fl.append(L); }
+    // bedding products
+    const bl=$('#bedList',wrap);
+    if(!beds.length) bl.innerHTML='<div class="empty" style="padding:14px">No bedding products yet. Add shavings/straw and a bulk purchase to price it.</div>';
+    else { const L=el('div','list'); beds.forEach(p=>{ const pc=productCost(p.id); const li=el('div','li');
+      li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.shavings}</div><div class="main"><div class="t1">${esc(p.product)}</div><div class="t2">${esc(p.brand||'')}${pc.perUnit!=null?' · '+money(pc.perUnit)+'/'+(p.unit||'bag'):' · no price yet'}${p.onHand?' · '+p.onHand+' '+(p.unit||'bag')+' on hand':''}</div></div><div class="r"><b class="tnum">${pc.totalCost?money(pc.totalCost):''}</b></div>`;
+      li.onclick=()=>openProductSheet(p.id); L.append(li); }); bl.append(L); }
+    // bedding usage
+    const bu=$('#bedUse',wrap); const uses=(DB.bedding||[]).slice().sort((a,b)=>a.date<b.date?1:-1);
+    if(!uses.length) bu.innerHTML='<div class="empty" style="padding:14px">No bedding logged. Tap “Log use” each time you bed a pen down.</div>';
+    else { const L=el('div','list'); uses.slice(0,20).forEach(b=>{ const p=(DB.inventory||[]).find(x=>x.id===b.productId); const c=beddingUseCost(b);
+      const who=b.scope==='animal'?(getAnimal(b.animalId)||{}).name||'animal':b.scope==='pen'?(b.pen||'Pen'):'Barn (overhead)';
+      const li=el('div','li'); li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.shavings}</div><div class="main"><div class="t1">${b.qty} ${esc(p?p.unit||'bag':'bag')} · ${esc(who)}</div><div class="t2">${esc(p?p.product:'')} · ${fmtDate(b.date)}</div></div><div class="r"><b class="tnum">${c?money(c):''}</b></div>`;
+      li.onclick=()=>openBeddingUseSheet(b.id); L.append(li); }); bu.append(L); }
+    $('#addFeedP',wrap).onclick=()=>openProductSheet(null,'feed');
+    $('#addBedP',wrap).onclick=()=>openProductSheet(null,'bedding');
+    $('#logBed',wrap).onclick=()=>{ if(!beds.length){ toast('Add a bedding product first','bad'); openProductSheet(null,'bedding'); return; } openBeddingUseSheet(); };
+  };
+  window.__costsRedraw=draw; draw();
+});
+function openProductSheet(id, category){
+  const p=id?{...(DB.inventory||[]).find(x=>x.id===id)}:{product:'',brand:'',category:category||'feed',unit:category==='bedding'?'bag':'lb',onHand:'',reorder:''};
+  const isBed=p.category==='bedding';
+  const body=el('div');
+  const draw=()=>{
+    const lots=id?(DB.purchases||[]).filter(l=>l.productId===id).sort((a,b)=>a.date<b.date?1:-1):[];
+    const pc=id?productCost(id):{perUnit:null,totalCost:0,totalQty:0};
+    body.innerHTML=`
+      <div class="field"><label>Product name *</label><input class="control" id="pName" value="${esc(p.product||'')}" placeholder="${isBed?'Pine shavings':'Show Grower'}"></div>
+      <div class="field-row"><div class="field" style="flex:1"><label>Brand / mill</label><input class="control" id="pBrand" value="${esc(p.brand||'')}"></div>
+        <div class="field" style="flex:1"><label>${isBed?'Unit':'Base unit'}</label><select class="control" id="pUnit">${(isBed?BEDDING_UNITS:['lb']).map(u=>`<option ${p.unit===u?'selected':''}>${u}</option>`).join('')}</select></div></div>
+      <div class="field-row"><div class="field" style="flex:1"><label>On hand (${isBed?(p.unit||'bag'):'lb'})</label><input class="control" type="number" inputmode="decimal" id="pOnHand" value="${p.onHand??''}"></div>
+        <div class="field" style="flex:1"><label>Reorder at</label><input class="control" type="number" inputmode="decimal" id="pReorder" value="${p.reorder??''}"></div></div>
+      ${id?`<div class="card pad" style="background:var(--line-2);border:none;margin-bottom:10px"><div style="display:flex;justify-content:space-around;text-align:center"><div><div style="font-size:11px;color:var(--muted);font-weight:700">COST / ${isBed?(p.unit||'BAG').toUpperCase():'LB'}</div><div style="font-weight:800;font-size:17px" class="tnum">${pc.perUnit!=null?money(pc.perUnit):'—'}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">TOTAL SPENT</div><div style="font-weight:800;font-size:17px" class="tnum">${money(pc.totalCost)}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">PURCHASED</div><div style="font-weight:800;font-size:17px" class="tnum">${round(pc.totalQty,0)} ${isBed?(p.unit||'bag'):'lb'}</div></div></div></div>
+      <div class="section-title" style="margin-top:4px">Purchase lots <button class="more" id="addLot">+ Bulk buy</button></div>
+      <div id="lotList"></div>`:'<div class="help">'+ICON.info+'<span>Save the product, then add your bulk purchases to set a cost per '+(isBed?(p.unit||'bag'):'pound')+'.</span></div>'}`;
+    if(id){ const ll=$('#lotList',body);
+      if(!lots.length) ll.innerHTML='<div class="empty" style="padding:12px">No purchases yet. Add a bulk buy — e.g. “'+(isBed?'40 bags for $260':'1 ton for $640')+'.”</div>';
+      else { const L=el('div','list'); lots.forEach(l=>{ const q=isBed?(+l.qty||0):toLb(l.qty,l.unit||'lb',l.perBag); const per=q>0?(+l.cost||0)/q:null; const li=el('div','li');
+        li.innerHTML=`<div class="thumb" style="color:var(--teal-3)">${ICON.receipt}</div><div class="main"><div class="t1">${money(l.cost)} · ${l.qty} ${esc(l.unit||(isBed?'bag':'lb'))}${l.unit==='bag'&&l.perBag?' × '+l.perBag+' lb':''}</div><div class="t2">${fmtDate(l.date)}${per!=null?' · '+money(per)+'/'+(isBed?(p.unit||'bag'):'lb'):''}${l.note?' · '+esc(l.note):''}</div></div><button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-dellot="${l.id}">${ICON.x}</button>`;
+        $('[data-dellot]',li).onclick=(e)=>{e.stopPropagation();DB.purchases=DB.purchases.filter(x=>x.id!==l.id);save();draw();if(window.__costsRedraw)window.__costsRedraw();}; L.append(li); }); ll.append(L); }
+      $('#addLot',body).onclick=()=>openPurchaseSheet(id,()=>{draw();if(window.__costsRedraw)window.__costsRedraw();});
+    }
+  };
+  draw();
+  const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">${id?'Save product':'Add product'}</button>`;
+  const sh=openSheet({title:id?'Edit product':(isBed?'New bedding product':'New feed product'),body,foot});
+  $('[data-save]',sh).onclick=()=>{ const data={product:$('#pName',body).value.trim(),brand:$('#pBrand',body).value.trim(),category:p.category,unit:$('#pUnit',body).value,onHand:$('#pOnHand',body).value===''?null:+$('#pOnHand',body).value,reorder:$('#pReorder',body).value===''?null:+$('#pReorder',body).value};
+    if(!data.product){toast('Name the product','bad');return;}
+    if(id){Object.assign((DB.inventory).find(x=>x.id===id),data);}else{const nid=uid('inv');DB.inventory.push(stamp({id:nid,...data}));} save(); toast('Saved','good');
+    if(!id){ closeSheet(); openProductSheet((DB.inventory[DB.inventory.length-1]).id); } // reopen to add lots
+    if(window.__costsRedraw)window.__costsRedraw();
+  };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete product','Remove this product and its purchase lots? Rations that name it lose their price.','Delete',true)){ DB.inventory=DB.inventory.filter(x=>x.id!==id); DB.purchases=(DB.purchases||[]).filter(l=>l.productId!==id); DB.bedding=(DB.bedding||[]).filter(b=>b.productId!==id); save(); closeSheet(); if(window.__costsRedraw)window.__costsRedraw(); } };
+}
+function openPurchaseSheet(productId, after){
+  const p=(DB.inventory||[]).find(x=>x.id===productId); const isBed=p&&p.category==='bedding';
+  const rec={date:todayISO(), qty:'', unit:isBed?(p.unit||'bag'):'lb', perBag:'', cost:'', note:''};
+  const body=el('div');
+  const draw=()=>{ const unit=body.querySelector('#lUnit')?body.querySelector('#lUnit').value:rec.unit;
+    body.innerHTML=`<div class="field-row"><div class="field" style="flex:1"><label>Date</label><input class="control" type="date" id="lDate" value="${rec.date}"></div>
+      <div class="field" style="flex:1"><label>Total cost ($)</label><input class="control" type="number" inputmode="decimal" id="lCost" value="${rec.cost}" placeholder="640"></div></div>
+      <div class="field-row"><div class="field" style="flex:1"><label>Quantity</label><input class="control" type="number" inputmode="decimal" id="lQty" value="${rec.qty}" placeholder="1"></div>
+        <div class="field" style="flex:1"><label>Unit</label><select class="control" id="lUnit">${(isBed?BEDDING_UNITS:PURCHASE_UNITS).map(u=>`<option ${unit===u?'selected':''}>${u}</option>`).join('')}</select></div></div>
+      ${!isBed?`<div class="field" id="perBagWrap" style="${unit==='bag'?'':'display:none'}"><label>Pounds per bag</label><input class="control" type="number" inputmode="decimal" id="lPerBag" value="${rec.perBag}" placeholder="50"></div>`:''}
+      <div id="lPreview"></div>
+      <div class="field"><label>Note</label><input class="control" id="lNote" value="${esc(rec.note)}" placeholder="Mill run, delivered…"></div>`;
+    const preview=()=>{ const qty=+$('#lQty',body).value||0, cost=+$('#lCost',body).value||0, u=$('#lUnit',body).value, pb=body.querySelector('#lPerBag')?+body.querySelector('#lPerBag').value:0;
+      const base=isBed?qty:toLb(qty,u,pb); const per=base>0?cost/base:null;
+      $('#lPreview',body).innerHTML=per!=null?`<div class="help" style="margin-bottom:10px">${ICON.money}<span>That's <b>${money(per)}/${isBed?(p.unit||'bag'):'lb'}</b>${!isBed&&base?` over ${round(base,0)} lb`:''}.</span></div>`:''; };
+    if(body.querySelector('#lUnit'))body.querySelector('#lUnit').onchange=()=>{ rec.qty=$('#lQty',body).value;rec.cost=$('#lCost',body).value;rec.note=$('#lNote',body).value; draw(); };
+    ['#lQty','#lCost'].forEach(s=>{if($(s,body))$(s,body).oninput=preview;}); if(body.querySelector('#lPerBag'))body.querySelector('#lPerBag').oninput=preview; preview(); };
+  draw();
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">Save purchase</button>`;
+  const sh=openSheet({title:'Bulk purchase',body,foot});
+  $('[data-save]',sh).onclick=()=>{ const qty=+$('#lQty',body).value||0, cost=+$('#lCost',body).value||0, u=$('#lUnit',body).value, pb=body.querySelector('#lPerBag')?+body.querySelector('#lPerBag').value:null;
+    if(!qty||!cost){toast('Enter quantity and cost','bad');return;}
+    DB.purchases.push(stamp({id:uid('lot'),productId,date:$('#lDate',body).value,qty,unit:u,perBag:pb,cost,note:$('#lNote',body).value.trim()}));
+    // add to on-hand in the product's base unit
+    const base=isBed?qty:toLb(qty,u,pb); if(base!=null){ p.onHand=(+p.onHand||0)+base; }
+    logAct('expense','Bought '+money(cost)+' '+(p?p.product:'feed')); save(); closeSheet(); toast('Purchase logged','good'); if(after)after(); };
+}
+function openBeddingUseSheet(id){
+  const beds=beddingProducts(); const b=id?{...(DB.bedding||[]).find(x=>x.id===id)}:{date:todayISO(),productId:beds[0]?beds[0].id:'',qty:'',scope:'pen',pen:'',animalId:''};
+  const pens=[...new Set(activeAnimals().map(a=>a.penLocation).filter(Boolean))];
+  const body=el('div');
+  const draw=()=>{
+    body.innerHTML=`<div class="field-row"><div class="field" style="flex:1"><label>Date</label><input class="control" type="date" id="bDate" value="${b.date}"></div>
+      <div class="field" style="flex:1"><label>Quantity</label><input class="control" type="number" inputmode="decimal" id="bQty" value="${b.qty}" placeholder="2"></div></div>
+      <div class="field"><label>Bedding product</label><select class="control" id="bProd">${beds.map(p=>`<option value="${p.id}" ${b.productId===p.id?'selected':''}>${esc(p.product)} (${money(productCost(p.id).perUnit||0)}/${p.unit||'bag'})</option>`).join('')}</select></div>
+      <div class="field"><label>Applies to</label><div class="chips" id="bScope">${[['pen','Pen (split)'],['animal','One animal'],['barn','Barn overhead']].map(([k,l])=>`<button type="button" class="chip ${b.scope===k?'active':''}" data-scope="${k}">${l}</button>`).join('')}</div></div>
+      ${b.scope==='pen'?`<div class="field"><label>Pen</label>${pens.length?`<select class="control" id="bPen">${pens.map(pn=>`<option ${b.pen===pn?'selected':''}>${esc(pn)}</option>`).join('')}</select>`:`<input class="control" id="bPen" value="${esc(b.pen||'')}" placeholder="Pen location">`}<div class="help" style="margin-top:8px">${ICON.info}<span>Cost splits evenly across active animals in this pen.</span></div></div>`:''}
+      ${b.scope==='animal'?`<div class="field"><label>Animal</label><select class="control" id="bAnimal">${activeAnimals().map(a=>`<option value="${a.id}" ${b.animalId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>`:''}
+      ${b.scope==='barn'?`<div class="help">${ICON.info}<span>Counted in totals as barn overhead — not pushed into any single animal's cost of gain.</span></div>`:''}
+      <div class="field"><label>Note</label><input class="control" id="bNote" value="${esc(b.note||'')}"></div>`;
+    $$('[data-scope]',body).forEach(btn=>btn.onclick=()=>{ b.qty=$('#bQty',body).value; b.date=$('#bDate',body).value; b.productId=$('#bProd',body).value; if($('#bPen',body))b.pen=$('#bPen',body).value; if($('#bAnimal',body))b.animalId=$('#bAnimal',body).value; b.scope=btn.dataset.scope; draw(); });
+  };
+  draw();
+  const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">Save</button>`;
+  const sh=openSheet({title:id?'Edit bedding use':'Log bedding used',body,foot});
+  $('[data-save]',sh).onclick=()=>{ const qty=+$('#bQty',body).value||0; if(!qty){toast('Enter a quantity','bad');return;}
+    const data={date:$('#bDate',body).value,productId:$('#bProd',body).value,qty,scope:b.scope,pen:$('#bPen',body)?$('#bPen',body).value.trim():'',animalId:$('#bAnimal',body)?$('#bAnimal',body).value:''};
+    if(id){Object.assign((DB.bedding).find(x=>x.id===id),data);}else{DB.bedding.push(stamp({id:uid('bed'),...data}));}
+    // draw down on-hand
+    const p=(DB.inventory||[]).find(x=>x.id===data.productId); if(p&&!id){ p.onHand=Math.max(0,(+p.onHand||0)-qty); }
+    save(); closeSheet(); toast('Bedding logged','good'); if(window.__costsRedraw)window.__costsRedraw(); };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete','Remove this bedding entry?','Delete',true)){ DB.bedding=DB.bedding.filter(x=>x.id!==id); save(); closeSheet(); if(window.__costsRedraw)window.__costsRedraw(); } };
 }
 
 /* ===================================================================
