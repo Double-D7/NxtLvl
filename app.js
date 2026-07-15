@@ -1022,6 +1022,41 @@ function finishSetup(){
 /* ===================================================================
    DASHBOARD
    =================================================================== */
+/* ---------- Dashboard flair helpers ---------- */
+function firstName(n){ return ((n||'').trim().split(/\s+/)[0])||'there'; }
+function greeting(){ const h=new Date().getHours(); return h<12?'Good morning':h<17?'Good afternoon':'Good evening'; }
+function countUp(node, to, dur=650){ to=+to||0; if(to<=0){ node.textContent='0'; return; } const start=performance.now();
+  const tick=now=>{ const p=Math.min(1,(now-start)/dur); node.textContent=Math.round(to*(1-Math.pow(1-p,3))); if(p<1)requestAnimationFrame(tick); };
+  requestAnimationFrame(tick); }
+function activityStreak(){ const days=new Set((DB.activity||[]).map(a=>(a.ts||'').slice(0,10)).filter(Boolean));
+  let n=0, d=todayISO(); if(!days.has(d)) d=addDaysISO(d,-1);           // today not logged yet? count from yesterday
+  while(days.has(d)){ n++; d=addDaysISO(d,-1); } return n; }
+function herdAvgAdg(active){ const xs=active.map(a=>animalStats(a).adgLife).filter(v=>v!=null); return xs.length?round(xs.reduce((s,v)=>s+v,0)/xs.length,2):null; }
+function biggestGainer(active, days=7){ let best=null; const cut=addDaysISO(todayISO(),-days);
+  active.forEach(a=>{ const ws=weightsFor(a.id).filter(w=>w.date>=cut); if(ws.length<2)return; const g=round(+ws[ws.length-1].weight-+ws[0].weight,1); if(g>0&&(!best||g>best.gain))best={a,gain:g}; }); return best; }
+function animalOfDay(active){ if(!active.length)return null; const key=todayISO().replace(/-/g,''); let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0; return active[h%active.length]; }
+function barnBriefing(ctx){ const p=[];
+  if(ctx.showSoon) p.push(`${ctx.showSoon.name} ${daysBetween(todayISO(),ctx.showSoon.start)===0?'is today':'is tomorrow'} 🏆`);
+  else if(ctx.nextShow) p.push(`${daysBetween(todayISO(),ctx.nextShow.start)} days to ${ctx.nextShow.name}`);
+  if(ctx.needWeigh.length) p.push(`${ctx.needWeigh.length} need a weigh-in`);
+  if(ctx.taskCount) p.push(`${ctx.taskCount} task${ctx.taskCount===1?'':'s'} on deck`);
+  if(ctx.lay) p.push('layover in progress');
+  if(!p.length) return 'The barn’s in good shape — nothing urgent today. 👍';
+  return p.slice(0,3).join(' · '); }
+function todaysFocus(ctx){
+  const {active, needWeigh, showSoon, todayTasks}=ctx;
+  if(showSoon) return {icon:ICON.clipboard,color:'#DB2777',title:'It’s show day',sub:'Open show-day mode',go:'/showday/'+showSoon.id};
+  const grp=todayTasks.find(({t})=>taskAnimalIds(t).filter(id=>getAnimal(id)).length>=2);
+  if(grp){ const t=grp.t; const ids=taskAnimalIds(t).filter(id=>getAnimal(id)); const dn=taskProgress(t,grp.date).filter(id=>ids.includes(id)).length;
+    return {icon:ICON.check,color:'var(--purple-3)',title:t.title,sub:`${dn}/${ids.length} done — keep working through them`,fn:()=>openTaskProgressSheet(t.id,grp.date)}; }
+  if(needWeigh.length) return {icon:ICON.weight,color:'var(--teal-3)',title:`Weigh ${needWeigh.length} animal${needWeigh.length===1?'':'s'}`,sub:'Due for a weekly weight',fn:()=>openWeightSheet(needWeigh[0].id)};
+  const behind=active.filter(a=>coachEligible(a)&&coachStatus(a).state==='under');
+  if(behind.length) return {icon:ICON.target,color:'var(--bad)',title:`${behind.length} behind on their game plan`,sub:'See what they need',go:'/coach'};
+  if(todayTasks.length){ const {t,date}=todayTasks[0]; return {icon:ICON.check,color:'var(--purple-3)',title:t.title,sub:'Due today',fn:()=>{ const ids=taskAnimalIds(t).filter(id=>getAnimal(id)); ids.length>=2?openTaskProgressSheet(t.id,date):openTaskSheet(t.id); }}; }
+  const noPhoto=active.find(a=>!mediaFor(a.id).length);
+  if(noPhoto) return {icon:ICON.camera,color:'var(--info)',title:'Snap a progress photo',sub:noPhoto.name+' doesn’t have one yet',go:'/animal/'+noPhoto.id+'/media'};
+  return {icon:ICON.star,color:'var(--good)',title:'All caught up',sub:'Nice work — the barn’s dialed in',go:null};
+}
 route('dashboard', ()=>{
   const active=activeAnimals();
   const bySpecies={}; DB.species.filter(s=>s.active).forEach(s=>bySpecies[s.id]=0);
@@ -1045,18 +1080,36 @@ route('dashboard', ()=>{
 
   const v=setView('','dashboard');
   const wrap=el('div');
-  // Hero: totals + species
+  const u=me(); const lay=activeLayover(); const showSoon=upcoming.find(s=>daysBetween(todayISO(),s.start)>=0&&daysBetween(todayISO(),s.start)<=1);
+  const streak=activityStreak(); const herdAdg=herdAvgAdg(active); const gainer=biggestGainer(active,7);
+  const ctx={active,needWeigh,nextShow,showSoon,lay,todayTasks,taskCount:todayTasks.length};
+  const focus=todaysFocus(ctx);
+  const shownSp=DB.species.filter(s=>(bySpecies[s.id]||0)>0);
+  // HERO — greeting + smart barn briefing
   wrap.append(htmlToFrag(`
-    <div class="grid g2">
-      <div class="stat"><div class="k">Active animals</div><div class="v tnum">${active.length}</div><div class="sub">${DB.animals.length-active.length} archived</div></div>
-      <div class="stat"><div class="k">Weighed this week</div><div class="v tnum">${weighedThisWeek}<small>/${active.length}</small></div><div class="sub">${needWeigh.length} need a weight</div></div>
-    </div>
-    ${(()=>{ const shown=DB.species.filter(s=>(bySpecies[s.id]||0)>0); return shown.length?`<div class="section-title">Species</div>
-    <div class="grid g4">${shown.map(s=>`
-      <button class="stat" style="text-align:left" onclick="go('/animals?species=${s.id}')">
-        <div style="display:flex;align-items:center;gap:7px;color:var(--purple-3)"><span style="width:20px;height:20px">${spIcon(s.id)}</span><span class="k" style="color:var(--muted)">${esc(s.name)}</span></div>
-        <div class="v tnum" style="font-size:22px">${bySpecies[s.id]}</div></button>`).join('')}</div>`:''; })()}
-  `));
+    <div class="card pad" style="position:relative;overflow:hidden;background:linear-gradient(135deg,#2E1065,#4C1D95 55%,#0D9488);color:#fff;border:none;box-shadow:var(--shadow-lg)">
+      <div style="position:absolute;right:-16px;top:-20px;width:120px;height:120px;opacity:.12;color:#fff">${ICON.paw}</div>
+      <div style="position:relative">
+        <div style="font-size:12px;font-weight:800;opacity:.9;text-transform:uppercase;letter-spacing:.6px">${greeting()}, ${esc(firstName(u.name))}</div>
+        <div style="font-size:12.5px;opacity:.8;margin-top:1px">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
+        <div style="font-size:15.5px;font-weight:700;line-height:1.45;margin-top:10px">${esc(barnBriefing(ctx))}</div>
+      </div>
+    </div>`));
+  // MOMENTUM TILES (animated)
+  wrap.append(htmlToFrag(`<div class="grid g4" style="margin-top:12px">
+    <button class="stat" style="text-align:left" onclick="go('/animals')"><div class="k">Active</div><div class="v tnum" data-count="${active.length}">0</div><div class="sub">animals</div></button>
+    <div class="stat" style="flex-direction:row;align-items:center;gap:8px;display:flex"><div style="flex:none">${ringSVG(active.length?weighedThisWeek/active.length*100:0,'var(--teal-3)',weighedThisWeek+'/'+active.length,'weighed')}</div><div style="min-width:0"><div class="k">This week</div><div class="sub" style="margin-top:3px">${needWeigh.length} to go</div></div></div>
+    <div class="stat"><div class="k">Streak</div><div class="v tnum" style="color:#FB923C" data-count="${streak}">0</div><div class="sub">${streak===1?'day':'days'} 🔥</div></div>
+    <div class="stat"><div class="k">Herd ADG</div><div class="v tnum" style="font-size:22px">${herdAdg??'—'}${herdAdg!=null?'<small> lb/d</small>':''}</div><div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${gainer?'🚀 '+esc(gainer.a.name)+' +'+gainer.gain:'lifetime avg'}</div></div>
+  </div>`));
+  // TODAY'S FOCUS — the one next best action
+  wrap.append((()=>{ const c=el('div','card pad'); c.style.cssText='margin-top:12px;display:flex;align-items:center;gap:13px;border-left:4px solid '+focus.color+(focus.go||focus.fn?';cursor:pointer':'');
+    c.innerHTML=`<div style="flex:none;width:44px;height:44px;border-radius:13px;background:${focus.color}22;color:${focus.color};display:flex;align-items:center;justify-content:center"><span style="width:24px;height:24px">${focus.icon}</span></div>
+      <div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Today's focus</div><div style="font-size:16px;font-weight:800;margin-top:1px">${esc(focus.title)}</div><div style="font-size:12.5px;color:var(--muted)">${esc(focus.sub)}</div></div>
+      ${focus.go||focus.fn?`<span style="color:var(--muted);flex:none">${ICON.chev}</span>`:''}`;
+    if(focus.go)c.onclick=()=>go(focus.go); else if(focus.fn)c.onclick=focus.fn; return c; })());
+  // species strip
+  if(shownSp.length) wrap.append(htmlToFrag(`<div class="grid g4" style="margin-top:12px">${shownSp.map(s=>`<button class="stat" style="text-align:left" onclick="go('/animals?species=${s.id}')"><div style="display:flex;align-items:center;gap:7px;color:var(--purple-3)"><span style="width:18px;height:18px">${spIcon(s.id)}</span><span class="k" style="color:var(--muted)">${esc(s.name)}</span></div><div class="v tnum" style="font-size:22px">${bySpecies[s.id]}</div></button>`).join('')}</div>`));
 
   // Next show countdown
   if(nextShow){ const dleft=daysBetween(todayISO(),nextShow.start);
@@ -1068,7 +1121,6 @@ route('dashboard', ()=>{
   }
 
   // Active layover banner
-  const lay=activeLayover();
   if(lay){ const todayCare=careForLayover(lay.id).filter(c=>c.date===todayISO()); const done=todayCare.filter(c=>c.done).length; const dayN=layoverDays(lay).indexOf(todayISO())+1;
     wrap.append(htmlToFrag(`<div class="card pad" style="margin-top:14px;background:linear-gradient(135deg,#0EA5B7,var(--teal-3));color:#fff;border:none;box-shadow:var(--shadow-lg)" onclick="go('/layover/${lay.id}')">
       <div style="display:flex;align-items:center;gap:12px">
@@ -1077,13 +1129,28 @@ route('dashboard', ()=>{
         <span style="color:#fff">${ICON.chev}</span></div></div>`));
   }
 
-  // Show-day banner (a show today or tomorrow)
-  const showSoon=upcoming.find(s=>daysBetween(todayISO(),s.start)>=0 && daysBetween(todayISO(),s.start)<=1);
-  if(showSoon){ const d0=daysBetween(todayISO(),showSoon.start);
-    wrap.append(htmlToFrag(`<div class="card pad" style="margin-top:14px;background:linear-gradient(135deg,#7C3AED,#DB2777);color:#fff;border:none;box-shadow:var(--shadow-lg)" onclick="go('/showday/${showSoon.id}')">
-      <div style="display:flex;align-items:center;gap:12px"><div style="flex:none;color:#fff;width:32px;height:32px">${ICON.clipboard}</div>
-        <div style="flex:1"><div style="font-size:11px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Show day ${d0===0?'is today':'is tomorrow'}</div><div style="font-size:16px;font-weight:800;margin-top:2px">${esc(showSoon.name)}</div><div style="font-size:12.5px;opacity:.9">Open show-day mode — checklist, weigh-in targets & classes</div></div>
-        <span style="color:#fff">${ICON.chev}</span></div></div>`));
+  // "Star of the day" — a rotating animal spotlight with its photo
+  const aotd=animalOfDay(active);
+  if(aotd){ const st=animalStats(aotd); const cs=coachEligible(aotd)?coachStatus(aotd):null;
+    const gBadge=(gainer&&gainer.a.id===aotd.id)?`🚀 +${gainer.gain} lb this week`:null;
+    wrap.append(htmlToFrag(`<div class="section-title">Star of the day</div>`));
+    const card=el('div','card'); card.style.cssText='overflow:hidden;cursor:pointer;padding:0';
+    card.innerHTML=`<div data-cover style="height:154px;background:linear-gradient(135deg,#3B1B6E,#0D9488);background-size:cover;background-position:center;position:relative">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.04),rgba(10,13,19,.78))"></div>
+        <div style="position:absolute;left:14px;bottom:11px;right:14px;color:#fff">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:5px">${cs?`<span class="pill" style="background:${cs.color}cc;color:#fff;font-size:10px">${cs.label}</span>`:''}${gBadge?`<span class="pill" style="background:rgba(255,255,255,.22);color:#fff;font-size:10px">${gBadge}</span>`:''}</div>
+          <div style="font-size:23px;font-weight:800;line-height:1.05">${esc(aotd.name)}${aotd.barnName?` <span style="font-weight:600;opacity:.8;font-size:15px">“${esc(aotd.barnName)}”</span>`:''}</div>
+          <div style="font-size:12.5px;opacity:.9">${esc(speciesName(aotd.species))}${aotd.breed?' · '+esc(aotd.breed):''}${aotd.sex?' · '+esc(aotd.sex):''}</div>
+        </div></div>
+      <div class="pad" style="display:flex;justify-content:space-around;text-align:center">
+        <div><div style="font-size:10.5px;color:var(--muted);font-weight:800;letter-spacing:.4px">WEIGHT</div><div style="font-size:18px;font-weight:800" class="tnum">${st.curW??'—'}${st.curW!=null?'<small style="color:var(--muted);font-weight:700"> lb</small>':''}</div></div>
+        <div><div style="font-size:10.5px;color:var(--muted);font-weight:800;letter-spacing:.4px">ADG</div><div style="font-size:18px;font-weight:800;color:var(--purple-3)" class="tnum">${st.adgLife??'—'}</div></div>
+        <div><div style="font-size:10.5px;color:var(--muted);font-weight:800;letter-spacing:.4px">TOTAL GAIN</div><div style="font-size:18px;font-weight:800;color:var(--good)" class="tnum">${st.gainTotal!=null?(st.gainTotal>=0?'+':'')+st.gainTotal:'—'}</div></div>
+      </div>`;
+    card.onclick=()=>go('/animal/'+aotd.id);
+    const mid=aotd.profileMediaId||(mediaFor(aotd.id)[0]||{}).blobId;
+    if(mid) Media.url(mid).then(u=>{ if(u){ const cov=$('[data-cover]',card); if(cov)cov.style.backgroundImage=`url(${u})`; } });
+    wrap.append(card);
   }
 
   // Game Plan summary
@@ -1171,6 +1238,7 @@ route('dashboard', ()=>{
   wrap.append(activityList(DB.activity.slice(0,5)));
   wrap.append(htmlToFrag(`<div style="height:8px"></div>`));
   v.append(wrap);
+  $$('[data-count]',v).forEach(n=>countUp(n, +n.dataset.count));  // animate the momentum numbers
 });
 
 function emptyState(icon,h,p){ return `<div class="card"><div class="empty">${icon}<div class="h">${esc(h)}</div><div class="p">${esc(p)}</div></div></div>`; }
