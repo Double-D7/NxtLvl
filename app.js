@@ -217,7 +217,7 @@ const STATUS_COLOR = {Prospect:'info',Active:'good','On feed':'t','Showing':'p',
 const ROLES = ['Owner','Administrator','Editor','Contributor','Viewer','Advisor'];
 const ROLE_RANK = {Owner:6,Administrator:5,Editor:4,Contributor:3,Advisor:2,Viewer:1};
 const FEED_OBJECTIVES = ['Growth','Maintenance','Increase appetite','Add body','Add muscle','Add shape','Increase fill','Increase freshness','Slow weight gain','Hold weight','Reduce body','Improve digestion','Recovery','Show-day preparation','Other'];
-const UNITS = ['lb','oz','cups','scoops','g','mL','cc','tablets','unit'];
+const UNITS = ['lb','oz','cups','scoop','flake','g','mL','cc','tablets','unit'];
 /* Layover / care-log categories — the breeder's time-specific directions */
 const CARE_CATS = [
   {key:'Water',      icon:'water', color:'#38BDF8'},
@@ -824,6 +824,8 @@ async function boot(){
     let healed=false; DB.species.forEach(sp=>{ if(!sp.active && DB.animals.some(a=>a.species===sp.id)){ sp.active=true; healed=true; } });
     // self-heal: inventory products gain a category + base unit for costing
     (DB.inventory||[]).forEach(p=>{ if(!p.category)p.category='feed'; if(!p.unit)p.unit=(p.category==='bedding'?'bag':'lb'); });
+    // self-heal: unit label 'scoops' -> singular 'scoop' (so the picker still matches)
+    (DB.feed||[]).forEach(f=>(f.meals||[]).forEach(m=>(m.items||[]).forEach(it=>{ if(it.unit==='scoops')it.unit='scoop'; })));
     // self-heal: tasks move from a single animalId to an animalIds array,
     // and gain per-animal progress (seeded from any prior whole-task completion)
     (DB.tasks||[]).forEach(t=>{ if(!t.animalIds){ t.animalIds = (t.animalId!=null&&t.animalId!=='')?[t.animalId]:[]; delete t.animalId; }
@@ -1740,13 +1742,15 @@ function openFeedSheet(animalId, feedId, dupFrom){
       <button class="btn sm block" id="addMeal" style="margin:4px 0 8px">${ICON.plus} Add feeding</button>
       <div id="fCostEst" style="margin-bottom:12px"></div>
       <div class="field"><label>Reason for change</label><input class="control" id="fReason" value="${esc(f.reason||'')}" placeholder="e.g. adding cover before show"></div>
-      <div class="field"><label>Advisor recommendation</label><input class="control" id="fAdv" value="${esc(f.advisorRec||'')}"></div>`;
+      <div class="field"><label>Advisor recommendation</label><input class="control" id="fAdv" value="${esc(f.advisorRec||'')}"></div>
+      <datalist id="fProdList">${[...new Set((DB.inventory||[]).map(p=>(p.product||'').trim()).filter(Boolean))].map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
     const mc=$('#fMeals',body);
     (f.meals||[]).forEach((m,mi)=>{ const card=el('div','card pad'); card.style.marginBottom='10px';
-      card.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:8px"><input class="control" value="${esc(m.time)}" data-mtime="${mi}" style="font-weight:700;flex:1" placeholder="Morning"><button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-mdel="${mi}">${ICON.trash}</button></div><div data-items="${mi}"></div><button class="btn sm ghost" data-add="${mi}">${ICON.plus} Add product</button>`;
+      const copyFrom=(f.meals[0]&&f.meals[0].time)||'first feeding';
+      card.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:8px"><input class="control" value="${esc(m.time)}" data-mtime="${mi}" style="font-weight:700;flex:1" placeholder="Morning"><button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-mdel="${mi}">${ICON.trash}</button></div>${mi>0?`<button class="btn sm ghost block" data-same="${mi}" style="margin:0 0 8px">${ICON.copy||ICON.plus} Same as ${esc(copyFrom)}</button>`:''}<div data-items="${mi}"></div><button class="btn sm ghost" data-add="${mi}">${ICON.plus} Add product</button>`;
       const ic=$('[data-items="'+mi+'"]',card);
       (m.items||[]).forEach((it,ii)=>{ const row=el('div'); row.style.cssText='display:flex;gap:6px;margin-bottom:6px';
-        row.innerHTML=`<input class="control" value="${esc(it.product)}" data-p="${mi}-${ii}" placeholder="Product" style="flex:2"><input class="control" type="number" inputmode="decimal" value="${it.amount}" data-a="${mi}-${ii}" placeholder="Qty" style="flex:1;min-width:56px"><select class="control" data-u="${mi}-${ii}" style="flex:1;min-width:70px">${UNITS.map(u=>`<option ${it.unit===u?'selected':''}>${u}</option>`).join('')}</select><button class="iconbtn" style="background:var(--line-2);color:var(--muted);flex:none" data-idel="${mi}-${ii}">${ICON.x}</button>`;
+        row.innerHTML=`<input class="control" value="${esc(it.product)}" data-p="${mi}-${ii}" list="fProdList" placeholder="Product" style="flex:2"><input class="control" type="number" inputmode="decimal" value="${it.amount}" data-a="${mi}-${ii}" placeholder="Qty" style="flex:1;min-width:56px"><select class="control" data-u="${mi}-${ii}" style="flex:1;min-width:70px">${UNITS.map(u=>`<option ${it.unit===u?'selected':''}>${u}</option>`).join('')}</select><button class="iconbtn" style="background:var(--line-2);color:var(--muted);flex:none" data-idel="${mi}-${ii}">${ICON.x}</button>`;
         ic.append(row); });
       mc.append(card); });
     // wire
@@ -1755,6 +1759,16 @@ function openFeedSheet(animalId, feedId, dupFrom){
     $$('[data-add]',body).forEach(b=>b.onclick=()=>{collectMeals();f.meals[+b.dataset.add].items.push({product:'',amount:'',unit:'lb'});draw();});
     $$('[data-idel]',body).forEach(b=>b.onclick=()=>{collectMeals();const[mi,ii]=b.dataset.idel.split('-').map(Number);f.meals[mi].items.splice(ii,1);draw();});
     $('#addMeal',body).onclick=()=>{collectMeals();f.meals.push({time:'Midday',items:[{product:'',amount:'',unit:'lb'}]});draw();};
+    // "Same as morning" — copy the first feeding's products into this feeding
+    $$('[data-same]',body).forEach(b=>b.onclick=()=>{ collectMeals(); const mi=+b.dataset.same;
+      const src=(f.meals[0]&&f.meals[0].items)||[]; f.meals[mi].items=JSON.parse(JSON.stringify(src.length?src:[{product:'',amount:'',unit:'lb'}]));
+      draw(); toast('Copied from '+((f.meals[0]&&f.meals[0].time)||'first feeding'),'good'); });
+    // recognise a typed product from the feed & bedding list → adopt its unit
+    $$('[data-p]',body).forEach(inp=>inp.addEventListener('change',()=>{ const p=productByName(inp.value); if(!p)return;
+      const[mi,ii]=inp.dataset.p.split('-').map(Number);
+      if(p.unit && UNITS.includes(p.unit) && (!f.meals[mi].items[ii].amount || f.meals[mi].items[ii].unit==='lb')){
+        f.meals[mi].items[ii].unit=p.unit; const sel=$('[data-u="'+mi+'-'+ii+'"]',body); if(sel)sel.value=p.unit; }
+      updateCost(); }));
     const updateCost=()=>{ collectMeals(); const dc=feedDailyCost(f); const est=$('#fCostEst',body); if(!est)return;
       est.innerHTML = dc.cost>0 ? `<div class="help">${ICON.money}<span>Estimated <b>${money(dc.cost)}/day</b> at your current feed prices${dc.uncosted.length?` · unpriced: ${esc(dc.uncosted.join(', '))}`:''}</span></div>`
         : (dc.uncosted.length?`<div class="help">${ICON.info}<span>Price these in <b>Feed &amp; bedding costs</b> to auto-cost this ration: ${esc(dc.uncosted.join(', '))}</span></div>`:''); };
@@ -1764,7 +1778,10 @@ function openFeedSheet(animalId, feedId, dupFrom){
   const collectMeals=()=>{ $$('[data-p]',body).forEach(inp=>{const[mi,ii]=inp.dataset.p.split('-').map(Number);f.meals[mi].items[ii].product=inp.value;});
     $$('[data-a]',body).forEach(inp=>{const[mi,ii]=inp.dataset.a.split('-').map(Number);f.meals[mi].items[ii].amount=inp.value;});
     $$('[data-u]',body).forEach(inp=>{const[mi,ii]=inp.dataset.u.split('-').map(Number);f.meals[mi].items[ii].unit=inp.value;});
-    $$('[data-mtime]',body).forEach(inp=>f.meals[+inp.dataset.mtime].time=inp.value); };
+    $$('[data-mtime]',body).forEach(inp=>f.meals[+inp.dataset.mtime].time=inp.value);
+    // preserve header fields across redraws (add product/feeding, same-as, etc.)
+    const g=(id,k)=>{ const e=$(id,body); if(e)f[k]=e.value; };
+    g('#fName','name'); g('#fObj','objective'); g('#fStart','startDate'); g('#fReason','reason'); g('#fAdv','advisorRec'); };
   draw();
   const foot=el('div'); foot.innerHTML=`<button class="btn ghost" data-cancel>Cancel</button><button class="btn primary" data-save>${feedId?'Save':'Start program'}</button>`;
   const sh=openSheet({title:feedId?'Edit feed program':'New feed program',body,foot});
