@@ -1834,8 +1834,74 @@ function mediaCell(m,a,opts){ const cell=el('div','g'); const d=m.captured||m.da
   cell.onclick=()=>openMediaViewer(m,a); return cell; }
 /* weight recorded on or before a date (for growth-timeline context) */
 function weightNear(animalId, dateISO){ const ws=weightsFor(animalId); if(!ws.length)return null; let best=null; ws.forEach(w=>{ if(w.date<=dateISO)best=w; }); return best?+best.weight:(+ws[0].weight); }
-/* the date to stamp on an upload — use the file's own date when available */
-function fileCapturedDate(file){ const t=file&&file.lastModified; if(!t)return todayISO(); const iso=new Date(t).toISOString().slice(0,10); return iso>todayISO()?todayISO():iso; }
+/* ---- Read the REAL capture date from the file itself ----
+   file.lastModified is when the file was written to THIS device (a download, an
+   export, an AirDrop, a text message) — not when it was shot. So we parse the
+   capture date out of the file's own metadata first: EXIF DateTimeOriginal for
+   photos, the QuickTime/MP4 `mvhd` creation time for videos. lastModified is
+   only a last resort, and the user always gets to confirm/adjust on upload. */
+async function _bytes(file,start,end){ return new Uint8Array(await file.slice(start,end).arrayBuffer()); }
+function _lastModDate(file){ const t=file&&file.lastModified; if(!t)return null; return new Date(t).toISOString().slice(0,10); }
+async function exifCapturedDate(file){
+  try{
+    const buf=await _bytes(file,0,Math.min(file.size,256*1024)); const dv=new DataView(buf.buffer);
+    if(dv.getUint16(0)!==0xFFD8)return null;               // not a JPEG
+    let off=2;
+    while(off+4<dv.byteLength){
+      if(dv.getUint8(off)!==0xFF)break; const marker=dv.getUint8(off+1);
+      if(marker===0xDA||marker===0xD9)break;               // start of scan / end
+      const size=dv.getUint16(off+2);
+      if(marker===0xE1 && dv.getUint32(off+4)===0x45786966) return _tiffDate(dv,off+10); // APP1 "Exif"
+      off+=2+size;
+    }
+  }catch(e){} return null;
+}
+function _tiffDate(dv,tiff){
+  const le=dv.getUint16(tiff)===0x4949; const u16=o=>dv.getUint16(o,le), u32=o=>dv.getUint32(o,le);
+  const readIFD=o=>{ const n=u16(o); const m={}; for(let i=0;i<n;i++){ const e=o+2+i*12; m[u16(e)]={cnt:u32(e+4),val:e+8}; } return m; };
+  const ascii=en=>{ let p=en.cnt>4?tiff+u32(en.val):en.val, s=''; for(let i=0;i<en.cnt-1;i++)s+=String.fromCharCode(dv.getUint8(p+i)); return s; };
+  const d0=readIFD(tiff+u32(tiff+4)); let ds=null;
+  if(d0[0x8769]){ const de=readIFD(tiff+u32(d0[0x8769].val)); if(de[0x9003])ds=ascii(de[0x9003]); else if(de[0x9004])ds=ascii(de[0x9004]); }
+  if(!ds && d0[0x0132])ds=ascii(d0[0x0132]);
+  const m=ds&&ds.match(/^(\d{4}):(\d{2}):(\d{2})/); return m?`${m[1]}-${m[2]}-${m[3]}`:null;
+}
+async function videoCapturedDate(file){
+  try{ let off=0; const size=file.size;
+    while(off+16<=size){
+      const h=await _bytes(file,off,off+16); const dv=new DataView(h.buffer);
+      let bs=dv.getUint32(0); const type=String.fromCharCode(h[4],h[5],h[6],h[7]); let hl=8;
+      if(bs===1){ bs=dv.getUint32(8)*4294967296+dv.getUint32(12); hl=16; } else if(bs===0){ bs=size-off; }
+      if(type==='moov') return await _moovDate(file,off+hl,off+bs);
+      if(bs<8)break; off+=bs;                              // slice past mdat etc. without reading it
+    }
+  }catch(e){} return null;
+}
+async function _moovDate(file,start,end){
+  let off=start;
+  while(off+8<=end){
+    const h=await _bytes(file,off,Math.min(off+16,end)); const dv=new DataView(h.buffer);
+    let bs=dv.getUint32(0); const type=String.fromCharCode(h[4],h[5],h[6],h[7]); let hl=8;
+    if(bs===1){ bs=dv.getUint32(8)*4294967296+dv.getUint32(12); hl=16; } else if(bs===0){ bs=end-off; }
+    if(type==='mvhd'){ const b=await _bytes(file,off+hl,off+hl+24); const bv=new DataView(b.buffer);
+      const ver=bv.getUint8(0); const secs=ver===1?bv.getUint32(4)*4294967296+bv.getUint32(8):bv.getUint32(4);
+      if(!secs)return null; const unix=(secs-2082844800)*1000; if(unix<=0)return null;   // mvhd epoch = 1904
+      return new Date(unix).toISOString().slice(0,10); }
+    if(bs<8)break; off+=bs;
+  }
+  return null;
+}
+/* Best guess for a file's capture date + where it came from (drives the confirm UI). */
+async function readCapturedDate(file){
+  let d=null, src='file';
+  try{
+    if((file.type||'').startsWith('image/')){ d=await exifCapturedDate(file); if(d)src='photo'; }
+    else if((file.type||'').startsWith('video/')){ d=await videoCapturedDate(file); if(d)src='video'; }
+  }catch(e){}
+  if(!d){ d=_lastModDate(file); src='file'; }
+  if(!d){ d=todayISO(); src='today'; }
+  if(d>todayISO()){ d=todayISO(); src='today'; }
+  return { date:d, src };
+}
 /* growth story: media grouped by date with weight context, start→finish */
 function mediaTimeline(box, a, items, order){
   const dir = order==='desc' ? -1 : 1;   // asc = oldest→newest (start to finish)
@@ -1858,16 +1924,56 @@ function hiddenFile(accept,cb,opts){ let inp=el('input'); inp.type='file'; inp.a
   inp.onchange=()=>{ if(inp.files.length)cb([...inp.files]); inp.value=''; }; document.body.appendChild(inp); return inp; }
 async function addMedia(animalId,files,kind){
   if(!can('addRecord')){ toast('Your role can’t upload media','bad'); return; }
+  toast('Reading dates…','');
+  // read each file's REAL capture date, then let the user confirm/adjust before it lands
+  const entries=[];
+  for(const file of files){ const g=await readCapturedDate(file); entries.push({file,date:g.date,src:g.src}); }
+  openMediaDateSheet(animalId,entries,kind);
+}
+/* Confirm-capture-date step: shows the date we read from each file (and where it
+   came from) so a wrong one — common on shared/downloaded/re-exported clips —
+   can be fixed in one tap before it joins the growth timeline. */
+function openMediaDateSheet(animalId,entries,kind){
+  const objUrls=[];
+  const note=s=> s==='photo'?'Read from the photo’s metadata'
+    : s==='video'?'Read from the video’s metadata'
+    : s==='file'?'From the file date — please check'
+    : 'Couldn’t read a date — please set';
+  const good=s=> s==='photo'||s==='video';
+  const body=el('div');
+  body.innerHTML=`<div class="help">${ICON.info}<span>We pull each file’s capture date from the photo or video itself. Anything shared, downloaded or re-exported can lose that — check the dates below and fix any before they land on the timeline.</span></div><div id="mdList"></div>`;
+  const list=$('#mdList',body);
+  entries.forEach(en=>{
+    const row=el('div','card pad'); row.style.marginTop='8px';
+    row.innerHTML=`<div style="display:flex;align-items:center;gap:10px">
+        <div data-th style="width:46px;height:46px;border-radius:8px;background:var(--line-2) center/cover;flex:none;display:flex;align-items:center;justify-content:center;color:var(--muted)">${kind==='video'?ICON.video:''}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(en.file.name||(kind==='video'?'Video':'Photo'))}</div>
+          <div style="font-size:11px;color:${good(en.src)?'var(--good)':'var(--warn)'}">${note(en.src)}</div>
+        </div>
+        <input class="control" type="date" data-d max="${todayISO()}" value="${en.date}" style="width:148px;flex:none">
+      </div>`;
+    const inp=$('[data-d]',row); inp.onchange=()=>{ en.date=inp.value||en.date; };
+    if(!(en.file.type||'').startsWith('video')){ try{ const u=URL.createObjectURL(en.file); objUrls.push(u); $('[data-th]',row).style.backgroundImage=`url(${u})`; }catch(e){} }
+    list.append(row);
+  });
+  const foot=el('div'); foot.innerHTML=`<button class="btn" data-cancel style="flex:1">Cancel</button><button class="btn primary" data-save style="flex:1">Add ${entries.length>1?entries.length+' files':'to timeline'}</button>`;
+  const cleanup=()=>objUrls.forEach(u=>{try{URL.revokeObjectURL(u);}catch(e){}});
+  const sh=openSheet({title:'Confirm date'+(entries.length>1?'s':''),body,foot});
+  $('[data-cancel]',sh).onclick=()=>{ cleanup(); closeSheet(); };
+  $('[data-save]',sh).onclick=()=>{ cleanup(); closeSheet(); commitMedia(animalId,entries,kind); };
+}
+async function commitMedia(animalId,entries,kind){
   toast('Uploading…','');
-  for(const file of files){ const blobId=uid('blob'); await Media.put(blobId,file); await Media.upload(blobId,file);
-    const cap=fileCapturedDate(file);
+  for(const en of entries){ const file=en.file; const blobId=uid('blob'); await Media.put(blobId,file); await Media.upload(blobId,file);
+    const cap=en.date;
     const rec=stamp({id:uid('m'),animalId,kind:kind||(file.type.startsWith('video')?'video':'photo'),blobId,size:file.size,mime:file.type,view: kind==='video'?'Walking video':'Side view',date:cap,captured:cap,by:DB.currentUserId,caption:'',shared:false});
     // capture weight+feed context
     const ws=weightsFor(animalId); rec.contextWeight=ws.length?+ws[ws.length-1].weight:null; const cf=currentFeed(animalId); rec.contextFeed=cf?cf.name:null;
     if(!getAnimal(animalId).profileMediaId && kind!=='video'){ getAnimal(animalId).profileMediaId=blobId; }
     DB.media.push(rec);
   }
-  logAct('media',`Uploaded ${files.length} ${kind}${files.length>1?'s':''}`,animalId); milestone('first:photo','First progress photo!','Your growth timeline starts here 📸','📸'); save(); toast('Media added — dated for your timeline','good'); render();
+  logAct('media',`Uploaded ${entries.length} ${kind}${entries.length>1?'s':''}`,animalId); milestone('first:photo','First progress photo!','Your growth timeline starts here 📸','📸'); save(); toast('Media added — dated for your timeline','good'); render();
 }
 /* pick a photo from the library (or camera) and set it as the animal's profile picture */
 function uploadProfilePhoto(animalId){
@@ -1877,7 +1983,7 @@ function uploadProfilePhoto(animalId){
     toast('Uploading…','');
     const blobId=uid('blob'); await Media.put(blobId,file); await Media.upload(blobId,file);
     const a=getAnimal(animalId); if(!a) return;
-    const ws=weightsFor(animalId); const cf=currentFeed(animalId); const cap=fileCapturedDate(file);
+    const ws=weightsFor(animalId); const cf=currentFeed(animalId); const cap=(await readCapturedDate(file)).date;
     DB.media.push(stamp({id:uid('m'),animalId,kind:'photo',blobId,size:file.size,mime:file.type,view:'Profile',date:cap,captured:cap,by:DB.currentUserId,caption:'',shared:false,contextWeight:ws.length?+ws[ws.length-1].weight:null,contextFeed:cf?cf.name:null}));
     a.profileMediaId=blobId; touch(a);
     logAct('media','Set profile photo',animalId); save(); toast('Profile photo updated','good'); render();
