@@ -111,6 +111,38 @@ function toast(msg, kind){ const t=$('#toast'); const ic = kind==='good'?ICON.ch
   requestAnimationFrame(()=>t.classList.add('show')); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200);
   if(navigator.vibrate && kind==='good') navigator.vibrate(12); }
 
+/* ---------------- Celebrations (confetti + milestones) ---------------- */
+function confetti(){
+  try{ if(matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
+  const cv=el('canvas'); cv.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:200';
+  document.body.appendChild(cv); const ctx=cv.getContext('2d'); const dpr=Math.min(2,window.devicePixelRatio||1);
+  const W=innerWidth, H=innerHeight; cv.width=W*dpr; cv.height=H*dpr; ctx.scale(dpr,dpr);
+  const colors=['#8B5CF6','#2DD4BF','#F59E0B','#EF4444','#22C55E','#C4B5FD','#FB923C'];
+  const parts=[]; for(let i=0;i<110;i++)parts.push({x:W/2+(Math.random()-.5)*120, y:H*0.30, vx:(Math.random()-.5)*9, vy:Math.random()*-10-4, g:0.26+Math.random()*0.14, s:5+Math.random()*6, rot:Math.random()*6.28, vr:(Math.random()-.5)*0.5, c:colors[i%colors.length], sq:Math.random()<.55});
+  const start=performance.now();
+  const draw=now=>{ const t=now-start; ctx.clearRect(0,0,W,H);
+    parts.forEach(p=>{ p.vy+=p.g; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr; ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.globalAlpha=Math.max(0,1-t/2300); ctx.fillStyle=p.c;
+      if(p.sq)ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*.62); else {ctx.beginPath();ctx.arc(0,0,p.s/2,0,6.3);ctx.fill();} ctx.restore(); });
+    if(t<2300)requestAnimationFrame(draw); else cv.remove(); };
+  requestAnimationFrame(draw);
+}
+function celebrate(title, sub, emoji){
+  if(navigator.vibrate) navigator.vibrate([18,45,18]); confetti();
+  const old=$('#celebrate'); if(old)old.remove();
+  const c=el('div'); c.id='celebrate';
+  c.style.cssText='position:fixed;left:50%;top:32%;transform:translate(-50%,-50%) scale(.82);z-index:201;background:linear-gradient(135deg,#4C1D95,#0D9488);color:#fff;padding:18px 24px;border-radius:22px;box-shadow:0 24px 60px rgba(0,0,0,.55);text-align:center;max-width:80vw;opacity:0;transition:opacity .25s cubic-bezier(.2,.8,.2,1),transform .25s cubic-bezier(.2,.8,.2,1)';
+  c.innerHTML=`<div style="font-size:34px;margin-bottom:2px">${emoji||'🎉'}</div><div style="font-size:17px;font-weight:800;line-height:1.2">${esc(title)}</div>${sub?`<div style="font-size:13px;opacity:.92;margin-top:4px">${esc(sub)}</div>`:''}`;
+  c.onclick=()=>c.remove(); document.body.appendChild(c);
+  requestAnimationFrame(()=>{ c.style.opacity='1'; c.style.transform='translate(-50%,-50%) scale(1)'; });
+  setTimeout(()=>{ if(!c.parentNode)return; c.style.opacity='0'; c.style.transform='translate(-50%,-50%) scale(.92)'; setTimeout(()=>c.remove(),320); }, 2700);
+}
+/* fire a celebration once per key (keys are remembered so it never repeats) */
+function milestone(key, title, sub, emoji){ if(!DB) return false; DB.milestones=DB.milestones||{}; if(DB.milestones[key]) return false;
+  DB.milestones[key]=nowISO(); save(); celebrate(title, sub, emoji); return true; }
+function checkStreakMilestone(){ const n=activityStreak(); const ms=[3,7,14,30,50,100,200]; DB.milestones=DB.milestones||{}; let fired=null;
+  ms.forEach(m=>{ if(n>=m && !DB.milestones['streak:'+m]){ DB.milestones['streak:'+m]=nowISO(); fired=m; } });
+  if(fired!=null){ save(); celebrate(fired+'-day streak!', 'You’re showing up every day 💪', '🔥'); } }
+
 /* ===================================================================
    INDEXEDDB — media blobs (photos / videos) kept out of localStorage
    =================================================================== */
@@ -234,7 +266,7 @@ function blankDB(){
     animals:[], weights:[], feed:[], media:[], measurements:[], exercise:[],
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
-    layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[],
+    layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
   };
 }
@@ -860,7 +892,7 @@ const Push = {
   async test(){
     if(this.permission()!=='granted'){ const p=await Notification.requestPermission(); if(p!=='granted'){ toast('Allow notifications first','bad'); return; } }
     const reg=await this.registration(); if(!reg){ toast('Service worker not ready','bad'); return; }
-    reg.showNotification('Devitt Family Show Team', { body:'Test notification — you’re all set. Reminders will look like this.', icon:'icon-192.png', badge:'favicon-32.png', vibrate:[40,30,40], data:{url:'./'} });
+    reg.showNotification((DB.team&&DB.team.name)||'Show Team', { body:'Test notification — you’re all set. Reminders will look like this.', icon:'icon-192.png', badge:'favicon-32.png', vibrate:[40,30,40], data:{url:'./'} });
     toast('Sent a test notification','good');
   }
 };
@@ -875,7 +907,7 @@ function renderLogin(){
   const isSignup = !cloud ? !existing : loginMode==='signup';
   $('#app').innerHTML = `<div class="login"><div class="box">
     <div class="logo">${brandImg()}</div>
-    <h1>Devitt Family Show Team</h1><div class="tag">Show Livestock Management</div>
+    <h1>Show Team</h1><div class="tag">Show livestock, dialed in.</div>
     <div class="card">
       <div class="oauth">
         <button class="btn block" data-oauth="google">${gicon()} Continue with Google</button>
@@ -1034,7 +1066,10 @@ function activityStreak(){ const days=new Set((DB.activity||[]).map(a=>(a.ts||''
 function herdAvgAdg(active){ const xs=active.map(a=>animalStats(a).adgLife).filter(v=>v!=null); return xs.length?round(xs.reduce((s,v)=>s+v,0)/xs.length,2):null; }
 function biggestGainer(active, days=7){ let best=null; const cut=addDaysISO(todayISO(),-days);
   active.forEach(a=>{ const ws=weightsFor(a.id).filter(w=>w.date>=cut); if(ws.length<2)return; const g=round(+ws[ws.length-1].weight-+ws[0].weight,1); if(g>0&&(!best||g>best.gain))best={a,gain:g}; }); return best; }
-function animalOfDay(active){ if(!active.length)return null; const key=todayISO().replace(/-/g,''); let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0; return active[h%active.length]; }
+let starOverride=null;  // tap the shuffle button to feature a different animal
+function animalOfDay(active){ if(!active.length)return null;
+  if(starOverride){ const o=active.find(a=>a.id===starOverride); if(o)return o; }
+  const key=todayISO().replace(/-/g,''); let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0; return active[h%active.length]; }
 function barnBriefing(ctx){ const p=[];
   if(ctx.showSoon) p.push(`${ctx.showSoon.name} ${daysBetween(todayISO(),ctx.showSoon.start)===0?'is today':'is tomorrow'} 🏆`);
   else if(ctx.nextShow) p.push(`${daysBetween(todayISO(),ctx.nextShow.start)} days to ${ctx.nextShow.name}`);
@@ -1133,7 +1168,9 @@ route('dashboard', ()=>{
   const aotd=animalOfDay(active);
   if(aotd){ const st=animalStats(aotd); const cs=coachEligible(aotd)?coachStatus(aotd):null;
     const gBadge=(gainer&&gainer.a.id===aotd.id)?`🚀 +${gainer.gain} lb this week`:null;
-    wrap.append(htmlToFrag(`<div class="section-title">Star of the day</div>`));
+    const stitle=htmlToFrag(`<div class="section-title">Star of the day ${active.length>1?`<button class="more" data-shuffle>${ICON.restore} Shuffle</button>`:''}</div>`);
+    wrap.append(stitle);
+    if(active.length>1){ const sb=$('[data-shuffle]',wrap); if(sb)sb.onclick=()=>{ const pool=active.filter(a=>a.id!==aotd.id); starOverride=pool[Math.floor(Math.random()*pool.length)].id; render(); }; }
     const card=el('div','card'); card.style.cssText='overflow:hidden;cursor:pointer;padding:0';
     card.innerHTML=`<div data-cover style="height:154px;background:linear-gradient(135deg,#3B1B6E,#0D9488);background-size:cover;background-position:center;position:relative">
         <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.04),rgba(10,13,19,.78))"></div>
@@ -1239,14 +1276,17 @@ route('dashboard', ()=>{
   wrap.append(htmlToFrag(`<div style="height:8px"></div>`));
   v.append(wrap);
   $$('[data-count]',v).forEach(n=>countUp(n, +n.dataset.count));  // animate the momentum numbers
+  setTimeout(checkStreakMilestone, 400);  // celebrate a streak milestone if one was just reached
 });
 
 function emptyState(icon,h,p){ return `<div class="card"><div class="empty">${icon}<div class="h">${esc(h)}</div><div class="p">${esc(p)}</div></div></div>`; }
 function animalRow(a, right, sub){
   const st=animalStats(a);
+  const ws=weightsFor(a.id);
+  const spark = ws.length>=3 ? sparkline(ws.slice(-8).map(w=>+w.weight), (st.adgLife==null||st.adgLife>=0)?'var(--teal-3)':'var(--bad)') : '';
   const li=el('div','li');
   li.innerHTML=`<div class="thumb" data-thumb>${esc(initials(a.name))}</div>
-    <div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${sub!=null?esc(sub):esc(speciesName(a.species)+' · '+a.breed+(st.curW!=null?' · '+st.curW+' lb':''))}</div></div>
+    <div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${sub!=null?esc(sub):esc(speciesName(a.species)+' · '+a.breed+(st.curW!=null?' · '+st.curW+' lb':''))}</div>${spark?`<div style="margin-top:5px;display:flex;align-items:center;gap:7px">${spark}${st.adgLife!=null?`<span style="font-size:11px;font-weight:800;color:${st.adgLife>=0?'var(--good)':'var(--bad)'}">${st.adgLife>=0?'+':''}${st.adgLife}<span style="color:var(--muted);font-weight:600"> lb/d</span></span>`:''}</div>`:''}</div>
     <div class="r">${right||''}</div>`;
   if(a.profileMediaId) Media.url(a.profileMediaId).then(u=>{ if(u){ const t=$('[data-thumb]',li); t.style.backgroundImage=`url(${u})`; t.style.backgroundSize='cover'; t.textContent=''; }});
   li.onclick=()=>go('/animal/'+a.id);
@@ -1673,6 +1713,11 @@ function openWeightSheet(animalId, weightId){
     if(weightId){ Object.assign(DB.weights.find(x=>x.id===weightId),rec); touch(DB.weights.find(x=>x.id===weightId)); logAct('weight','Edited weight '+val+' lb',animalId); }
     else { DB.weights.push(stamp({id:uid('w'),animalId,...rec})); logAct('weight','Logged '+val+' lb',animalId); }
     save(); closeSheet(); toast('Weight saved','good'); render();
+    if(!weightId){  // celebrate milestones on a fresh weigh-in
+      const prevMax = ws.length ? Math.max(...ws.map(w=>+w.weight)) : (a.startWeight!=null?+a.startWeight:0);
+      if(a.targetWeight && val>=+a.targetWeight && prevMax<+a.targetWeight) milestone('goal:'+animalId+':'+a.targetWeight, `${a.name} hit the goal!`, `${val} lb — target reached`, '🎯');
+      else if(DB.weights.length===1) milestone('first:weight', 'First weigh-in logged!', 'You’re officially tracking gains', '⚖️');
+    }
   };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete weight','Remove this weight record?','Delete',true)){ DB.weights=DB.weights.filter(x=>x.id!==weightId); save(); closeSheet(); render(); } };
 }
@@ -1868,7 +1913,7 @@ async function generateReel(a, items, opts, onProgress){
       ctx.font='700 26px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.fillStyle='#fff'; ctx.textBaseline='top';
       ctx.fillText(a.name, 26, 26);
       ctx.font='600 18px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.fillStyle='rgba(255,255,255,.85)';
-      ctx.fillText('Devitt Family Show Team', 26, 58);
+      ctx.fillText((DB.team&&DB.team.name)||'Show Team', 26, 58);
       if(opts.labels!==false){ const m=frames[idx].m; const dd=fmtDate(m.captured||m.date);
         ctx.textBaseline='bottom'; ctx.font='800 40px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.fillStyle='#fff';
         const wt=(m.contextWeight!=null)?(m.contextWeight+' lb'):''; if(wt) ctx.fillText(wt, 26, S-58);
@@ -1998,7 +2043,7 @@ function openShareSheet(animalId){
     btn.disabled=false; btn.textContent=orig;
     if(link){ $('#shOut',body).innerHTML=`<div class="card pad" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);margin-top:4px"><div style="font-weight:800;margin-bottom:6px">Link ready 🎉</div><div style="font-size:12.5px;word-break:break-all;color:var(--ink-2)">${esc(link)}</div><div class="btn-row" style="margin-top:10px"><button class="btn primary" id="shCopy" style="flex:1">${ICON.copy} Copy link</button><button class="btn" id="shShare">${ICON.share}</button></div></div>`;
       $('#shCopy',body).onclick=()=>{ navigator.clipboard&&navigator.clipboard.writeText(link); toast('Copied','good'); };
-      $('#shShare',body).onclick=async()=>{ if(navigator.share){ try{ await navigator.share({title:a.name+' — Devitt Family Show Team', url:link}); }catch(e){} } else { navigator.clipboard&&navigator.clipboard.writeText(link); toast('Copied','good'); } };
+      $('#shShare',body).onclick=async()=>{ if(navigator.share){ try{ await navigator.share({title:a.name+' — '+((DB.team&&DB.team.name)||'Show Team'), url:link}); }catch(e){} } else { navigator.clipboard&&navigator.clipboard.writeText(link); toast('Copied','good'); } };
       if(!$('#shList',body)){ /* add list section */ } paintList();
     }
   };
@@ -2328,7 +2373,10 @@ function openResultSheet(id){
     {type:'row',fields:[{k:'premium',type:'number',label:'Premium'},{k:'points',type:'number',label:'Points'}]},
     {k:'judgeComments',type:'textarea',label:'Judge comments'},
     {k:'lessons',type:'textarea',label:'Lessons learned'}],
-    onSave:s=>{ e.result=s; touch(e); if(s.salePrice)DB.income.push(stamp({id:uid('in'),animalId:e.animalId,source:'Sale proceeds',amount:+s.salePrice,date:todayISO()})); if(s.premium)DB.income.push(stamp({id:uid('in'),animalId:e.animalId,source:'Premium',amount:+s.premium,date:todayISO()})); logAct('show','Recorded result: placed '+(s.placing||'?'),e.animalId); save(); toast('Result saved','good'); render(); } });
+    onSave:s=>{ e.result=s; touch(e); if(s.salePrice)DB.income.push(stamp({id:uid('in'),animalId:e.animalId,source:'Sale proceeds',amount:+s.salePrice,date:todayISO()})); if(s.premium)DB.income.push(stamp({id:uid('in'),animalId:e.animalId,source:'Premium',amount:+s.premium,date:todayISO()})); logAct('show','Recorded result: placed '+(s.placing||'?'),e.animalId); save(); toast('Result saved','good'); render();
+      const an=getAnimal(e.animalId); const champ=/champ|grand|reserve|supreme|banner/i.test((s.divisionPlacing||'')+' '+(s.bannerNote||''));
+      if(champ) milestone('banner:'+e.id, `${an?an.name:'Your animal'} took a banner!`, esc(s.divisionPlacing||s.bannerNote), '🏆');
+      else if(String(s.placing).trim()==='1') milestone('win:'+e.id, `${an?an.name:'Your animal'} won the class!`, '1st place 🥇', '🥇'); } });
 }
 
 /* ===================================================================
@@ -2590,7 +2638,7 @@ function eventDescription(ev){ const parts=[]; if(ev.notes)parts.push(ev.notes);
   const sh=ev.showId?DB.shows.find(s=>s.id===ev.showId):null; if(sh)parts.push('Show: '+sh.name);
   return parts.join('\n'); }
 function buildICS(events){
-  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Devitt Family Show Team//EN','CALSCALE:GREGORIAN'];
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Show Team//EN','CALSCALE:GREGORIAN'];
   events.forEach(ev=>{ const d=ev.date.replace(/-/g,'');
     lines.push('BEGIN:VEVENT'); lines.push('UID:'+(ev.id||uid('ev'))+'@dfst'); lines.push('DTSTAMP:'+icsStamp());
     if(ev.allDay){ const next=new Date(parseD(ev.date)); next.setDate(next.getDate()+1); const nd=next.getFullYear()+pad2(next.getMonth()+1)+pad2(next.getDate());

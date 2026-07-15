@@ -1,4 +1,4 @@
-# Devitt Family Show Team
+# Show Team
 
 **Show Livestock Management** — a polished, mobile-first app for a family show
 livestock operation to manage an unlimited number of show animals across
