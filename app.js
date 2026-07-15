@@ -1781,31 +1781,75 @@ function openFeedSheet(animalId, feedId, dupFrom){
 }
 
 /* ---------- MEDIA TAB ---------- */
+let mediaView='timeline', mediaOrder='asc';
 function tabMedia(box,a){
   const items=mediaFor(a.id);
-  const photoCount=items.filter(m=>m.kind!=='video').length;
+  const photos=items.filter(m=>m.kind!=='video').slice().sort((x,y)=>(x.captured||x.date)<(y.captured||y.date)?-1:1);
+  const photoCount=photos.length;
   box.innerHTML=`<div class="btn-row"><button class="btn primary" id="upPhoto" style="flex:1">${ICON.camera} Photo</button><button class="btn teal" id="upVideo" style="flex:1">${ICON.video} Video</button></div>
     ${photoCount>=2?`<button class="btn block" id="makeReel" style="margin-top:10px;background:linear-gradient(135deg,var(--purple-3),var(--teal-3));color:#fff;border:none">${ICON.video} Create growth reel</button>`:''}
-    <div class="seg" id="mView" style="margin-top:12px"><button class="on" data-v="gallery">Gallery</button><button data-v="timeline">Timeline</button><button data-v="compare">Before / After</button></div>
-    <div id="mBody" style="margin-top:12px"></div>`;
+    <div id="journey"></div>
+    <div class="seg" id="mView" style="margin-top:12px"><button data-v="timeline">Timeline</button><button data-v="gallery">Gallery</button><button data-v="compare">Before / After</button></div>
+    <div id="mBody" style="margin-top:4px"></div>`;
   const photoIn=hiddenFile('image/*',(files)=>addMedia(a.id,files,'photo'));
   const videoIn=hiddenFile('video/*',(files)=>addMedia(a.id,files,'video'));
   $('#upPhoto',box).onclick=()=>photoIn.click(); $('#upVideo',box).onclick=()=>videoIn.click();
   if($('#makeReel',box))$('#makeReel',box).onclick=()=>openReelSheet(a.id);
-  let view='gallery';
-  const draw=()=>{ const mb=$('#mBody',box);
-    if(!items.length){ mb.innerHTML=emptyState(ICON.media,'No media yet','Upload weekly side, front, rear and walking media to document progress.'); return; }
-    if(view==='gallery'){ const g=el('div','gallery'); items.forEach(m=>g.append(mediaCell(m,a))); mb.innerHTML=''; mb.append(g); }
-    else if(view==='timeline'){ mb.innerHTML=''; const grp={}; items.forEach(m=>{ const wk=m.captured||m.date; (grp[wk]=grp[wk]||[]).push(m); });
-      Object.keys(grp).sort().reverse().forEach(d=>{ mb.append(htmlToFrag(`<div class="section-title" style="margin-top:8px">${fmtDate(d)} · ${relDays(d)}</div>`)); const g=el('div','gallery'); grp[d].forEach(m=>g.append(mediaCell(m,a))); mb.append(g); }); }
+  // Growth journey — then → now
+  if(photoCount>=2){ const A=photos[0], B=photos[photoCount-1];
+    const days=daysBetween(A.captured||A.date, B.captured||B.date);
+    const wa=weightNear(a.id,A.captured||A.date), wb=weightNear(a.id,B.captured||B.date);
+    const dw=(wa!=null&&wb!=null)?round(wb-wa,1):null;
+    const jc=el('div','card pad'); jc.style.cssText='margin-top:12px;cursor:pointer';
+    jc.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-weight:800;font-size:14px">Growth journey</div><span class="pill p" style="font-size:10px">${days} day${days===1?'':'s'}${dw!=null?' · '+(dw>=0?'+':'')+dw+' lb':''}</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1"><div data-ja style="aspect-ratio:1;border-radius:12px;background:var(--line-2) center/cover"></div><div style="text-align:center;font-size:11px;color:var(--muted);font-weight:700;margin-top:4px">${fmtShort(A.captured||A.date)}${wa!=null?' · '+wa+' lb':''}</div></div>
+        <div style="flex:none;color:var(--purple-3)">${ICON.chev}</div>
+        <div style="flex:1"><div data-jb style="aspect-ratio:1;border-radius:12px;background:var(--line-2) center/cover"></div><div style="text-align:center;font-size:11px;color:var(--muted);font-weight:700;margin-top:4px">${fmtShort(B.captured||B.date)}${wb!=null?' · '+wb+' lb':''}</div></div>
+      </div>`;
+    Media.url(A.blobId).then(u=>{ if(u)$('[data-ja]',jc).style.backgroundImage=`url(${u})`; });
+    Media.url(B.blobId).then(u=>{ if(u)$('[data-jb]',jc).style.backgroundImage=`url(${u})`; });
+    jc.onclick=()=>{ mediaView='compare'; render(); };
+    $('#journey',box).append(jc);
+  }
+  const seg=$('#mView',box); $$('button',seg).forEach(b=>b.classList.toggle('on',b.dataset.v===mediaView));
+  const draw=()=>{ const mb=$('#mBody',box); mb.innerHTML='';
+    if(!items.length){ mb.innerHTML=emptyState(ICON.media,'No media yet','Upload weekly side, front, rear and walking photos and the app will build a dated growth timeline.'); return; }
+    if(mediaView==='gallery'){ const g=el('div','gallery'); items.forEach(m=>g.append(mediaCell(m,a))); mb.append(g); }
+    else if(mediaView==='timeline'){
+      mb.append(htmlToFrag(`<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="chip sm" id="mOrder" style="padding:5px 11px;font-size:12px">${mediaOrder==='asc'?ICON.download:ICON.upload} ${mediaOrder==='asc'?'Oldest first':'Newest first'}</button></div>`));
+      const tl=el('div'); mb.append(tl); mediaTimeline(tl,a,items,mediaOrder);
+      $('#mOrder',mb).onclick=()=>{ mediaOrder=mediaOrder==='asc'?'desc':'asc'; draw(); };
+    }
     else { drawCompare(mb,a,items); }
   };
   draw();
-  $$('#mView button',box).forEach(b=>b.onclick=()=>{ view=b.dataset.v; $$('#mView button',box).forEach(x=>x.classList.toggle('on',x===b)); draw(); });
+  $$('#mView button',box).forEach(b=>b.onclick=()=>{ mediaView=b.dataset.v; $$('#mView button',box).forEach(x=>x.classList.toggle('on',x===b)); draw(); });
 }
-function mediaCell(m,a){ const cell=el('div','g'); cell.innerHTML=`<div class="tag">${esc(m.view||m.kind)}</div>`+(m.kind==='video'?`<div class="play">${ICON.video}</div>`:'');
+function mediaCell(m,a,opts){ const cell=el('div','g'); const d=m.captured||m.date;
+  cell.innerHTML=`<div class="tag" style="top:auto;bottom:5px;left:5px;background:rgba(0,0,0,.68)">${esc(fmtShort(d))}</div>`+
+    ((opts&&opts.showName&&a&&a.name)?`<div class="tag" style="max-width:78%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</div>`:(m.view&&m.view!=='Profile'?`<div class="tag" style="left:auto;right:5px;background:rgba(139,92,246,.85)">${esc(m.view)}</div>`:''))+
+    (m.kind==='video'?`<div class="play">${ICON.video}</div>`:'');
   Media.url(m.blobId).then(u=>{ if(!u)return; const e=m.kind==='video'?el('video'):el('img'); e.src=u; if(m.kind==='video')e.muted=true; cell.prepend(e); });
   cell.onclick=()=>openMediaViewer(m,a); return cell; }
+/* weight recorded on or before a date (for growth-timeline context) */
+function weightNear(animalId, dateISO){ const ws=weightsFor(animalId); if(!ws.length)return null; let best=null; ws.forEach(w=>{ if(w.date<=dateISO)best=w; }); return best?+best.weight:(+ws[0].weight); }
+/* the date to stamp on an upload — use the file's own date when available */
+function fileCapturedDate(file){ const t=file&&file.lastModified; if(!t)return todayISO(); const iso=new Date(t).toISOString().slice(0,10); return iso>todayISO()?todayISO():iso; }
+/* growth story: media grouped by date with weight context, start→finish */
+function mediaTimeline(box, a, items, order){
+  const dir = order==='desc' ? -1 : 1;   // asc = oldest→newest (start to finish)
+  const grp={}; items.forEach(m=>{ const d=m.captured||m.date; (grp[d]=grp[d]||[]).push(m); });
+  const dates=Object.keys(grp).sort((x,y)=> x<y?-dir:dir);
+  box.innerHTML='';
+  dates.forEach(d=>{ const w=weightNear(a.id,d);
+    box.append(htmlToFrag(`<div style="display:flex;align-items:center;gap:9px;margin:16px 0 8px">
+      <div style="width:10px;height:10px;border-radius:50%;background:var(--purple-3);box-shadow:0 0 0 4px rgba(139,92,246,.18);flex:none"></div>
+      <div style="font-weight:800;font-size:14.5px">${fmtDate(d)}</div>
+      <div style="font-size:12px;color:var(--muted)">${relDays(d)}${w!=null?` · <b style="color:var(--ink)" class="tnum">${w} lb</b>`:''}</div></div>`));
+    const g=el('div','gallery'); g.style.marginLeft='19px'; grp[d].forEach(m=>g.append(mediaCell(m,a))); box.append(g);
+  });
+}
 function hiddenFile(accept,cb,opts){ let inp=el('input'); inp.type='file'; inp.accept=accept; inp.style.display='none';
   if(opts&&opts.multiple!==false) inp.multiple=true;
   // No `capture` attribute → the phone shows its full picker (Photo Library,
@@ -1816,13 +1860,14 @@ async function addMedia(animalId,files,kind){
   if(!can('addRecord')){ toast('Your role can’t upload media','bad'); return; }
   toast('Uploading…','');
   for(const file of files){ const blobId=uid('blob'); await Media.put(blobId,file); await Media.upload(blobId,file);
-    const rec=stamp({id:uid('m'),animalId,kind:kind||(file.type.startsWith('video')?'video':'photo'),blobId,size:file.size,mime:file.type,view: kind==='video'?'Walking video':'Side view',date:todayISO(),captured:todayISO(),by:DB.currentUserId,caption:'',shared:false});
+    const cap=fileCapturedDate(file);
+    const rec=stamp({id:uid('m'),animalId,kind:kind||(file.type.startsWith('video')?'video':'photo'),blobId,size:file.size,mime:file.type,view: kind==='video'?'Walking video':'Side view',date:cap,captured:cap,by:DB.currentUserId,caption:'',shared:false});
     // capture weight+feed context
     const ws=weightsFor(animalId); rec.contextWeight=ws.length?+ws[ws.length-1].weight:null; const cf=currentFeed(animalId); rec.contextFeed=cf?cf.name:null;
     if(!getAnimal(animalId).profileMediaId && kind!=='video'){ getAnimal(animalId).profileMediaId=blobId; }
     DB.media.push(rec);
   }
-  logAct('media',`Uploaded ${files.length} ${kind}${files.length>1?'s':''}`,animalId); save(); toast('Media added','good'); render();
+  logAct('media',`Uploaded ${files.length} ${kind}${files.length>1?'s':''}`,animalId); milestone('first:photo','First progress photo!','Your growth timeline starts here 📸','📸'); save(); toast('Media added — dated for your timeline','good'); render();
 }
 /* pick a photo from the library (or camera) and set it as the animal's profile picture */
 function uploadProfilePhoto(animalId){
@@ -1832,8 +1877,8 @@ function uploadProfilePhoto(animalId){
     toast('Uploading…','');
     const blobId=uid('blob'); await Media.put(blobId,file); await Media.upload(blobId,file);
     const a=getAnimal(animalId); if(!a) return;
-    const ws=weightsFor(animalId); const cf=currentFeed(animalId);
-    DB.media.push(stamp({id:uid('m'),animalId,kind:'photo',blobId,size:file.size,mime:file.type,view:'Profile',date:todayISO(),captured:todayISO(),by:DB.currentUserId,caption:'',shared:false,contextWeight:ws.length?+ws[ws.length-1].weight:null,contextFeed:cf?cf.name:null}));
+    const ws=weightsFor(animalId); const cf=currentFeed(animalId); const cap=fileCapturedDate(file);
+    DB.media.push(stamp({id:uid('m'),animalId,kind:'photo',blobId,size:file.size,mime:file.type,view:'Profile',date:cap,captured:cap,by:DB.currentUserId,caption:'',shared:false,contextWeight:ws.length?+ws[ws.length-1].weight:null,contextFeed:cf?cf.name:null}));
     a.profileMediaId=blobId; touch(a);
     logAct('media','Set profile photo',animalId); save(); toast('Profile photo updated','good'); render();
   }, {multiple:false}).click();
@@ -1863,7 +1908,9 @@ function drawCompare(box,a,items){
     const ic=$('#cmpImgs',box); ic.innerHTML=''; [A,B].forEach((m,i)=>{ const c=el('div'); c.style.cssText='border-radius:12px;overflow:hidden;background:var(--line-2);aspect-ratio:3/4;position:relative';
       c.innerHTML=`<div class="tag" style="position:absolute;left:6px;top:6px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;z-index:2">${i?'AFTER':'BEFORE'} · ${fmtShort(m.captured||m.date)}</div>`;
       Media.url(m.blobId).then(u=>{ if(u){const im=el('img');im.src=u;im.style.cssText='width:100%;height:100%;object-fit:cover';c.prepend(im);} }); ic.append(c); });
-    const days=daysBetween(A.captured||A.date,B.captured||B.date); const dw=(A.contextWeight!=null&&B.contextWeight!=null)?round(B.contextWeight-A.contextWeight,1):null; const adg=(dw!=null&&days>0)?round(dw/days,2):null;
+    const days=daysBetween(A.captured||A.date,B.captured||B.date);
+    const wA=A.contextWeight!=null?+A.contextWeight:weightNear(a.id,A.captured||A.date), wB=B.contextWeight!=null?+B.contextWeight:weightNear(a.id,B.captured||B.date);
+    const dw=(wA!=null&&wB!=null)?round(wB-wA,1):null; const adg=(dw!=null&&Math.abs(days)>0)?round(dw/Math.abs(days),2):null;
     $('#cmpStats',box).innerHTML=`<div style="display:flex;justify-content:space-around;text-align:center"><div><div style="font-size:11px;color:var(--muted);font-weight:700">DAYS</div><div style="font-weight:800;font-size:18px" class="tnum">${Math.abs(days)}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">WEIGHT Δ</div><div style="font-weight:800;font-size:18px" class="tnum">${dw!=null?(dw>0?'+':'')+dw+' lb':'—'}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">ADG</div><div style="font-weight:800;font-size:18px;color:var(--purple-3)" class="tnum">${adg??'—'}</div></div></div>`; };
   $('#cmpA',box).onchange=paint; $('#cmpB',box).onchange=paint; paint();
 }
@@ -3262,11 +3309,11 @@ function toggleDemo(){
   $('[data-del]',sh).onclick=async()=>{ closeSheet(); if(await confirmSheet('Delete demo data',`Permanently delete the ${demoCount} demo animal${demoCount===1?'':'s'} and all their records? This cannot be undone.`,'Delete everything',true)){ removeDemo(); toast('Demo data removed','good'); render(); } };
 }
 
-route('media',()=>{ // global recent media → route to first animal gallery fallback
-  const v=setView('','dashboard'); const all=DB.media.slice().sort((a,b)=>a.createdAt<b.createdAt?1:-1);
+route('media',()=>{ // all media across the barn, newest capture first
+  const v=setView('','dashboard'); const all=DB.media.slice().sort((a,b)=>(a.captured||a.date)<(b.captured||b.date)?1:-1);
   const wrap=el('div'); wrap.innerHTML=pageHeader('Progress media','/dashboard');
   if(!all.length)wrap.append(htmlToFrag(emptyState(ICON.media,'No media yet','Upload photos and videos from any animal profile.')));
-  else { const g=el('div','gallery'); all.forEach(m=>g.append(mediaCell(m,getAnimal(m.animalId)||{}))); wrap.append(g); }
+  else { const g=el('div','gallery'); all.forEach(m=>g.append(mediaCell(m,getAnimal(m.animalId)||{},{showName:true}))); wrap.append(g); }
   v.append(wrap);
 });
 
