@@ -1658,18 +1658,20 @@ function tabFeed(box,a){
   box.innerHTML=`<div class="btn-row"><button class="btn primary" id="addFeed" style="flex:1">${ICON.plus} New feed program</button>
     ${progs.length>1?`<button class="btn" id="cmpFeed">${ICON.trend} Compare</button>`:''}</div>
     <div class="help" style="margin-top:12px">${ICON.info}<span>Changing feed never erases the old program — each change is saved as a dated version so you can see what worked.</span></div>
-    ${cur?`<div class="section-title">Current program</div>${feedCard(cur)}`:''}
+    ${cur?`<div class="section-title">Current program</div><div id="feedCur"></div>`:''}
     ${progs.filter(f=>f.id!==(cur&&cur.id)).length?`<div class="section-title">History</div><div id="feedHist"></div>`:progs.length?'':emptyState(ICON.feed,'No feed program yet','Add the current ration to start tracking feed response against weight.')}`;
-  const hist=$('#feedHist',box);
-  if(hist){ progs.filter(f=>f.id!==(cur&&cur.id)).forEach(f=>{ const c=htmlToFrag(feedCard(f)); const wrap=el('div'); wrap.style.marginBottom='10px'; wrap.append(c);
+  // build a card + Duplicate/Edit bar for one program
+  const cardWith=(f)=>{ const wrap=el('div'); wrap.style.marginBottom='10px'; wrap.append(htmlToFrag(feedCard(f)));
     const bar=el('div','btn-row'); bar.style.marginTop='6px';
     bar.innerHTML=`<button class="btn sm ghost" data-dup>${ICON.copy} Duplicate</button><button class="btn sm ghost" data-edit>${ICON.edit} Edit</button>`;
     $('[data-dup]',bar).onclick=()=>openFeedSheet(a.id,null,f); $('[data-edit]',bar).onclick=()=>openFeedSheet(a.id,f.id);
-    wrap.append(bar); hist.append(wrap); }); }
+    wrap.append(bar); return wrap; };
+  const curBox=$('#feedCur',box);
+  if(curBox && cur) curBox.append(cardWith(cur));   // current program is now editable too
+  const hist=$('#feedHist',box);
+  if(hist){ progs.filter(f=>f.id!==(cur&&cur.id)).forEach(f=>hist.append(cardWith(f))); }
   $('#addFeed',box).onclick=()=>openFeedSheet(a.id);
   if($('#cmpFeed',box))$('#cmpFeed',box).onclick=()=>openFeedCompare(a.id);
-  // clicking current card edits
-  const cc=$('.section-title',box);
 }
 function openFeedCompare(id){
   const progs=feedFor(id); const body=el('div');
