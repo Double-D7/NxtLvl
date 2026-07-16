@@ -92,7 +92,11 @@ const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<'
 const uid = (p='id') => p+'_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
 const round = (n,d=1)=>{ const f=10**d; return Math.round((+n||0)*f)/f; };
-const todayISO = () => new Date().toISOString().slice(0,10);
+/* LOCAL calendar date as YYYY-MM-DD. Must NOT go through toISOString() — that
+   returns the UTC date, so any evening in the Americas (UTC already past
+   midnight) rolled "today" onto tomorrow, mis-dating tasks/weigh-ins/care. */
+const isoDate = (d) => { d = d || new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const todayISO = () => isoDate();
 const nowISO = () => new Date().toISOString();
 const nowTime = () => new Date().toTimeString().slice(0,5);
 const daysBetween = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
@@ -312,7 +316,7 @@ const getLayover = id => (DB.layovers||[]).find(l=>l.id===id);
 const careForLayover = id => (DB.care||[]).filter(c=>c.layoverId===id);
 const careForAnimal = id => (DB.care||[]).filter(c=>c.animalId===id);
 const activeLayover = () => (DB.layovers||[]).find(l=>l.start<=todayISO() && (!l.end||l.end>=todayISO()));
-function layoverDays(l){ const out=[]; if(!l||!l.start) return out; const end=l.end||l.start; let d=l.start; let guard=0; while(d<=end && guard++<60){ out.push(d); const dt=parseD(d); dt.setDate(dt.getDate()+1); d=dt.toISOString().slice(0,10); } return out; }
+function layoverDays(l){ const out=[]; if(!l||!l.start) return out; const end=l.end||l.start; let d=l.start; let guard=0; while(d<=end && guard++<60){ out.push(d); const dt=parseD(d); dt.setDate(dt.getDate()+1); d=isoDate(dt); } return out; }
 function careSort(a,b){ const ka=(a.date||'')+(a.time||'99:99'); const kb=(b.date||'')+(b.time||'99:99'); return ka<kb?-1:ka>kb?1:0; }
 
 /* ===================================================================
@@ -1099,7 +1103,7 @@ route('dashboard', ()=>{
   const bySpecies={}; DB.species.filter(s=>s.active).forEach(s=>bySpecies[s.id]=0);
   active.forEach(a=>bySpecies[a.species]=(bySpecies[a.species]||0)+1);
   const weighDay=DB.team.weighDay;
-  const startWeek=(()=>{ const d=new Date(); const diff=(d.getDay()-weighDay+7)%7; d.setDate(d.getDate()-diff); return d.toISOString().slice(0,10); })();
+  const startWeek=(()=>{ const d=new Date(); const diff=(d.getDay()-weighDay+7)%7; d.setDate(d.getDate()-diff); return isoDate(d); })();
   const weighedThisWeek=active.filter(a=>weightsFor(a.id).some(w=>w.date>=startWeek)).length;
   const needWeigh=active.filter(a=>{ const ws=weightsFor(a.id); return !ws.length || daysBetween(ws[ws.length-1].date,todayISO())>=7; });
   const upcoming=DB.shows.filter(s=>s.start>=todayISO()).sort((a,b)=>a.start<b.start?-1:1);
