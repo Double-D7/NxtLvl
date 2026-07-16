@@ -2979,8 +2979,8 @@ route('layover',(parts,q)=>{
     $('#edLay',wrap).onclick=()=>openLayoverSheet(l.id);
     $$('[data-day]',wrap).forEach(b=>b.onclick=()=>{day=b.dataset.day;draw();});
     $$('[data-an]',wrap).forEach(b=>b.onclick=()=>{animalId=b.dataset.an;draw();});
-    $('#logCare',wrap).onclick=()=>openCareSheet({layoverId:l.id, date:day, animalId:animalId!=='all'?animalId:(ids[0]||null), markDone:true});
-    $('#schedCare',wrap).onclick=()=>openCareSheet({layoverId:l.id, date:day, animalId:animalId!=='all'?animalId:(ids[0]||null), markDone:false});
+    $('#logCare',wrap).onclick=()=>openCareSheet({layoverId:l.id, date:day, animalIds:animalId!=='all'?[animalId]:[...ids], markDone:true});
+    $('#schedCare',wrap).onclick=()=>openCareSheet({layoverId:l.id, date:day, animalIds:animalId!=='all'?[animalId]:[...ids], markDone:false});
     const cb=$('#careBody',wrap);
     if(!ids.length){ cb.innerHTML=emptyState(ICON.animals,'No animals on this layover','Tap edit to add the animals staged at the breeder’s barn.'); return; }
     if(!items.length){ cb.innerHTML=emptyState(ICON.clock,'Nothing logged for this day','Tap “Log care” each time the breeder gives a direction — it’s stamped with the time automatically.'); return; }
@@ -3049,9 +3049,21 @@ function openCareSheet(opts){
   const c = editing ? {...DB.care.find(x=>x.id===opts.edit)}
     : { layoverId:opts.layoverId||null, animalId:opts.animalId||null, category:'Water', title:'', detail:'', date:opts.date||todayISO(), time:nowTime(), done:!!opts.markDone, notes:'' };
   const animals = c.layoverId ? (getLayover(c.layoverId)?.animalIds||[]).map(getAnimal).filter(Boolean) : activeAnimals();
+  // New entries can fan out across animals — a breeder direction rarely applies to just one head.
+  let selected = editing ? [] :
+    (Array.isArray(opts.animalIds)&&opts.animalIds.length ? opts.animalIds.slice()
+     : opts.animalId ? [opts.animalId]
+     : animals.map(a=>a.id));
+  selected = selected.filter(id=>animals.some(a=>a.id===id));
+  const animalField = editing
+    ? (animals.length?`<div class="field"><label>Animal</label><select class="control" id="caAnimal">${animals.map(a=>`<option value="${a.id}" ${c.animalId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>`:'')
+    : (animals.length?`<div class="field"><label>Animals <span id="caCount" style="color:var(--muted);font-weight:600"></span></label>
+        <div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" class="chip sm" id="caAll">Select all</button><button type="button" class="chip sm" id="caNone">Clear</button></div>
+        <div class="chips" id="caAnimals" style="flex-wrap:wrap;white-space:normal">${animals.map(a=>`<button type="button" class="chip ${selected.includes(a.id)?'active':''}" data-an="${a.id}">${esc(a.name)}</button>`).join('')}</div></div>`
+      : '');
   const body=el('div');
   body.innerHTML=`
-    ${animals.length?`<div class="field"><label>Animal</label><select class="control" id="caAnimal">${animals.map(a=>`<option value="${a.id}" ${c.animalId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>`:''}
+    ${animalField}
     <div class="field"><label>What did the breeder direct?</label>
       <div class="chips" id="caCats" style="flex-wrap:wrap;white-space:normal">${CARE_CATS.map(cat=>`<button type="button" class="chip ${c.category===cat.key?'active':''}" data-cat="${cat.key}"><span style="width:15px;height:15px;color:${c.category===cat.key?'#fff':cat.color}">${ICON[cat.icon]}</span>${cat.key}</button>`).join('')}</div></div>
     <div class="field"><label>Detail / amount</label><input class="control" id="caDetail" value="${esc(c.detail||'')}" placeholder="e.g. 2 oz Game On · walk 15 min · rinse & blow out"></div>
@@ -3061,17 +3073,31 @@ function openCareSheet(opts){
     <div class="field"><label>Notes / how they responded</label><textarea class="control" id="caNotes" placeholder="drank well · stayed fresh · a little hot">${esc(c.notes||'')}</textarea></div>`;
   let cat=c.category;
   $$('[data-cat]',body).forEach(b=>b.onclick=()=>{ cat=b.dataset.cat; $$('[data-cat]',body).forEach(x=>{ const cc=careCat(x.dataset.cat); x.classList.toggle('active',x===b); const sp=x.querySelector('span'); if(sp)sp.style.color=(x===b)?'#fff':cc.color; }); });
+  // multi-animal picker (new entries) — log the same direction across several head at once
+  const syncCount=()=>{ const el2=$('#caCount',body); if(el2)el2.textContent=selected.length?('· '+selected.length+' selected'):'· none'; };
+  if(!editing){
+    const paint=()=>{ $$('#caAnimals [data-an]',body).forEach(b=>b.classList.toggle('active',selected.includes(b.dataset.an))); syncCount(); };
+    $$('#caAnimals [data-an]',body).forEach(b=>b.onclick=()=>{ const id=b.dataset.an; if(selected.includes(id))selected=selected.filter(x=>x!==id); else selected.push(id); paint(); });
+    if($('#caAll',body))$('#caAll',body).onclick=()=>{ selected=animals.map(a=>a.id); paint(); };
+    if($('#caNone',body))$('#caNone',body).onclick=()=>{ selected=[]; paint(); };
+    syncCount();
+  }
   const foot=el('div'); foot.innerHTML=`${editing?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">${editing?'Save':'Log it'}</button>`;
   const sh=openSheet({title:editing?'Edit care entry':'Log care',body,foot});
   $('[data-save]',sh).onclick=()=>{
-    const data={ category:cat, title:careCat(cat).key===cat?'':'', detail:$('#caDetail',body).value.trim(), date:$('#caDate',body).value, time:$('#caTime',body).value, notes:$('#caNotes',body).value.trim(), done:$('#caDone',body).checked };
-    if($('#caAnimal',body)) data.animalId=$('#caAnimal',body).value;
-    data.title=''; // category is the primary label; detail carries specifics
-    if(!data.animalId){ toast('Pick an animal','bad'); return; }
-    if(editing){ const rec=DB.care.find(x=>x.id===opts.edit); const wasDone=rec.done; Object.assign(rec,data); if(data.done&&!rec.doneAt)rec.doneAt=nowISO(); if(!data.done)rec.doneAt=null; touch(rec); }
-    else { const rec=stamp({id:uid('care'),layoverId:c.layoverId,by:DB.currentUserId,...data}); if(data.done)rec.doneAt=nowISO(); DB.care.push(rec); }
-    logAct('care',(data.done?'Logged ':'Scheduled ')+data.category+(data.detail?' · '+data.detail:''),data.animalId);
-    save(); closeSheet(); toast('Care logged','good'); render();
+    const data={ category:cat, title:'', detail:$('#caDetail',body).value.trim(), date:$('#caDate',body).value, time:$('#caTime',body).value, notes:$('#caNotes',body).value.trim(), done:$('#caDone',body).checked };
+    if(editing){
+      const rec=DB.care.find(x=>x.id===opts.edit);
+      data.animalId = $('#caAnimal',body) ? $('#caAnimal',body).value : rec.animalId;
+      Object.assign(rec,data); if(data.done&&!rec.doneAt)rec.doneAt=nowISO(); if(!data.done)rec.doneAt=null; touch(rec);
+      logAct('care',(data.done?'Logged ':'Scheduled ')+data.category+(data.detail?' · '+data.detail:''),data.animalId);
+      save(); closeSheet(); toast('Care updated','good'); render(); return;
+    }
+    // new — fan the direction out to each selected animal as its own timestamped entry
+    if(!selected.length){ toast('Pick at least one animal','bad'); return; }
+    selected.forEach(aid=>{ const rec=stamp({id:uid('care'),layoverId:c.layoverId,by:DB.currentUserId,...data,animalId:aid}); if(data.done)rec.doneAt=nowISO(); DB.care.push(rec); });
+    logAct('care',(data.done?'Logged ':'Scheduled ')+data.category+(data.detail?' · '+data.detail:'')+(selected.length>1?' · '+selected.length+' animals':''), selected[0]);
+    save(); closeSheet(); toast(selected.length>1?('Logged for '+selected.length+' animals'):'Care logged','good'); render();
   };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete entry','Remove this care entry?','Delete',true)){ DB.care=DB.care.filter(x=>x.id!==opts.edit); save(); closeSheet(); render(); } };
 }
