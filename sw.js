@@ -1,9 +1,9 @@
-/* Devitt Family Show Team service worker
+/* Show Team service worker
    - App HTML: network-first so new versions load automatically when online
    - Static assets (app.js/icons/manifest): cache-first for speed
    - Fully offline-capable via cache fallback
    NOTE: user data (localStorage + IndexedDB) is never touched by this cache. */
-const VERSION = 'dfst-v35';
+const VERSION = 'dfst-v36';
 const ASSETS = ['index.html', 'app.js', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'favicon-32.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -26,8 +26,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; }
-  catch (_) { d = { title: 'Devitt Family Show Team', body: (e.data && e.data.text()) || '' }; }
-  const title = d.title || 'Devitt Family Show Team';
+  catch (_) { d = { title: 'Show Team', body: (e.data && e.data.text()) || '' }; }
+  const title = d.title || 'Show Team';
   const opts = {
     body: d.body || '',
     icon: 'icon-192.png',

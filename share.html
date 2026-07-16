@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A0D13">
-<title>Devitt Family Show Team</title>
+<title>Show Team</title>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <style>
 :root{--purple:#8B5CF6;--teal:#2DD4BF;--ink:#E9EBF1;--muted:#7C8497;--line:#242a36;--bg:#0A0D13;--card:#141922}
@@ -79,7 +79,7 @@ a{color:var(--purple)}
   function render(a){
     const stat=(k,v,s)=> v==null||v===''?'':'<div class="stat"><div class="k">'+k+'</div><div class="v tnum">'+v+(s?'<small> '+s+'</small>':'')+'</div></div>';
     const ped=[['Breeder',a.breeder],['Sire',a.sire],['Dam',a.dam],['Sire of dam',a.sireOfDam]].filter(r=>r[1]);
-    document.title=a.name+' — Devitt Family Show Team';
+    document.title=a.name+' — '+((a.team&&a.team.name)||'Show Team');
     app.innerHTML=
     '<div class="wrap">'+
       '<div class="hero">'+(a.profileUrl?'<div class="cover" style="background-image:url('+esc(a.profileUrl)+')"></div>':'')+'<div class="ov"></div>'+
@@ -95,7 +95,7 @@ a{color:var(--purple)}
       (a.photos&&a.photos.length?'<div class="section"><div class="h">Progress photos</div><div class="gallery">'+a.photos.map(p=>'<img loading="lazy" src="'+esc(p.url)+'" alt="">').join('')+'</div></div>':'')+
       (ped.length?'<div class="section"><div class="h">Pedigree</div><div class="card">'+ped.map(r=>'<div class="kv"><span class="k2">'+esc(r[0])+'</span><span class="v2">'+esc(r[1])+'</span></div>').join('')+'</div></div>':'')+
       (a.results&&a.results.length?'<div class="section"><div class="h">Show results</div><div class="card">'+a.results.map(r=>'<div class="kv"><span class="k2">'+esc(r.show)+(r.division?' · '+esc(r.division):'')+'</span><span class="v2">'+esc(r.placing)+(r.note?' · '+esc(r.note):'')+'</span></div>').join('')+'</div></div>':'')+
-      '<div class="foot"><div class="brand"><img src="icon-192.png" alt=""><b>'+esc((a.team&&a.team.name)||'Devitt Family Show Team')+'</b></div><div>Shared from the Devitt Family Show Team app'+(a.generatedAt?' · '+fmtD(a.generatedAt.slice(0,10)):'')+'</div></div>'+
+      '<div class="foot"><div class="brand"><img src="icon-192.png" alt=""><b>'+esc((a.team&&a.team.name)||'Show Team')+'</b></div><div>Shared from the Show Team app'+(a.generatedAt?' · '+fmtD(a.generatedAt.slice(0,10)):'')+'</div></div>'+
     '</div>';
   }
 })();
