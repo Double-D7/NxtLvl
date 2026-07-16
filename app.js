@@ -52,6 +52,7 @@ const ICON = {
   info:I('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
   download:I('<path d="M12 3v11M8 10l4 4 4-4M4 20h16"/>'),
   refresh:I('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/>'),
+  pill:I('<rect x="2.5" y="8.5" width="19" height="7" rx="3.5"/><path d="M12 8.5v7"/>'),
   upload:I('<path d="M12 20V9M8 13l4-4 4 4M4 4h16"/>'),
   star:I('<path d="M12 3l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8L6.4 19.6l1-6L3 9.4l6-.9L12 3z"/>'),
   flag:I('<path d="M5 21V4M5 4h11l-2 3 2 3H5"/>'),
@@ -272,6 +273,7 @@ function blankDB(){
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
     layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
+    meds:[], medLog:[],
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
   };
 }
@@ -510,10 +512,15 @@ function seedDemo(db){
   care(db.animals[0].id,'Walk','15 min, easy','16:30',false,'');
   care(db.animals[1].id,'Water','Fresh water','06:00',true,'');
   care(db.animals[1].id,'Supplement','2 oz Game On in AM feed','06:30',true,'');
+  // demo medications catalog + one already-cleared dose (illustrative — generic names, not advice)
+  const medA=stamp({id:uid('med'),demo:true,name:'Example Dewormer',category:'Dewormer',withdrawalDays:8,route:'Oral',notes:'Enter real withdrawal from the product label.'});
+  const medB=stamp({id:uid('med'),demo:true,name:'Example Antibiotic',category:'Antibiotic',withdrawalDays:18,route:'SubQ',notes:'Enter real withdrawal from the product label or your vet.'});
+  db.meds.push(medA,medB);
+  db.medLog.push(stamp({id:uid('dose'),demo:true,animalId:db.animals[0].id,medId:medA.id,name:medA.name,date:ago(20),withdrawalDays:8,withdrawalEnds:addDaysISO(ago(20),8),dose:'per label',route:'Oral',by:owner.id,notes:'Routine — cleared well before the fair.'}));
   db.seeded=true;
   logAct('seed','Loaded demo show team data');
 }
-const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory','layovers','care','helpers','events'];
+const DEMO_ARRAYS=['animals','weights','feed','media','measurements','exercise','health','shows','entries','tasks','notes','expenses','income','recs','relatives','inventory','layovers','care','helpers','events','meds','medLog'];
 function removeDemo(){
   DEMO_ARRAYS.forEach(k=>{ DB[k]=DB[k].filter(r=>!r.demo && !(r.animalId && (DB.animals.find(a=>a.id===r.animalId)||{}).demo)); });
   DB.animals=DB.animals.filter(a=>!a.demo);
@@ -1449,7 +1456,7 @@ function openAnimalForm(id){
 /* ===================================================================
    ANIMAL PROFILE (tabbed)
    =================================================================== */
-const ANIMAL_TABS=[['overview','Overview'],['weight','Weight'],['feed','Feed'],['care','Care'],['media','Media'],['measurements','Measure'],['health','Health'],['exercise','Exercise'],['shows','Shows'],['pedigree','Pedigree'],['expenses','Expenses'],['notes','Notes'],['activity','History']];
+const ANIMAL_TABS=[['overview','Overview'],['weight','Weight'],['feed','Feed'],['care','Care'],['media','Media'],['measurements','Measure'],['health','Health'],['meds','Meds'],['exercise','Exercise'],['shows','Shows'],['pedigree','Pedigree'],['expenses','Expenses'],['notes','Notes'],['activity','History']];
 route('animal',(parts)=>{
   const id=parts[1]; const a=getAnimal(id);
   if(!a){ setView(emptyState(ICON.animals,'Animal not found','It may have been deleted.'),'animals'); return; }
@@ -1482,7 +1489,7 @@ route('animal',(parts)=>{
   // keep active tab visible
   const at=$('.tab.active',hero); if(at) at.scrollIntoView({inline:'center',block:'nearest'});
   const body=$('#tabBody',hero);
-  ({overview:tabOverview,weight:tabWeight,feed:tabFeed,care:tabCare,media:tabMedia,measurements:tabMeasure,health:tabHealth,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
+  ({overview:tabOverview,weight:tabWeight,feed:tabFeed,care:tabCare,media:tabMedia,measurements:tabMeasure,health:tabHealth,meds:tabMeds,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
 });
 
 /* ---------- OVERVIEW ---------- */
@@ -1548,6 +1555,7 @@ function renderTimeline(box,a){
   weightsFor(a.id).forEach(w=>ev.push({d:w.date,t:w.date,icon:ICON.weight,c:'var(--purple-3)',title:`Weighed ${w.weight} lb`,body:w.notes||''}));
   feedFor(a.id).forEach(f=>ev.push({d:f.startDate,icon:ICON.feed,c:'var(--teal-3)',title:`Feed: ${f.name}`,body:f.objective||''}));
   DB.health.filter(h=>h.animalId===a.id).forEach(h=>ev.push({d:h.date,icon:ICON.health,c:'var(--bad)',title:h.type,body:h.treatment||h.notes||''}));
+  (DB.medLog||[]).filter(d=>d.animalId===a.id).forEach(d=>{ const e=doseWithdrawalEnds(d); ev.push({d:d.date,icon:ICON.pill,c:'var(--bad)',title:'Medication: '+d.name,body:(d.dose?d.dose+' · ':'')+(e?'withdrawal clears '+fmtShort(e):'no withdrawal')}); });
   DB.exercise.filter(x=>x.animalId===a.id).forEach(x=>ev.push({d:x.date,icon:ICON.run,c:'var(--warn)',title:`Exercise: ${x.type}`,body:x.duration?x.duration+' min':''}));
   mediaFor(a.id).forEach(m=>ev.push({d:m.captured||m.date,icon:m.kind==='video'?ICON.video:ICON.camera,c:'var(--info)',title:`${m.kind==='video'?'Video':'Photo'}: ${m.view||'Progress'}`,body:m.caption||''}));
   DB.entries.filter(e=>e.animalId===a.id).forEach(e=>{ const sh=DB.shows.find(s=>s.id===e.showId); ev.push({d:sh?sh.start:todayISO(),icon:ICON.shows,c:'var(--purple)',title:`Show: ${sh?sh.name:''}`,body:e.result&&e.result.placing?`Placed ${e.result.placing}${e.result.divisionPlacing?' · '+e.result.divisionPlacing:''}`:''}); });
@@ -2288,6 +2296,138 @@ function tabHealth(box,a){
   const L=recordList(recs,r=>({icon:ICON.health,t1:esc(r.type)+(r.treatment?': '+esc(r.treatment):''),t2:fmtDate(r.date)+(r.withdrawal?` · withdrawal ends ${fmtShort(r.withdrawal)}`:''),right:r.withdrawal&&r.withdrawal>=todayISO()?'<span class="pill warn" style="font-size:10px">WD</span>':'',onClick:()=>add(r.id)})); lc.append(L);
 }
 
+/* ===================================================================
+   MEDICATIONS — a catalog of meds (each with a withdrawal time) plus a
+   per-animal dose log. Logging a dose auto-computes the withdrawal-clear
+   date and warns/blocks when a show the animal is ENTERED IN falls inside
+   the window (market animals can't show during withdrawal). The app never
+   suggests medications, doses, or withdrawal times — those are user-entered.
+   =================================================================== */
+const MED_CATS  = ['Antibiotic','Dewormer','Vaccine','Anti-inflammatory','Vitamin/Supplement','Coccidiostat','Hormone/Implant','Topical','Other'];
+const MED_ROUTES= ['Oral','SubQ','IM','IV','Topical','Intranasal','In feed','In water'];
+const medById = id => (DB.meds||[]).find(m=>m.id===id);
+const medDosesFor = animalId => (DB.medLog||[]).filter(d=>d.animalId===animalId).sort((a,b)=>a.date<b.date?1:-1);
+/* the date a dose's withdrawal clears (safe to show on/after this date) */
+const doseWithdrawalEnds = d => d ? (d.withdrawalEnds || (d.withdrawalDays!=null&&d.withdrawalDays!=='' ? addDaysISO(d.date, +d.withdrawalDays) : null)) : null;
+const doseInWithdrawal = (d, onISO) => { const e=doseWithdrawalEnds(d); return e ? (onISO||todayISO()) < e : false; };
+/* shows this animal is entered in that start on/after a date, soonest first */
+function upcomingShowsForAnimal(animalId, fromISO){ fromISO=fromISO||todayISO();
+  return (DB.entries||[]).filter(e=>e.animalId===animalId).map(e=>DB.shows.find(s=>s.id===e.showId)).filter(s=>s&&s.start&&s.start>=fromISO).sort((a,b)=>a.start<b.start?-1:1); }
+/* the earliest entered show that starts BEFORE a withdrawal clears (i.e. the conflict), or null */
+function medShowConflict(animalId, withdrawalEnds, fromISO){ if(!withdrawalEnds)return null;
+  return upcomingShowsForAnimal(animalId, fromISO||todayISO()).find(s=>s.start < withdrawalEnds) || null; }
+
+function tabMeds(box,a){
+  const doses=medDosesFor(a.id);
+  const active=doses.filter(d=>doseInWithdrawal(d));
+  const nextShow=upcomingShowsForAnimal(a.id)[0];
+  const conflicts=active.map(d=>({d,s:medShowConflict(a.id,doseWithdrawalEnds(d))})).filter(x=>x.s);
+  box.innerHTML=`<button class="btn primary block" id="addDose">${ICON.plus} Log medication</button>
+    <div class="help" style="margin-top:12px">${ICON.info}<span>Track meds per animal with automatic <b>withdrawal timing</b>. Times come from your <b>Medications</b> list (More → Medications) or the label — the app never suggests meds, doses, or times.</span></div>
+    <div id="medSafe" style="margin-top:12px"></div>
+    <div id="medActive"></div>
+    <div class="section-title">History</div>
+    <div id="medHist"></div>`;
+  $('#addDose',box).onclick=()=>openMedDoseSheet(a.id);
+  const safe=$('#medSafe',box);
+  if(conflicts.length){
+    safe.innerHTML=`<div class="card pad" style="background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.5)"><div style="font-weight:800;color:var(--bad);display:flex;align-items:center;gap:6px">${ICON.info} Not show-legal yet</div>
+      <div style="font-size:12.5px;margin-top:5px">${conflicts.map(c=>`<b>${esc(c.d.name)}</b> clears ${fmtShort(doseWithdrawalEnds(c.d))} — after <b>${esc(c.s.name)}</b> on ${fmtShort(c.s.start)}.`).join('<br>')}</div></div>`;
+  } else if(nextShow){
+    safe.innerHTML=`<div class="card pad" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4)"><div style="font-weight:800;color:var(--good)">${active.length?'On track for '+esc(nextShow.name):'Clear for '+esc(nextShow.name)}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">${fmtShort(nextShow.start)} · ${Math.max(0,daysBetween(todayISO(),nextShow.start))} days out</div></div>`;
+  }
+  const ab=$('#medActive',box);
+  if(active.length){ ab.append(htmlToFrag('<div class="section-title">In withdrawal now</div>'));
+    active.forEach(d=>{ const ends=doseWithdrawalEnds(d); const left=Math.max(0,daysBetween(todayISO(),ends)); const conf=medShowConflict(a.id,ends);
+      ab.append(htmlToFrag(`<div class="card pad" style="margin-bottom:8px;border-left:4px solid ${conf?'var(--bad)':'var(--warn)'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-weight:800">${esc(d.name)}</div><span class="pill ${conf?'bad':'warn'}" style="font-size:10px">${conf?'CONFLICT':left+'d left'}</span></div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px">Given ${fmtShort(d.date)} · clears ${fmtShort(ends)}${d.dose?' · '+esc(d.dose):''}${d.route?' · '+esc(d.route):''}</div>
+        ${conf?`<div style="font-size:12px;color:var(--bad);font-weight:600;margin-top:4px">Clears after ${esc(conf.name)} (${fmtShort(conf.start)})</div>`:''}</div>`)); }); }
+  const hb=$('#medHist',box);
+  if(!doses.length){ hb.innerHTML=emptyState(ICON.pill,'No medications logged','Log a med and the app tracks its withdrawal window and warns if a show falls inside it.'); return; }
+  const L=recordList(doses,d=>{ const ends=doseWithdrawalEnds(d); const conf=doseInWithdrawal(d)?medShowConflict(a.id,ends):null;
+    return {icon:ICON.pill, t1:esc(d.name)+(d.dose?': '+esc(d.dose):''), t2:'Given '+fmtDate(d.date)+(ends?' · clears '+fmtShort(ends):''), right: doseInWithdrawal(d)?`<span class="pill ${conf?'bad':'warn'}" style="font-size:10px">${conf?'CONFLICT':'WD'}</span>`:'', onClick:()=>openMedDoseSheet(a.id,d.id)}; });
+  hb.append(L);
+}
+
+function openMedDoseSheet(animalId, doseId){
+  if(!can('addRecord')){ toast('Your role can’t log medications','bad'); return; }
+  const a=getAnimal(animalId); const editing=!!doseId;
+  const d = editing ? {...DB.medLog.find(x=>x.id===doseId)}
+    : { animalId, medId:'', name:'', date:todayISO(), dose:'', route:'', notes:'', withdrawalDays:null };
+  const body=el('div');
+  const opts=()=> (DB.meds||[]).slice().sort((x,y)=>x.name.localeCompare(y.name)).map(m=>`<option value="${m.id}" ${d.medId===m.id?'selected':''}>${esc(m.name)}${m.withdrawalDays!=null&&m.withdrawalDays!==''?` · ${m.withdrawalDays}d`:''}</option>`).join('');
+  const selHTML=()=>`<select class="control" id="mdMed"><option value="">— pick from your list —</option>${opts()}</select>`;
+  body.innerHTML=`
+    <div class="field"><label>Medication</label>
+      <div style="display:flex;gap:8px"><div style="flex:1" id="mdMedWrap">${selHTML()}</div><button type="button" class="btn sm" id="mdNew" style="flex:none">${ICON.plus} New</button></div></div>
+    <div class="field-row"><div class="field" style="flex:1"><label>Date given</label><input class="control" type="date" id="mdDate" value="${d.date}"></div>
+      <div class="field" style="flex:1"><label>Withdrawal (days)</label><input class="control" type="number" inputmode="numeric" id="mdWD" value="${d.withdrawalDays??''}" placeholder="from label"></div></div>
+    <div class="field-row"><div class="field" style="flex:1"><label>Dose</label><input class="control" id="mdDose" value="${esc(d.dose||'')}" placeholder="as directed"></div>
+      <div class="field" style="flex:1"><label>Route</label><select class="control" id="mdRoute"><option value=""></option>${MED_ROUTES.map(r=>`<option ${d.route===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
+    <div id="mdCalc"></div>
+    <div class="field"><label>Notes</label><textarea class="control" id="mdNotes" placeholder="lot #, who gave it, reaction">${esc(d.notes||'')}</textarea></div>`;
+  const recalc=()=>{
+    const date=$('#mdDate',body).value; const wdv=$('#mdWD',body).value; const wd=wdv!==''?+wdv:null;
+    const ends=(wd!=null&&date)?addDaysISO(date,wd):null; const c=$('#mdCalc',body);
+    if(ends==null){ c.innerHTML=''; return; }
+    const clears=`Clears <b>${fmtShort(ends)}</b>${wd?` · ${wd} day${wd===1?'':'s'}`:''}`;
+    const conflict=medShowConflict(animalId,ends,date);
+    if(conflict){ c.innerHTML=`<div class="card pad" style="background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.5)"><div style="font-weight:800;color:var(--bad);display:flex;align-items:center;gap:6px">${ICON.info} Withdrawal conflicts with a show</div>
+      <div style="font-size:12.5px;margin-top:4px">${clears} — but <b>${esc(conflict.name)}</b> is <b>${fmtShort(conflict.start)}</b>. A market animal can’t show inside its withdrawal window.</div></div>`; }
+    else { const next=upcomingShowsForAnimal(animalId,date)[0];
+      c.innerHTML=`<div class="card pad" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4)"><div style="font-weight:800;color:var(--good)">${clears}</div>${next?`<div style="font-size:12.5px;margin-top:3px;color:var(--muted)">Clear before <b style="color:var(--ink)">${esc(next.name)}</b> on ${fmtShort(next.start)} ✓</div>`:`<div style="font-size:12px;color:var(--muted);margin-top:2px">No upcoming shows entered for ${esc(a.name)}.</div>`}</div>`; }
+  };
+  const wireSel=()=>{ $('#mdMed',body).onchange=()=>{ const m=medById($('#mdMed',body).value); if(m){ if(m.withdrawalDays!=null&&m.withdrawalDays!=='')$('#mdWD',body).value=m.withdrawalDays; if(m.route&&!$('#mdRoute',body).value)$('#mdRoute',body).value=m.route; } recalc(); }; };
+  wireSel(); $('#mdWD',body).oninput=recalc; $('#mdDate',body).onchange=recalc;
+  $('#mdNew',body).onclick=()=>openMedSheet(null,(newId)=>{ d.medId=newId; $('#mdMedWrap',body).innerHTML=selHTML(); wireSel(); const m=medById(newId); if(m){ if(m.withdrawalDays!=null&&m.withdrawalDays!=='')$('#mdWD',body).value=m.withdrawalDays; if(m.route)$('#mdRoute',body).value=m.route; } recalc(); });
+  recalc();
+  const foot=el('div'); foot.innerHTML=`${editing?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">${editing?'Save':'Log medication'}</button>`;
+  const sh=openSheet({title:editing?'Edit medication log':'Log medication',body,foot});
+  $('[data-save]',sh).onclick=async()=>{
+    const medId=$('#mdMed',body).value||null; const med=medById(medId); const name=med?med.name:(d.name||'');
+    if(!name){ toast('Pick a medication (or add one)','bad'); return; }
+    const date=$('#mdDate',body).value; const wdv=$('#mdWD',body).value; const wd=wdv!==''?+wdv:null;
+    const ends=(wd!=null&&date)?addDaysISO(date,wd):null;
+    const conflict=ends?medShowConflict(animalId,ends,date):null;
+    if(conflict){ const ok=await confirmSheet('Withdrawal conflicts with a show', `${name} won’t clear until ${fmtShort(ends)}, but ${conflict.name} is ${fmtShort(conflict.start)}. Showing a market animal inside its withdrawal window isn’t allowed. Log it anyway?`, 'Log anyway', true); if(!ok) return; }
+    const data={ animalId, medId, name, date, dose:$('#mdDose',body).value.trim(), route:$('#mdRoute',body).value, withdrawalDays:wd, withdrawalEnds:ends, notes:$('#mdNotes',body).value.trim(), conflictAck:!!conflict, by:DB.currentUserId };
+    if(editing){ Object.assign(DB.medLog.find(x=>x.id===doseId),data); touch(DB.medLog.find(x=>x.id===doseId)); }
+    else { DB.medLog.push(stamp({id:uid('dose'),...data})); }
+    logAct('health','Medication: '+name+(a?' · '+a.name:''),animalId);
+    save(); closeSheet(); toast(conflict?'Logged — flagged as a show conflict':'Medication logged','good'); render();
+  };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete','Remove this medication log?','Delete',true)){ DB.medLog=DB.medLog.filter(x=>x.id!==doseId); save(); closeSheet(); render(); } };
+}
+
+/* Catalog add/edit. onDone(id) is called after save (used by the dose sheet's "New"). */
+function openMedSheet(id, onDone){
+  if(!can('edit')){ toast('Your role can’t manage medications','bad'); return; }
+  const rec = id ? {...medById(id)} : {name:'',category:'Antibiotic',withdrawalDays:'',route:'',notes:''};
+  recordSheet({ title:id?'Edit medication':'New medication', recId:id, rec, fields:[
+      {k:'name',label:'Medication name',ph:'product name'},
+      {type:'row',fields:[{k:'category',type:'select',label:'Category',options:MED_CATS},{k:'withdrawalDays',type:'number',label:'Withdrawal (days)'}]},
+      {k:'route',type:'select',label:'Default route',blank:true,options:MED_ROUTES},
+      {k:'notes',type:'textarea',label:'Notes (label directions / source)'} ],
+    onSave:s=>{ if(!s.name||!String(s.name).trim()){ toast('Name the medication','bad'); return; } s.name=String(s.name).trim();
+      if(id){ Object.assign(medById(id),s); touch(medById(id)); } else { const r=stamp({id:uid('med'),...s}); DB.meds.push(r); id=r.id; }
+      logAct('health','Medication list: '+s.name); save(); toast('Saved','good'); if(onDone)onDone(id); else render(); },
+    onDelete: id?()=>{ DB.meds=DB.meds.filter(m=>m.id!==id); save(); render(); }:null });
+}
+
+route('medications',()=>{
+  const v=setView('','more'); const wrap=el('div');
+  const meds=(DB.meds||[]).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  wrap.innerHTML=pageHeader('Medications',null,`<button class="btn primary sm" id="addMed">${ICON.plus} Add</button>`);
+  wrap.append(htmlToFrag(`<div class="help" style="margin-bottom:12px">${ICON.info}<span>Your medications and each one's <b>withdrawal time</b>. Logging a med on an animal applies its withdrawal automatically and warns if it overlaps a show that animal is entered in. The app never suggests meds, doses, or withdrawal times — enter those from the label or your vet.</span></div>`));
+  if(!meds.length){ wrap.append(htmlToFrag(emptyState(ICON.pill,'No medications yet','Add the meds you use with their label withdrawal days, then log them from each animal\'s Meds tab.'))); }
+  else { const L=el('div','list'); meds.forEach(m=>{ const used=(DB.medLog||[]).filter(d=>d.medId===m.id).length; const li=el('div','li');
+    li.innerHTML=`<div class="thumb" style="background:var(--line-2);color:var(--purple)">${ICON.pill}</div><div class="main"><div class="t1">${esc(m.name)}</div><div class="t2">${esc(m.category||'')}${m.withdrawalDays!=null&&m.withdrawalDays!==''?' · '+m.withdrawalDays+'-day withdrawal':' · no withdrawal set'}${used?' · used '+used+'×':''}</div></div>${ICON.chev}`;
+    li.onclick=()=>openMedSheet(m.id); L.append(li); }); wrap.append(L); }
+  v.append(wrap);
+  $('#addMed',wrap).onclick=()=>openMedSheet();
+});
+
 /* ---------- EXERCISE ---------- */
 function tabExercise(box,a){
   const XT=['Walking','Treadmill','Track work','Driving','Showmanship practice','Free exercise','Hill work','Brace training','Rinsing/washing','Other'];
@@ -2497,6 +2637,8 @@ function collectAlerts(){
   DB.tasks.filter(t=>!t.done&&t.date<todayISO()).forEach(t=>out.push({k:'warn',t:'Task overdue: '+t.title,taskId:t.id}));
   DB.shows.filter(s=>s.entryDeadline&&s.entryDeadline>=todayISO()&&daysBetween(todayISO(),s.entryDeadline)<=7).forEach(s=>out.push({k:'info',t:'Entry deadline soon: '+s.name}));
   DB.health.filter(h=>h.withdrawal&&h.withdrawal>=todayISO()).forEach(h=>{ const a=getAnimal(h.animalId); out.push({k:'warn',t:`${a?a.name:''} withdrawal ends ${fmtShort(h.withdrawal)}`,animal:a}); });
+  (DB.medLog||[]).filter(d=>doseInWithdrawal(d)).forEach(d=>{ const a=getAnimal(d.animalId); const ends=doseWithdrawalEnds(d); const conf=medShowConflict(d.animalId,ends);
+    out.push({k:conf?'warn':'info', t: conf?`${a?a.name:''}: ${d.name} clears ${fmtShort(ends)} — after ${conf.name} (${fmtShort(conf.start)})`:`${a?a.name:''}: ${d.name} withdrawal clears ${fmtShort(ends)}`, animal:a}); });
   DB.recs.filter(r=>r.status==='pending').forEach(r=>{ const a=getAnimal(r.animalId); out.push({k:'p',t:`Advisor rec for ${a?a.name:''}`,animal:a}); });
   return out;
 }
@@ -2610,6 +2752,7 @@ function calItems(range){
   DB.shows.forEach(s=>{ if(inR(s.start))items.push({date:s.start,time:'',kind:'show',title:s.name,ref:s});
     if(s.entryDeadline&&inR(s.entryDeadline))items.push({date:s.entryDeadline,time:'',kind:'deadline',title:'Entry deadline · '+s.name,ref:s}); });
   DB.health.forEach(h=>{ if(h.withdrawal&&inR(h.withdrawal)){const a=getAnimal(h.animalId);items.push({date:h.withdrawal,kind:'withdrawal',title:(a?a.name+' ':'')+'withdrawal ends',animalId:h.animalId});} if(h.followup&&inR(h.followup)){const a=getAnimal(h.animalId);items.push({date:h.followup,kind:'health',title:(a?a.name+' ':'')+'health follow-up',animalId:h.animalId});} });
+  (DB.medLog||[]).forEach(d=>{ const e=doseWithdrawalEnds(d); if(e&&inR(e)){ const a=getAnimal(d.animalId); items.push({date:e,kind:'withdrawal',title:(a?a.name+' ':'')+d.name+' clears',animalId:d.animalId}); } });
   return items;
 }
 const itemSort=(a,b)=>{ const ka=a.date+(a.time||'99:99'), kb=b.date+(b.time||'99:99'); return ka<kb?-1:ka>kb?1:0; };
@@ -3351,6 +3494,7 @@ route('more',()=>{
       ${moreRow('archive',ICON.archive,'Archive')}
       ${moreRow('shows',ICON.shows,'Shows')}
       ${moreRow('layovers',ICON.layover,'Layover care')}
+      ${moreRow('medications',ICON.pill,'Medications')}
       ${moreRow('helpers',ICON.team,'Helpers')}
       ${moreRow('__breeds',ICON.dna,'Species & breeds')}
       ${moreRow('costs',ICON.receipt,'Feed & bedding costs')}
