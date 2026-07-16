@@ -1,5 +1,5 @@
 /* ===================================================================
-   Devitt Family Show Team — Show Livestock Management
+   Show Team — Show Livestock Management
    Single-file, offline-capable PWA. Local-first (localStorage + IndexedDB
    for media blobs). Architected so a cloud backend (auth, Postgres, object
    storage, row-level security, real-time sync) can replace the local store
@@ -264,7 +264,7 @@ function load(){ try{ DB = JSON.parse(localStorage.getItem(KEY)); }catch(e){ DB=
 function blankDB(){
   return {
     version:2, createdAt:nowISO(), updatedAt:nowISO(), setupComplete:false, seeded:false,
-    team:{ name:'Devitt Family Show Team', subtitle:'Show Livestock Management', logo:null,
+    team:{ name:'Show Team', subtitle:'Show Livestock Management', logo:null,
            colors:{purple:'#4C1D95', teal:'#0D9488'}, weighDay:0 /*Sun*/ },
     users:[], currentUserId:null,
     species: SPECIES_DEFS.map(s=>({...s})),
@@ -638,7 +638,7 @@ const LOGO = (c1='#4C1D95',c2='#0D9488')=>`<svg viewBox="0 0 48 48" fill="none">
   <circle cx="18.5" cy="17" r="1.1" fill="#fff"/><circle cx="29.5" cy="17" r="1.1" fill="#fff"/>
 </svg>`;
 /* Brand badge = the real app icon (matches the home-screen tile) */
-const brandImg = () => `<img src="icon-192.png" alt="Devitt Family Show Team" style="width:100%;height:100%;object-fit:cover;display:block">`;
+const brandImg = () => `<img src="icon-192.png" alt="Show Team" style="width:100%;height:100%;object-fit:cover;display:block">`;
 
 /* ===================================================================
    ROUTER + CHROME
@@ -759,7 +759,7 @@ const Cloud = {
     const local = mergeDefaults(load() || blankDB());
     reconcileMember(uid_, name, email, 'Owner');
     local.currentUserId=uid_;
-    const {data:team,error}=await this.sb.from('teams').insert({ owner:uid_, name:local.team?.name||'Devitt Family Show Team', data:local, write_token:this.token() }).select('id').single();
+    const {data:team,error}=await this.sb.from('teams').insert({ owner:uid_, name:local.team?.name||'Show Team', data:local, write_token:this.token() }).select('id').single();
     if(error){ console.error(error); toast('Could not create team: '+error.message,'bad'); return null; }
     const {error:me_}=await this.sb.from('team_members').insert({ team_id:team.id, user_id:uid_, role:'Owner' });
     if(me_) console.error(me_);
@@ -3315,7 +3315,7 @@ function helperSnapshot(id){
     table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
     th{background:#f5f5f7;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#555}.num{white-space:nowrap;font-variant-numeric:tabular-nums}.muted{color:#888;font-size:12px}
     @media print{.noprint{display:none}} .btn{background:#4C1D95;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:700;margin-top:18px;cursor:pointer}</style></head>
-    <body><h1>${esc(h.name)} — animals I'm helping with</h1><div class="sub">Devitt Family Show Team · ${fmtDate(todayISO())} · ${animals.length} animal${animals.length===1?'':'s'}</div>
+    <body><h1>${esc(h.name)} — animals I'm helping with</h1><div class="sub">${esc(DB.team.name)} · ${fmtDate(todayISO())} · ${animals.length} animal${animals.length===1?'':'s'}</div>
     ${animals.length?`<table><tr><th>Animal</th><th>Weight</th><th>Current feed program</th></tr>${rows}</table>`:'<p class="muted">No animals assigned yet.</p>'}
     <button class="btn noprint" onclick="window.print()">Print / Save as PDF</button>
     <p class="noprint muted" style="margin-top:10px">Tip: “Save as PDF” or screenshot this to text it to ${esc(h.name.split(' ')[0])}.</p>
@@ -3382,7 +3382,7 @@ function seasonSummary(id){
     table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px 8px;border-bottom:1px solid #eee;text-align:left}
     .grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin:10px 0}.box{background:#f5f5f7;border-radius:10px;padding:10px}.box b{display:block;font-size:20px;color:#4C1D95}
     .muted{color:#777;font-size:12px}@media print{.noprint{display:none}}</style></head>
-    <body><div class="head"><h1>${esc(a.name)}${a.barnName?' “'+esc(a.barnName)+'”':''}</h1><div style="text-align:right"><b>Devitt Family Show Team</b><div class="muted">Season ${esc(a.season||'')} · ${fmtDate(todayISO())}</div></div></div>
+    <body><div class="head"><h1>${esc(a.name)}${a.barnName?' “'+esc(a.barnName)+'”':''}</h1><div style="text-align:right"><b>${esc(DB.team.name)}</b><div class="muted">Season ${esc(a.season||'')} · ${fmtDate(todayISO())}</div></div></div>
     <p class="muted">${esc(speciesName(a.species))} · ${esc(a.breed)} · ${esc(a.sex||'')}${a.earTag?' · Tag '+esc(a.earTag):''} · Breeder ${esc(a.breeder||'—')}</p>
     <div class="grid"><div class="box"><span class="muted">Start weight</span><b>${st.startW??'—'}</b></div><div class="box"><span class="muted">Final weight</span><b>${st.curW??'—'}</b></div><div class="box"><span class="muted">Total gain</span><b>${st.gainTotal??'—'}</b></div><div class="box"><span class="muted">Lifetime ADG</span><b>${st.adgLife??'—'}</b></div></div>
     <h2>Weight history</h2><table><tr><th>Date</th><th>Weight</th><th>Gain</th><th>ADG</th><th>Notes</th></tr>${ws.map((x,i)=>{const p=ws[i-1];const g=p?round(x.weight-p.weight,1):null;const d=p?daysBetween(p.date,x.date):null;return `<tr><td>${fmtDate(x.date)}</td><td>${x.weight} lb</td><td>${g!=null?(g>0?'+':'')+g:'—'}</td><td>${g!=null&&d>0?round(g/d,2):'—'}</td><td>${esc(x.notes||'')}</td></tr>`;}).join('')}</table>
@@ -3516,7 +3516,7 @@ route('more',()=>{
       <button class="li" data-more="__update" style="width:100%;text-align:left"><div class="thumb" style="background:var(--line-2);color:var(--purple)">${ICON.refresh}</div><div class="main"><div class="t1">Check for updates</div><div class="t2" id="appVer">Checking version…</div></div>${ICON.chev}</button>
     </div>
     <div style="margin-top:18px"><button class="btn block" id="logout">${ICON.logout} Sign out</button></div>
-    <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">Devitt Family Show Team${Cloud.enabled?' · Cloud sync on':' · Local-first build'}<br>${Cloud.enabled&&Cloud.teamId?'Shared & synced across your team':'Data stored on this device'}</p>`;
+    <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">${esc(DB.team.name)}${Cloud.enabled?' · Cloud sync on':' · Local-first build'}<br>${Cloud.enabled&&Cloud.teamId?'Shared & synced across your team':'Data stored on this device'}</p>`;
   v.append(wrap);
   $$('[data-more]',wrap).forEach(b=>b.onclick=()=>{ const k=b.dataset.more;
     if(k==='__breeds')openBreeds(); else if(k==='__notif')openNotif(); else if(k==='__settings')openTeamSettings();
@@ -3938,7 +3938,7 @@ function printRecordBook(animalId){
     table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px}td,th{padding:6px 8px;border-bottom:1px solid #eee;text-align:left}
     .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.box{background:#f5f5f7;border-radius:10px;padding:10px}.box b{display:block;font-size:22px;color:#4C1D95}
     .muted{color:#777;font-size:12px;font-weight:400}@media print{.noprint{display:none}}</style></head>
-    <body><div class="head"><h1>${esc(a?a.name:'Devitt Family Show Team')}<br><span class="muted">Record Book</span></h1><div style="text-align:right"><b>Devitt Family Show Team</b><div class="muted">${fmtDate(todayISO())}</div></div></div>
+    <body><div class="head"><h1>${esc(a?a.name:DB.team.name)}<br><span class="muted">Record Book</span></h1><div style="text-align:right"><b>${esc(DB.team.name)}</b><div class="muted">${fmtDate(todayISO())}</div></div></div>
     <div class="grid"><div class="box"><span class="muted">Class wins</span><b>${st.wins}</b></div><div class="box"><span class="muted">Banners</span><b>${st.banners}</b></div><div class="box"><span class="muted">Shows</span><b>${st.shows}</b></div><div class="box"><span class="muted">Placings</span><b>${st.count}</b></div></div>
     ${(st.premium||st.sale)?`<p class="muted">Premiums ${money(st.premium)} · Sale total ${money(st.sale)}${st.points?' · '+round(st.points,1)+' points':''}</p>`:''}
     ${st.bannerList.length?`<h3>Banners &amp; Champions</h3><table>${st.bannerList.map(e=>{const an=getAnimal(e.animalId);const sh=DB.shows.find(s=>s.id===e.showId);return `<tr><td>${esc(e.result.divisionPlacing||e.result.bannerNote)}</td><td>${esc(an?an.name:'')}</td><td>${esc(sh?sh.name:'')}</td><td>${sh?fmtDate(sh.start):''}</td></tr>`;}).join('')}</table>`:''}

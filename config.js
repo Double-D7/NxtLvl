@@ -1,4 +1,4 @@
-/* Devitt Family Show Team — cloud configuration.
+/* Show Team — cloud configuration.
    Fill these in to turn on shared, multi-user cloud sync (Supabase).
    Both values are SAFE to commit to a frontend: the anon key only grants
    what Row-Level Security allows, and RLS is what actually protects the data.
