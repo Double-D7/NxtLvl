@@ -44,6 +44,7 @@ marked and removable any time from **More → Remove demo data**.
 | **Reports** | ADG ranking, species mix, show results, and one-tap exports: **season summary** (printable / Save-as-PDF), animals CSV, weights CSV, and a full JSON backup/restore. |
 | **Team** | Roles (Owner · Administrator · Editor · Contributor · Viewer · Advisor) with permission gating, invitations, and an advisor-recommendation review flow (accept / modify / decline). |
 | **Archive** | Finish an animal's career without deleting it — every record is preserved, searchable, and **restorable**. |
+| **Check for updates** | **More → App → Check for updates** shows the installed version and force-pulls the newest deploy on demand — refreshes the service worker and reloads into the new build instead of waiting on the cache. |
 
 ## Design
 
