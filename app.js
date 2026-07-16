@@ -51,6 +51,7 @@ const ICON = {
   paw:I('<ellipse cx="12" cy="15" rx="4.5" ry="3.5"/><circle cx="6.5" cy="10" r="1.8"/><circle cx="17.5" cy="10" r="1.8"/><circle cx="9" cy="6.5" r="1.6"/><circle cx="15" cy="6.5" r="1.6"/>'),
   info:I('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
   download:I('<path d="M12 3v11M8 10l4 4 4-4M4 20h16"/>'),
+  refresh:I('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/>'),
   upload:I('<path d="M12 20V9M8 13l4-4 4 4M4 4h16"/>'),
   star:I('<path d="M12 3l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8L6.4 19.6l1-6L3 9.4l6-.9L12 3z"/>'),
   flag:I('<path d="M5 21V4M5 4h11l-2 3 2 3H5"/>'),
@@ -3366,15 +3367,37 @@ route('more',()=>{
       ${moreRow('__import',ICON.upload,'Import backup')}
       ${moreRow('__demo',DB.seeded?ICON.check:ICON.boxes,DB.seeded?'Demo animals — keep or remove':'Load demo data')}
     </div>
+    <div class="section-title">App</div>
+    <div class="list">
+      <button class="li" data-more="__update" style="width:100%;text-align:left"><div class="thumb" style="background:var(--line-2);color:var(--purple)">${ICON.refresh}</div><div class="main"><div class="t1">Check for updates</div><div class="t2" id="appVer">Checking version…</div></div>${ICON.chev}</button>
+    </div>
     <div style="margin-top:18px"><button class="btn block" id="logout">${ICON.logout} Sign out</button></div>
     <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">Devitt Family Show Team${Cloud.enabled?' · Cloud sync on':' · Local-first build'}<br>${Cloud.enabled&&Cloud.teamId?'Shared & synced across your team':'Data stored on this device'}</p>`;
   v.append(wrap);
   $$('[data-more]',wrap).forEach(b=>b.onclick=()=>{ const k=b.dataset.more;
     if(k==='__breeds')openBreeds(); else if(k==='__notif')openNotif(); else if(k==='__settings')openTeamSettings();
     else if(k==='__inventory')openInventory(); else if(k==='__backup')exportBackup();
-    else if(k==='__import')importBackup(); else if(k==='__demo')toggleDemo(); else if(k==='__cloud')openCloudConnect(); else go('/'+k); });
+    else if(k==='__import')importBackup(); else if(k==='__demo')toggleDemo(); else if(k==='__cloud')openCloudConnect(); else if(k==='__update')checkForUpdate(); else go('/'+k); });
   $('#logout',wrap).onclick=async()=>{ if(Cloud.enabled){ await Cloud.signOut(); } DB.currentUserId=null; save(true); render(); };
+  appVersion().then(x=>{ const e=$('#appVer',wrap); if(e)e.textContent = x?('Version '+x+' · tap to update'):'Tap to reload the latest'; });
 });
+/* the running app version = the active service-worker cache key (single source of truth) */
+async function appVersion(){ try{ if(!('caches' in window))return null; const keys=await caches.keys(); const k=keys.find(x=>/^dfst-v/.test(x)); return k?k.replace('dfst-',''):null; }catch(e){ return null; } }
+/* Force-fetch the newest deploy: re-check the service worker; when a fresh one
+   takes control, reload so the new app.js (cache-first) is picked up. If nothing
+   changed, say so. Falls back to a plain reload where there's no SW. */
+async function checkForUpdate(){
+  if(!('serviceWorker' in navigator)){ toast('Reloading…',''); setTimeout(()=>location.reload(),300); return; }
+  toast('Checking for updates…','');
+  let reg=null; try{ reg = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.ready; }catch(e){}
+  if(!reg){ location.reload(); return; }
+  let done=false; const reload=()=>{ if(done)return; done=true; toast('Updating — reloading…','good'); setTimeout(()=>location.reload(),250); };
+  navigator.serviceWorker.addEventListener('controllerchange', reload, {once:true});
+  reg.addEventListener('updatefound', ()=>{ const nw=reg.installing; if(!nw)return;
+    nw.addEventListener('statechange', ()=>{ if(nw.state==='activated' || (nw.state==='installed' && navigator.serviceWorker.controller)) reload(); }); });
+  try{ await reg.update(); }catch(e){}
+  setTimeout(async()=>{ if(done)return; if(reg.installing||reg.waiting)return; const v=await appVersion(); toast('You’re on the latest version'+(v?' ('+v+')':''),'good'); }, 3500);
+}
 function openCloudConnect(){
   const cfg=cloudConfig()||{}; const body=el('div');
   const connected = Cloud.enabled && Cloud.teamId;
