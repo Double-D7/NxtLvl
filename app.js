@@ -1613,7 +1613,10 @@ function renderTimeline(box,a){
 /* Flag weigh-ins that look like data-entry errors (bad date or typo weight),
    so unusual numbers are easy to spot and fix. Returns { [weightId]: {level,reason} }. */
 function speciesAdgCeiling(sp){ return {swine:4.5, cattle:6.5, sheep:2.5, goat:2.5}[sp] || 4.5; }
-function weightFlags(ws, sp){
+/* a weigh-in confirmed "correct" is tied to its weight+date, so editing either re-checks it */
+const weighSig = w => (w.weight)+'|'+(w.date);
+const weighConfirmed = w => !!(w.confirmed && w.confirmSig===weighSig(w));
+function weightFlags(ws, sp, opts){
   const ceil=speciesAdgCeiling(sp); const flags={};
   for(let j=1;j<ws.length;j++){ const w=ws[j], p=ws[j-1];
     const days=daysBetween(p.date,w.date); const gain=+w.weight-+p.weight;
@@ -1629,6 +1632,8 @@ function weightFlags(ws, sp){
       flags[ws[j].id]={level:'warn',reason:'This weight is out of line with the ones around it — possible typo'};
     }
   }
+  // drop flags the user has reviewed and confirmed correct (unless we're asked to show them)
+  if(!(opts&&opts.ignoreConfirmed)) ws.forEach(w=>{ if(weighConfirmed(w) && flags[w.id]) delete flags[w.id]; });
   return flags;
 }
 /* Entry-time sanity check for a single weigh-in against its date-neighbours.
@@ -1681,10 +1686,10 @@ function tabWeight(box,a){
     const fl=flags[w.id];
     const li=el('div','li'); if(fl)li.style.cssText='border-left:3px solid var(--'+(fl.level==='bad'?'bad':'warn')+')';
     li.innerHTML=`<div class="thumb" style="color:${fl?'var(--'+(fl.level==='bad'?'bad':'warn')+')':'var(--purple-3)'}">${fl?ICON.info:ICON.weight}</div>
-      <div class="main"><div class="t1 tnum">${w.weight} lb${fl?` <span class="pill ${fl.level==='bad'?'bad':'warn'}" style="font-size:9px">Check</span>`:''}</div><div class="t2">${fmtDate(w.date)}${w.scale?' · '+esc(w.scale):''}${w.by?' · '+esc(userName(w.by)):''}</div>${fl?`<div class="t2" style="color:var(--${fl.level==='bad'?'bad':'warn'});white-space:normal;font-weight:600;margin-top:2px">${esc(fl.reason)}</div>`:''}</div>
+      <div class="main"><div class="t1 tnum">${w.weight} lb${fl?` <span class="pill ${fl.level==='bad'?'bad':'warn'}" style="font-size:9px">Check</span>`:''}</div><div class="t2">${fmtDate(w.date)}${w.scale?' · '+esc(w.scale):''}${w.by?' · '+esc(userName(w.by)):''}</div>${fl?`<div class="t2" style="color:var(--${fl.level==='bad'?'bad':'warn'});white-space:normal;font-weight:600;margin-top:2px">${esc(fl.reason)}</div>`:''}${weighConfirmed(w)&&w.confirmNote?`<div class="t2" style="color:var(--muted);white-space:normal;margin-top:2px">${ICON.check} ${esc(w.confirmNote)}</div>`:''}</div>
       <div class="r">${gain!=null?`<div style="font-weight:800;color:${gain>=0?'var(--good)':'var(--bad)'}" class="tnum">${gain>=0?'+':''}${gain}</div><div style="font-size:11px;color:var(--muted)" class="tnum">${adg!=null?adg+' lb/d':''}</div>`:'<span class="pill gray" style="font-size:10px">start</span>'}</div>`;
     li.onclick=()=>openWeightSheet(a.id,w.id); L.append(li); }); hist.append(L); }
-  if($('#wFlagBanner',box))$('#wFlagBanner',box).onclick=()=>{ const first=$('#wHist .li[style*="border-left"]',box); if(first)first.scrollIntoView({behavior:'smooth',block:'center'}); };
+  if($('#wFlagBanner',box))$('#wFlagBanner',box).onclick=()=>{ const id=Object.keys(flags)[0]; if(id)openWeightSheet(a.id,id); };
   $('#addW',box).onclick=()=>openWeightSheet(a.id);
 }
 
@@ -1740,6 +1745,8 @@ function openFeedCompare(id){
 function openWeightSheet(animalId, weightId){
   if(!can('addRecord')){ toast('Your role can’t add weights','bad'); return; }
   const a=getAnimal(animalId); const ws=weightsFor(animalId); const lastW=ws.length?+ws[ws.length-1].weight:(a.startWeight||80);
+  const rawFlag = weightId ? weightFlags(ws, a.species, {ignoreConfirmed:true})[weightId] : null;
+  const wConfirmed = weightId ? weighConfirmed(DB.weights.find(x=>x.id===weightId)||{}) : false;
   const w = weightId?{...DB.weights.find(x=>x.id===weightId)}:{ animalId, weight:Math.round(lastW), date:todayISO(), time:nowTime(), scale:DB.lastScale||'', by:DB.currentUserId };
   const body=el('div');
   body.innerHTML=`
@@ -1752,6 +1759,12 @@ function openWeightSheet(animalId, weightId){
     <div class="field-row"><div class="field" style="flex:1"><label>Body condition (1–9)</label><input class="control" type="number" min="1" max="9" id="wBcs" value="${w.bcs??''}"></div>
       <div class="field" style="flex:1"><label>Fill</label><select class="control" id="wFill"><option value=""></option>${['Empty','Light','Normal','Full','Heavy'].map(x=>`<option ${w.fill===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
     <div class="field"><label>Notes</label><textarea class="control" id="wNotes" placeholder="How did they look and handle?">${esc(w.notes||'')}</textarea></div>
+    ${rawFlag?`<div class="card pad" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.4)">
+      <div style="font-weight:800;color:var(--warn);font-size:13px;display:flex;gap:6px;align-items:center">${ICON.info} This weigh-in looks unusual</div>
+      <div style="font-size:12.5px;color:var(--ink-2);margin:5px 0 10px">${esc(rawFlag.reason)}</div>
+      <label class="li" style="border:1px solid var(--line);border-radius:12px;margin:0 0 8px"><div class="main"><div class="t1" style="font-size:13.5px">This weight is correct</div><div class="t2">Keep it as-is and stop flagging it</div></div><input type="checkbox" id="wConfirm" ${wConfirmed?'checked':''} style="width:22px;height:22px"></label>
+      <input class="control" id="wConfirmNote" placeholder="Reason (e.g. ulcer that week — treated, back on gain)" value="${esc(w.confirmNote||'')}">
+    </div>`:''}
     <div id="wCalc"></div>`;
   const calc=()=>{ const val=+$('#wInput',body).value; const prev=ws.filter(x=>x.id!==weightId).slice(-1)[0];
     if(prev){ const g=round(val-prev.weight,1); const d=daysBetween(prev.date,$('#wDate',body).value); const adg=d>0?round(g/d,2):null;
@@ -1765,11 +1778,16 @@ function openWeightSheet(animalId, weightId){
   $('#wDate',sh).onchange=calc; calc();
   $('[data-save]',sh).onclick=async()=>{ const val=+$('#wInput',body).value; if(!val){toast('Enter a weight','bad');return;}
     const date=$('#wDate',body).value;
-    const warn=weighInAnomaly(animalId, val, date, weightId);
+    const confirmChk = $('#wConfirm',body) && $('#wConfirm',body).checked;
+    const warn = confirmChk ? null : weighInAnomaly(animalId, val, date, weightId);
     if(warn){ const ok=await confirmSheet('Double-check this weigh-in', warn, 'Save anyway'); if(!ok) return; }
     const rec={ weight:val, date, time:$('#wTime',body).value, scale:$('#wScale',body).value.trim(), bcs:$('#wBcs',body).value||null, fill:$('#wFill',body).value||null, notes:$('#wNotes',body).value.trim(), by:DB.currentUserId };
     DB.lastScale=rec.scale;
-    if(weightId){ Object.assign(DB.weights.find(x=>x.id===weightId),rec); touch(DB.weights.find(x=>x.id===weightId)); logAct('weight','Edited weight '+val+' lb',animalId); }
+    if(weightId){ const target=DB.weights.find(x=>x.id===weightId); Object.assign(target,rec);
+      if($('#wConfirm',body)){ if(confirmChk){ target.confirmed=true; target.confirmNote=$('#wConfirmNote',body).value.trim(); target.confirmedBy=DB.currentUserId; target.confirmedAt=nowISO(); target.confirmSig=weighSig(target); logAct('weight',`Confirmed weigh-in ${val} lb on ${fmtShort(date)} correct${target.confirmNote?' — '+target.confirmNote:''}`,animalId); }
+        else { target.confirmed=false; delete target.confirmSig; logAct('weight','Edited weight '+val+' lb',animalId); } }
+      else logAct('weight','Edited weight '+val+' lb',animalId);
+      touch(target); }
     else { DB.weights.push(stamp({id:uid('w'),animalId,...rec})); logAct('weight','Logged '+val+' lb',animalId); }
     save(); closeSheet(); toast('Weight saved','good'); render();
     if(!weightId){  // celebrate milestones on a fresh weigh-in
