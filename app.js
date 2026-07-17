@@ -273,7 +273,7 @@ function blankDB(){
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
     layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
-    meds:[], medLog:[],
+    meds:[], medLog:[], alertAcks:{},
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
   };
 }
@@ -364,17 +364,26 @@ function weightAlerts(a){
   const s=animalStats(a); const out=[];
   const ws=weightsFor(a.id);
   if(ws.length){ const since=daysBetween(ws[ws.length-1].date, todayISO());
-    if(since>=7) out.push({k:'warn', t:`No weight in ${since} days`}); }
-  else out.push({k:'info', t:'No weights recorded yet'});
+    if(since>=7) out.push({k:'warn', type:'stale', t:`No weight in ${since} days`}); }
+  else out.push({k:'info', type:'noweight', t:'No weights recorded yet'});
   if(a.targetWeight && s.projWeight!=null){
-    if(s.projWeight < a.targetWeight-8) out.push({k:'bad', t:`Projected ${s.projWeight} — under ${a.targetWeight} target`});
-    else if(s.projWeight > a.targetWeight+12) out.push({k:'warn', t:`Projected ${s.projWeight} — over ${a.targetWeight} target`});
+    if(s.projWeight < a.targetWeight-8) out.push({k:'bad', type:'under', t:`Projected ${s.projWeight} — under ${a.targetWeight} target`});
+    else if(s.projWeight > a.targetWeight+12) out.push({k:'warn', type:'over', t:`Projected ${s.projWeight} — over ${a.targetWeight} target`});
   }
-  if(s.adgPeriod!=null && s.adgLife!=null && s.adgPeriod < s.adgLife*0.5 && s.count>2) out.push({k:'warn',t:'ADG dropped sharply'});
+  if(s.adgPeriod!=null && s.adgLife!=null && s.adgPeriod < s.adgLife*0.5 && s.count>2) out.push({k:'warn',type:'adgdrop',t:'ADG dropped sharply'});
   const missingMedia = mediaFor(a.id).length===0;
-  if(missingMedia) out.push({k:'info', t:'No progress media'});
-  return out;
+  if(missingMedia) out.push({k:'info', type:'nomedia', t:'No progress media'});
+  return out.map(al=>({...al, acked:isAcked(a,al.type)}));
 }
+/* ---- Acknowledge/justify an alert without touching the data. The signature
+   ties the acknowledgement to the current weigh-in state, so logging a new
+   weight automatically re-checks and re-surfaces the alert if it still holds. */
+const ackKey = (animalId,type)=>animalId+'::'+type;
+function alertSig(a,type){ const ws=weightsFor(a.id); if(type==='nomedia')return 'm'+mediaFor(a.id).length; const last=ws[ws.length-1]; return 'w'+ws.length+':'+(last?last.date+':'+last.weight:'0'); }
+const alertAck = (animalId,type)=>(DB.alertAcks||{})[ackKey(animalId,type)];
+function isAcked(a,type){ const ack=alertAck(a.id,type); return !!(ack && ack.sig===alertSig(a,type)); }
+function setAlertAck(a,type,note){ DB.alertAcks=DB.alertAcks||{}; const k=ackKey(a.id,type); if(note==null){ delete DB.alertAcks[k]; } else { DB.alertAcks[k]={note, sig:alertSig(a,type), by:DB.currentUserId, at:nowISO()}; } }
+const activeWeightAlerts = a => weightAlerts(a).filter(al=>!al.acked);
 function currentFeed(id){ return feedFor(id).find(f=>!f.endDate) || feedFor(id)[0] || null; }
 function feedProgramStats(f){
   const ws=weightsFor(f.animalId);
@@ -1116,7 +1125,7 @@ route('dashboard', ()=>{
   const needWeigh=active.filter(a=>{ const ws=weightsFor(a.id); return !ws.length || daysBetween(ws[ws.length-1].date,todayISO())>=7; });
   const upcoming=DB.shows.filter(s=>s.start>=todayISO()).sort((a,b)=>a.start<b.start?-1:1);
   const nextShow=upcoming[0];
-  const alertAnimals=active.filter(a=>weightAlerts(a).some(x=>x.k==='bad'||x.k==='warn'));
+  const alertAnimals=active.filter(a=>activeWeightAlerts(a).some(x=>x.k==='bad'||x.k==='warn'));
   const recentMedia=DB.media.slice().sort((a,b)=>a.createdAt<b.createdAt?1:-1).slice(0,6);
   // Occurrence-aware: a repeating task shows today's occurrence (unless done
   // for today); a one-off shows if due today or overdue.
@@ -1249,7 +1258,7 @@ route('dashboard', ()=>{
   if(alertAnimals.length){
     wrap.append(htmlToFrag(`<div class="section-title">Attention needed</div>`));
     const list=el('div','list');
-    alertAnimals.slice(0,5).forEach(a=>{ const al=weightAlerts(a).find(x=>x.k==='bad')||weightAlerts(a).find(x=>x.k==='warn');
+    alertAnimals.slice(0,5).forEach(a=>{ const al=activeWeightAlerts(a).find(x=>x.k==='bad')||activeWeightAlerts(a).find(x=>x.k==='warn');
       const li=animalRow(a, `<span class="pill ${al.k==='bad'?'bad':'warn'}">${esc(al.t)}</span>`); list.append(li); });
     wrap.append(list);
   }
@@ -1519,7 +1528,11 @@ function tabOverview(box,a){
     <div class="section-title">Growth chart</div>
     <div class="card pad">${overviewChart(a)}
       <div class="chart-legend"><span><span class="leg-line" style="background:var(--purple-3)"></span>Actual</span>${a.targetWeight?'<span><span class="leg-line" style="background:var(--teal-3)"></span>Target</span>':''}${st.projWeight!=null?'<span><span class="leg-line" style="background:#C4B5FD;border-top:2px dashed #C4B5FD"></span>Projected</span>':''}</div></div>
-    ${alerts.length?`<div class="section-title">Alerts</div><div class="list">${alerts.map(al=>`<div class="li"><div class="dot" style="background:var(--${al.k==='bad'?'bad':al.k==='warn'?'warn':'info'})"></div><div class="main"><div class="t1" style="font-size:13.5px;font-weight:600">${esc(al.t)}</div></div></div>`).join('')}</div>`:''}
+    ${(()=>{ const activeAl=alerts.filter(al=>!al.acked); const ackedAl=alerts.filter(al=>al.acked);
+      const rowActive=al=>`<div class="li" data-alert="${al.type}" style="cursor:pointer"><div class="dot" style="background:var(--${al.k==='bad'?'bad':al.k==='warn'?'warn':'info'})"></div><div class="main"><div class="t1" style="font-size:13.5px;font-weight:600">${esc(al.t)}</div>${al.k!=='info'?'<div class="t2">Tap to review or add a reason</div>':''}</div>${al.k!=='info'?ICON.chev:''}</div>`;
+      const rowAcked=al=>{ const ack=alertAck(a.id,al.type); return `<div class="li" data-alert="${al.type}" style="cursor:pointer;opacity:.7"><div class="dot" style="background:var(--muted)"></div><div class="main"><div class="t1" style="font-size:13.5px;font-weight:600;text-decoration:line-through;text-decoration-color:var(--muted)">${esc(al.t)}</div><div class="t2" style="white-space:normal">${esc(ack&&ack.note||'Acknowledged')}</div></div>${ICON.chev}</div>`; };
+      return (activeAl.length?`<div class="section-title">Alerts</div><div class="list">${activeAl.map(rowActive).join('')}</div>`:'')
+        + (ackedAl.length?`<div class="section-title">Acknowledged <span style="color:var(--muted);font-weight:600;font-size:12px">· muted with a reason</span></div><div class="list">${ackedAl.map(rowAcked).join('')}</div>`:''); })()}
     <div class="section-title">Current feed</div>
     ${cf?feedCard(cf,false):emptyState(ICON.feed,'No feed program','Add the current ration to start tracking response.')}
     <div class="section-title">Details</div>
@@ -1531,7 +1544,36 @@ function tabOverview(box,a){
   renderTimeline($('#ovTimeline',box),a);
   if($('[data-gpopen]',box))$('[data-gpopen]',box).onclick=()=>openGamePlanSheet(a.id);
   if($('[data-gpcard]',box))$('[data-gpcard]',box).onclick=()=>openGamePlanSheet(a.id);
+  $$('[data-alert]',box).forEach(li=>{ const type=li.dataset.alert; if(type==='noweight'||type==='nomedia')return; li.onclick=()=>openAlertReview(a.id,type); });
   $$('[data-fquick]',box).forEach(b=>{});
+}
+/* Review an alert and either mute it with a written reason, or un-mute it. */
+function openAlertReview(animalId, type){
+  const a=getAnimal(animalId); if(!a)return;
+  const al=weightAlerts(a).find(x=>x.type===type);
+  const ack=alertAck(animalId,type); const acked=isAcked(a,type);
+  const st=animalStats(a); const ws=weightsFor(a.id);
+  const last=ws[ws.length-1], prev=ws[ws.length-2];
+  const delta=(last&&prev)?round(+last.weight - +prev.weight,1):null;
+  const body=el('div');
+  body.innerHTML=`
+    <div class="card pad" style="margin-bottom:12px">
+      <div style="font-weight:800;margin-bottom:3px">${esc(a.name)}</div>
+      <div style="font-size:13.5px;font-weight:700;color:var(--${al?(al.k==='bad'?'bad':'warn'):'good'})">${al?esc(al.t):'This alert has since cleared.'}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:6px">
+        ${last?`Last weigh-in ${fmtShort(last.date)}: <b class="tnum" style="color:var(--ink)">${last.weight} lb</b>${delta!=null?` (${delta>=0?'+':''}${delta} vs prior)`:''}`:'No weigh-ins yet'}
+        ${st.adgPeriod!=null?` · recent ADG <b class="tnum" style="color:var(--ink)">${st.adgPeriod} lb/d</b>`:''}</div>
+    </div>
+    <div class="help">${ICON.info}<span>If this change is expected — a known illness, a scale/fill difference, a bounce-back — write why and mute it. Your note stays on the record, and the alert re-checks automatically the next time you log a weight.</span></div>
+    <div class="field"><label>Reason / justification</label><textarea class="control" id="arNote" placeholder="e.g. Ulcer that week — treated, back on gain now">${esc((ack&&ack.note)||'')}</textarea></div>
+    ${ack&&acked?`<div style="font-size:11.5px;color:var(--muted)">Muted by ${esc(userName(ack.by)||'you')} · ${fmtShort((ack.at||'').slice(0,10))}</div>`:''}`;
+  const foot=el('div');
+  foot.innerHTML=`${acked?`<button class="btn" data-clear style="flex:1">Un-mute</button>`:`<button class="btn" data-weigh style="flex:1">${ICON.plus} Log weight</button>`}<button class="btn primary" data-save style="flex:1">${acked?'Update reason':'Acknowledge & mute'}</button>`;
+  const sh=openSheet({title:'Review alert',body,foot});
+  $('[data-save]',sh).onclick=()=>{ const note=$('#arNote',body).value.trim(); if(!note){ toast('Add a short reason to mute it','bad'); return; }
+    setAlertAck(a,type,note); logAct('alert',`Acknowledged “${al?al.t:type}” — ${note}`,a.id); save(); closeSheet(); toast('Alert muted with your reason','good'); render(); };
+  if($('[data-clear]',sh))$('[data-clear]',sh).onclick=()=>{ setAlertAck(a,type,null); logAct('alert',`Un-muted alert for ${a.name}`,a.id); save(); closeSheet(); toast('Alert un-muted','good'); render(); };
+  if($('[data-weigh]',sh))$('[data-weigh]',sh).onclick=()=>{ closeSheet(); openWeightSheet(a.id); };
 }
 function overviewChart(a){
   const ws=weightsFor(a.id); if(ws.length<1) return '<div class="empty" style="padding:16px">No weights yet</div>';
@@ -2633,7 +2675,7 @@ function openSearch(){
    =================================================================== */
 function collectAlerts(){
   const out=[];
-  activeAnimals().forEach(a=>weightAlerts(a).forEach(al=>{ if(al.k!=='info')out.push({animal:a,...al}); }));
+  activeAnimals().forEach(a=>activeWeightAlerts(a).forEach(al=>{ if(al.k!=='info')out.push({animal:a,...al}); }));
   DB.tasks.filter(t=>!t.done&&t.date<todayISO()).forEach(t=>out.push({k:'warn',t:'Task overdue: '+t.title,taskId:t.id}));
   DB.shows.filter(s=>s.entryDeadline&&s.entryDeadline>=todayISO()&&daysBetween(todayISO(),s.entryDeadline)<=7).forEach(s=>out.push({k:'info',t:'Entry deadline soon: '+s.name}));
   DB.health.filter(h=>h.withdrawal&&h.withdrawal>=todayISO()).forEach(h=>{ const a=getAnimal(h.animalId); out.push({k:'warn',t:`${a?a.name:''} withdrawal ends ${fmtShort(h.withdrawal)}`,animal:a}); });
@@ -2647,7 +2689,7 @@ function openAlerts(){
   if(!alerts.length){ body.innerHTML='<div class="empty" style="padding:24px">'+ICON.check+'<div class="h">All clear</div><div class="p">No alerts right now.</div></div>'; }
   else { const L=el('div','list'); alerts.forEach(al=>{ const li=el('div','li');
     li.innerHTML=`<div class="dot" style="background:var(--${al.k==='bad'?'bad':al.k==='warn'?'warn':al.k==='p'?'purple-3':'info'})"></div><div class="main"><div class="t1" style="font-size:13.5px;font-weight:600">${esc(al.t)}</div>${al.animal?`<div class="t2">${esc(al.animal.name)}</div>`:''}</div>${al.animal?ICON.chev:''}`;
-    if(al.animal)li.onclick=()=>{closeSheet();go('/animal/'+al.animal.id);}; L.append(li); }); body.append(L); }
+    if(al.animal)li.onclick=()=>{ if(al.type && ['stale','under','over','adgdrop'].includes(al.type)){ closeSheet(); openAlertReview(al.animal.id, al.type); } else { closeSheet(); go('/animal/'+al.animal.id); } }; L.append(li); }); body.append(L); }
   openSheet({title:`Alerts${alerts.length?' · '+alerts.length:''}`,body});
 }
 
