@@ -1107,13 +1107,13 @@ function barnBriefing(ctx){ const p=[];
 function todaysFocus(ctx){
   const {active, needWeigh, showSoon, todayTasks}=ctx;
   if(showSoon) return {icon:ICON.clipboard,color:'#DB2777',title:'It’s show day',sub:'Open show-day mode',go:'/showday/'+showSoon.id};
-  const grp=todayTasks.find(({t})=>taskAnimalIds(t).filter(id=>getAnimal(id)).length>=2);
-  if(grp){ const t=grp.t; const ids=taskAnimalIds(t).filter(id=>getAnimal(id)); const dn=taskProgress(t,grp.date).filter(id=>ids.includes(id)).length;
+  const grp=todayTasks.find(({t})=>taskLiveIds(t).length>=2);
+  if(grp){ const t=grp.t; const ids=taskLiveIds(t); const dn=taskProgress(t,grp.date).filter(id=>ids.includes(id)).length;
     return {icon:ICON.check,color:'var(--purple-3)',title:t.title,sub:`${dn}/${ids.length} done — keep working through them`,fn:()=>openTaskProgressSheet(t.id,grp.date)}; }
   if(needWeigh.length) return {icon:ICON.weight,color:'var(--teal-3)',title:`Weigh ${needWeigh.length} animal${needWeigh.length===1?'':'s'}`,sub:'Due for a weekly weight',fn:()=>openWeightSheet(needWeigh[0].id)};
   const behind=active.filter(a=>coachEligible(a)&&coachStatus(a).state==='under');
   if(behind.length) return {icon:ICON.target,color:'var(--bad)',title:`${behind.length} behind on their game plan`,sub:'See what they need',go:'/coach'};
-  if(todayTasks.length){ const {t,date}=todayTasks[0]; return {icon:ICON.check,color:'var(--purple-3)',title:t.title,sub:'Due today',fn:()=>{ const ids=taskAnimalIds(t).filter(id=>getAnimal(id)); ids.length>=2?openTaskProgressSheet(t.id,date):openTaskSheet(t.id); }}; }
+  if(todayTasks.length){ const {t,date}=todayTasks[0]; return {icon:ICON.check,color:'var(--purple-3)',title:t.title,sub:'Due today',fn:()=>{ const ids=taskLiveIds(t); ids.length>=2?openTaskProgressSheet(t.id,date):openTaskSheet(t.id); }}; }
   const noPhoto=active.find(a=>!mediaFor(a.id).length);
   if(noPhoto) return {icon:ICON.camera,color:'var(--info)',title:'Snap a progress photo',sub:noPhoto.name+' doesn’t have one yet',go:'/animal/'+noPhoto.id+'/media'};
   return {icon:ICON.star,color:'var(--good)',title:'All caught up',sub:'Nice work — the barn’s dialed in',go:null};
@@ -1243,7 +1243,7 @@ route('dashboard', ()=>{
   if(todayTasks.length){
     const list=el('div','list');
     todayTasks.forEach(({t,date})=>{
-      const ids=taskAnimalIds(t).filter(id=>getAnimal(id)); const multi=ids.length>=2;
+      const ids=taskLiveIds(t); const multi=ids.length>=2;
       const dn=multi?taskProgress(t,date).filter(id=>ids.includes(id)).length:0;
       const who=multi?`${dn}/${ids.length} animals`:animalsLabel(ids);
       const li=el('div','li');
@@ -2784,18 +2784,23 @@ function taskOccurrences(t, fromISO, toISO){
   return out;
 }
 const taskAnimalIds = t => t.animalIds || (t.animalId!=null&&t.animalId!==''?[t.animalId]:[]);
-function animalsLabel(ids){ ids=(ids||[]).filter(id=>getAnimal(id)); if(ids.length===1) return (getAnimal(ids[0])||{}).name||''; return ids.length>1 ? ids.length+' animals' : ''; }
+/* an assigned id counts only while the animal exists AND is not archived */
+const isActiveAnimalId = id => { const a=getAnimal(id); return !!a && !a.archived; };
+/* a task's assigned animals as shown/counted everywhere — archived ones drop out
+   (they stay in the stored animalIds, so they return if the animal is restored) */
+const taskLiveIds = t => taskAnimalIds(t).filter(isActiveAnimalId);
+function animalsLabel(ids){ ids=(ids||[]).filter(isActiveAnimalId); if(ids.length===1) return (getAnimal(ids[0])||{}).name||''; return ids.length>1 ? ids.length+' animals' : ''; }
 // Per-animal completion for a given date lives in t.progress[date] = [animalIds done].
 const taskProgress = (t,date) => (t.progress && t.progress[date]) || [];
 function setTaskAnimalDone(t,date,animalId,val){ t.progress=t.progress||{}; const arr=t.progress[date]||(t.progress[date]=[]);
   const i=arr.indexOf(animalId); if(val&&i<0)arr.push(animalId); else if(!val&&i>=0)arr.splice(i,1); if(!arr.length)delete t.progress[date]; touch(t); }
 // An occurrence is "done" when every assigned animal is checked (or, with no
 // animals, the whole task is marked done for that date).
-const taskDoneOn = (t,date) => { const ids=taskAnimalIds(t);
+const taskDoneOn = (t,date) => { const ids=taskLiveIds(t);
   if(ids.length){ const p=(t.progress&&t.progress[date])||[]; return ids.every(id=>p.includes(id)); }
   return t.recur ? (t.doneDates||[]).includes(date) : !!t.done; };
 function setTaskDone(t,date,val){
-  const ids=taskAnimalIds(t);
+  const ids=taskLiveIds(t);
   if(ids.length){ t.progress=t.progress||{}; if(val) t.progress[date]=[...ids]; else delete t.progress[date]; }
   else if(t.recur){ t.doneDates=t.doneDates||[]; const has=t.doneDates.includes(date);
     if(val&&!has) t.doneDates.push(date); else if(!val&&has) t.doneDates=t.doneDates.filter(x=>x!==date); }
@@ -2809,8 +2814,8 @@ function calItems(range){
   (DB.events||[]).forEach(e=>{ if(inR(e.date)) items.push({date:e.date,time:e.startTime||'',kind:'event',title:e.title,ref:e,cat:e.category}); });
   const tFrom=from||todayISO(), tTo=to||addDaysISO(todayISO(),60);
   DB.tasks.forEach(t=>{
-    if(t.recur){ taskOccurrences(t,tFrom,tTo).forEach(d=>items.push({date:d,occDate:d,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,d),priority:t.priority,animalIds:taskAnimalIds(t),recurring:true})); }
-    else if(inR(t.date)) items.push({date:t.date,occDate:t.date,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,t.date),priority:t.priority,animalIds:taskAnimalIds(t)});
+    if(t.recur){ taskOccurrences(t,tFrom,tTo).forEach(d=>items.push({date:d,occDate:d,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,d),priority:t.priority,animalIds:taskLiveIds(t),recurring:true})); }
+    else if(inR(t.date)) items.push({date:t.date,occDate:t.date,time:t.time||'',kind:'task',title:t.title,ref:t,done:taskDoneOn(t,t.date),priority:t.priority,animalIds:taskLiveIds(t)});
   });
   DB.shows.forEach(s=>{ if(inR(s.start))items.push({date:s.start,time:'',kind:'show',title:s.name,ref:s});
     if(s.entryDeadline&&inR(s.entryDeadline))items.push({date:s.entryDeadline,time:'',kind:'deadline',title:'Entry deadline · '+s.name,ref:s}); });
@@ -2944,7 +2949,7 @@ function openTaskSheet(id, presetDate){
    the group one animal at a time and watch the progress bar fill. */
 function openTaskProgressSheet(taskId, date){
   const t=DB.tasks.find(x=>x.id===taskId); if(!t) return;
-  const ids=taskAnimalIds(t).filter(id=>getAnimal(id));
+  const ids=taskLiveIds(t);
   if(ids.length<2){ openTaskSheet(taskId); return; }
   date = date || (t.recur?todayISO():t.date);
   const body=el('div');
