@@ -101,6 +101,7 @@ upgraded later (e.g. to per-record tables) without touching any screen. See the
 - `supabase/schema.sql` + `supabase/SETUP.md` — one-time cloud setup
 - `supabase/shares.sql` — optional: run once to enable public shareable animal pages
 - `supabase/push.sql` + `supabase/functions/push-reminders/` + `supabase/PUSH_SETUP.md` — optional: phone push notifications
+- `supabase/functions/delete-account/` + `supabase/DELETE_ACCOUNT_SETUP.md` — in-app account deletion (App Store requirement); **More → Delete account**
 - `share.html` — the public read-only page shareable links open
 - `sw.js` — service worker (network-first HTML, cache-first same-origin assets;
   never caches Supabase API calls or touches user data)
