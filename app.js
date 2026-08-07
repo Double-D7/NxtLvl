@@ -3579,6 +3579,7 @@ route('more',()=>{
       <button class="li" data-more="__update" style="width:100%;text-align:left"><div class="thumb" style="background:var(--line-2);color:var(--purple)">${ICON.refresh}</div><div class="main"><div class="t1">Check for updates</div><div class="t2" id="appVer">Checking version…</div></div>${ICON.chev}</button>
     </div>
     <div style="margin-top:18px"><button class="btn block" id="logout">${ICON.logout} Sign out</button></div>
+    <div style="margin-top:12px;text-align:center"><button id="delAcct" style="background:none;border:none;color:var(--bad);font-size:12.5px;font-weight:700;text-decoration:underline;cursor:pointer;padding:6px">Delete account</button></div>
     <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px">${esc(DB.team.name)}${Cloud.enabled?' · Cloud sync on':' · Local-first build'}<br>${Cloud.enabled&&Cloud.teamId?'Shared & synced across your team':'Data stored on this device'}</p>`;
   v.append(wrap);
   $$('[data-more]',wrap).forEach(b=>b.onclick=()=>{ const k=b.dataset.more;
@@ -3586,6 +3587,7 @@ route('more',()=>{
     else if(k==='__inventory')openInventory(); else if(k==='__backup')exportBackup();
     else if(k==='__import')importBackup(); else if(k==='__demo')toggleDemo(); else if(k==='__cloud')openCloudConnect(); else if(k==='__update')checkForUpdate(); else go('/'+k); });
   $('#logout',wrap).onclick=async()=>{ if(Cloud.enabled){ await Cloud.signOut(); } DB.currentUserId=null; save(true); render(); };
+  $('#delAcct',wrap).onclick=()=>openDeleteAccount();
   appVersion().then(x=>{ const e=$('#appVer',wrap); if(e)e.textContent = x?('Version '+x+' · tap to update'):'Tap to reload the latest'; });
 });
 /* the running app version = the active service-worker cache key (single source of truth) */
@@ -3627,6 +3629,45 @@ function openCloudConnect(){
   if($('[data-off]',sh))$('[data-off]',sh).onclick=async()=>{ if(await confirmSheet('Disconnect cloud','Stop cloud sync on this device? Your data stays on the device. Other devices keep their cloud copy.','Disconnect',true)){ localStorage.removeItem('dfst_cloud_cfg'); if(window.DFST_CONFIG){window.DFST_CONFIG.supabaseUrl='';} toast('Disconnected — reloading','good'); setTimeout(()=>location.reload(),500); } };
 }
 function moreRow(k,ic,label){ return `<button class="li" data-more="${k}" style="width:100%;text-align:left"><div class="thumb" style="background:var(--line-2);color:var(--purple)">${ic}</div><div class="main"><div class="t1">${esc(label)}</div></div>${ICON.chev}</button>`; }
+/* Erase this device's local data (backing store + cached media). */
+async function wipeLocalAll(){ try{ localStorage.removeItem(KEY); }catch(e){} try{ indexedDB.deleteDatabase('dfst_media'); }catch(e){} }
+/* Permanent account deletion — required by the App Store for any app with sign-up.
+   Cloud: an Edge Function (service role) deletes the auth user + owned team/data.
+   Local-only: removes the account and wipes this device's data. */
+function openDeleteAccount(){
+  const cloud = Cloud.enabled && Cloud.teamId && Cloud.user;
+  const u = me(); const isOwner = (u.role==='Owner');
+  const body=el('div');
+  body.innerHTML=`
+    <div class="help" style="border-color:rgba(239,68,68,.45);background:rgba(239,68,68,.09)">${ICON.info}<span><b>This permanently deletes your account${cloud?'':' and all data on this device'}.</b> It cannot be undone.</span></div>
+    <div style="font-size:13.5px;color:var(--ink-2);margin:8px 2px 12px">Deleting your account will:
+      <ul style="margin:8px 0 0 18px;padding:0;line-height:1.7">
+        <li>Remove your sign-in${cloud?' and your access to the team':''}</li>
+        ${cloud ? (isOwner
+          ? '<li><b style="color:var(--bad)">Delete the entire team</b> and all of its animals, weights, photos and records — for everyone (you’re the team owner)</li>'
+          : '<li>Remove you from the team; the team’s shared records stay with the other members</li>')
+          : '<li>Erase every animal, weight, photo and record stored on this device</li>'}
+      </ul></div>
+    ${cloud&&!isOwner?'':`<div class="help" style="margin-bottom:12px">${ICON.info}<span>Prefer to keep a copy? Cancel and use <b>More → Export full backup</b> first.</span></div>`}
+    <div class="field"><label>Type <b>DELETE</b> to confirm</label><input class="control" id="delConfirm" placeholder="DELETE" autocapitalize="characters" autocomplete="off"></div>`;
+  const foot=el('div'); foot.innerHTML=`<button class="btn ghost" data-cancel style="flex:1">Cancel</button><button class="btn danger" data-del style="flex:1">Delete my account</button>`;
+  const sh=openSheet({title:'Delete account',body,foot});
+  $('[data-cancel]',sh).onclick=()=>closeSheet();
+  $('[data-del]',sh).onclick=async()=>{
+    if(($('#delConfirm',body).value||'').trim().toUpperCase()!=='DELETE'){ toast('Type DELETE to confirm','bad'); return; }
+    const btn=$('[data-del]',sh); btn.disabled=true; toast('Deleting your account…','');
+    if(cloud){
+      try{ const { error } = await Cloud.sb.functions.invoke('delete-account',{ body:{} }); if(error) throw error; }
+      catch(e){ toast('Could not delete account: '+(e.message||e),'bad'); btn.disabled=false; return; }
+      try{ await Cloud.signOut(); }catch(e){}
+      await wipeLocalAll();
+    } else {
+      // local-only install: no server-side account — erase this device's data
+      await wipeLocalAll();
+    }
+    closeSheet(); toast('Your account has been deleted','good'); setTimeout(()=>location.reload(),500);
+  };
+}
 function openBreeds(){ const body=el('div');
   const draw=()=>{ body.innerHTML=`<div class="help" style="margin-bottom:10px">${ICON.info}<span>Toggle a species on to show it on the dashboard and in the Add-animal list. Species that have animals stay on automatically.</span></div>`+
     DB.species.map(sp=>{ const hasAnimals=DB.animals.some(a=>a.species===sp.id); return `<div class="section-title" style="margin-top:8px"><span style="width:16px;height:16px;color:${sp.active?'var(--purple-3)':'var(--muted)'}">${spIcon(sp.id)}</span>${esc(sp.name)} <label style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0"><input type="checkbox" data-spact="${sp.id}" ${sp.active?'checked':''} ${hasAnimals?'disabled':''} style="width:18px;height:18px"><span style="font-size:11px;color:var(--muted)">${sp.active?'On':'Off'}</span></label> <button class="more" data-addbr="${sp.id}">+ Breed</button></div>
