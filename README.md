@@ -6,7 +6,10 @@ species, breeds, seasons and years.
 
 A single-page, installable **PWA**. Open it on a phone in the barn, a tablet, or
 a desktop. Add it to your home screen for an app-like, offline-capable
-experience.
+experience. The layout is **fully responsive** — a phone-optimized view with
+bottom navigation, and on wide screens a **desktop layout with a left sidebar**
+and roomy multi-column content, so it looks clean whether it's used on a phone,
+a laptop, or wrapped as a store app.
 
 ## Run it
 

@@ -678,8 +678,11 @@ function renderChrome(activeTop){
     $('#hSearch').onclick=openSearch; $('#hBell').onclick=openAlerts; $('#hMe').onclick=()=>go('/more');
   }
   const nav=$('.bottomnav'); nav.innerHTML='';
+  // brand block — only shown in the desktop sidebar (CSS hides it on mobile)
+  const brand=el('div','nav-brand',`<div class="nav-brand-logo">${brandImg()}</div><div class="nav-brand-name">${esc(DB.team.name)}</div>`);
+  brand.onclick=()=>go('/dashboard'); nav.appendChild(brand);
   NAV_MAIN.forEach(([id,label,icon])=>{
-    if(id==='__add'){ const b=el('button','navitem fab',`<span class="fab-btn">${icon}</span>`); b.onclick=openQuickAdd; nav.appendChild(b); return; }
+    if(id==='__add'){ const b=el('button','navitem fab',`<span class="fab-btn">${icon}</span><span class="navlabel">Add entry</span>`); b.onclick=openQuickAdd; nav.appendChild(b); return; }
     const b=el('button','navitem'+(activeTop===id?' active':''),`${icon}<span>${label}</span>`); b.onclick=()=>go('/'+id); nav.appendChild(b);
   });
 }

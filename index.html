@@ -56,6 +56,47 @@ main{max-width:920px;margin:0 auto;padding:14px 14px 20px}
 .navitem.active{color:var(--purple-3)}
 .fab-btn{width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,var(--purple-3),var(--purple));color:#fff;display:grid;place-items:center;margin-top:-24px;box-shadow:0 8px 22px rgba(76,29,149,.45);border:3px solid #fff}
 .fab-btn svg{width:26px;height:26px}
+/* brand block + add-entry label live in the DOM but only show in the desktop sidebar */
+.nav-brand{display:none}
+.navitem .navlabel{display:none}
+
+/* ---------- Desktop / wide-screen layout: left sidebar + roomy content ---------- */
+@media (min-width:1000px){
+  :root{--side-w:250px}
+  #app{padding-bottom:0}
+  /* content sits to the right of the sidebar, left-anchored with a comfortable max width */
+  main{margin-left:var(--side-w);margin-right:0;max-width:1240px;padding:28px clamp(28px,3.6vw,60px) 72px}
+  /* the top bar becomes a clean light header spanning the content area */
+  .app-header{margin-left:var(--side-w);background:var(--card);color:var(--ink);box-shadow:none;border-bottom:1px solid var(--line);padding:13px clamp(28px,3.6vw,60px)}
+  .app-header .brandmark{display:none}
+  .app-header h1{font-size:18px;color:var(--ink)}
+  .app-header .sub{color:var(--muted)}
+  .app-header .iconbtn{background:var(--surface-2);color:var(--ink)}
+  .app-header .iconbtn:hover{background:var(--line)}
+  /* bottom nav → fixed left sidebar */
+  .bottomnav{top:0;bottom:0;right:auto;width:var(--side-w);height:100vh;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:3px;
+    background:linear-gradient(185deg,var(--purple-2),#160a2e 55%,#0b0713);border-top:none;border-right:1px solid var(--line);padding:18px 14px;backdrop-filter:none;overflow-y:auto}
+  .nav-brand{display:flex;order:-2;align-items:center;gap:11px;padding:6px 8px 16px;margin-bottom:8px;cursor:pointer}
+  .nav-brand-logo{width:40px;height:40px;border-radius:12px;overflow:hidden;flex:none;box-shadow:0 4px 16px rgba(0,0,0,.45)}
+  .nav-brand-logo img{width:100%;height:100%;object-fit:cover;display:block}
+  .nav-brand-name{font-weight:800;font-size:15.5px;color:#fff;letter-spacing:.2px;line-height:1.2}
+  .navitem{flex:none;flex-direction:row;justify-content:flex-start;gap:13px;padding:11px 14px;border-radius:12px;color:rgba(255,255,255,.74)}
+  .navitem svg{width:21px;height:21px}
+  .navitem span{font-size:14.5px;font-weight:700;letter-spacing:.1px}
+  .navitem:hover{background:rgba(255,255,255,.09);color:#fff}
+  .navitem.active{background:rgba(255,255,255,.15);color:#fff}
+  .navitem.active svg{color:var(--teal-2)}
+  /* "Add entry" becomes a prominent button pinned right under the brand */
+  .navitem.fab{order:-1;background:linear-gradient(135deg,var(--purple-3),var(--purple));color:#fff;margin:2px 0 12px;padding:12px 14px;box-shadow:0 6px 18px rgba(76,29,149,.4)}
+  .navitem.fab:hover{filter:brightness(1.07)}
+  .navitem.fab .fab-btn{width:22px;height:22px;margin:0;border:none;background:none;box-shadow:none;border-radius:0}
+  .navitem.fab .fab-btn svg{width:22px;height:22px}
+  .navitem.fab .navlabel{display:inline;font-size:14.5px;font-weight:800}
+  /* animal-profile tabs clear the sticky header */
+  .tabbar{top:59px}
+  /* toast clears the (now absent) bottom bar */
+  #toast{bottom:24px}
+}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 .pad{padding:16px}
