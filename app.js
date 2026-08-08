@@ -3354,13 +3354,15 @@ route('helper',(parts)=>{
   const v=setView('','more'); const wrap=el('div');
   const animals=animalsForHelper(h.id).filter(a=>!a.archived).sort((a,b)=>a.name.localeCompare(b.name));
   wrap.innerHTML=`${pageHeader(h.name,'/helpers',`<button class="iconbtn" style="background:var(--line-2);color:var(--ink)" id="edHelper">${ICON.edit}</button>`)}
-    <div class="btn-row" style="margin-bottom:12px"><button class="btn primary" id="viewAll" style="flex:1">${ICON.animals} Filter herd to ${esc(h.name.split(' ')[0])}</button><button class="btn" id="shareSnap">${ICON.share} Share</button></div>
+    <button class="btn primary block" id="feedReport" style="margin-bottom:8px">${ICON.reports} Weekly feed report</button>
+    <div class="btn-row" style="margin-bottom:12px"><button class="btn" id="viewAll" style="flex:1">${ICON.animals} Filter herd</button><button class="btn" id="shareSnap" style="flex:1">${ICON.share} Snapshot</button></div>
     <div class="section-title">${h.name.split(' ')[0]}’s animals · ${animals.length}</div>
     <div id="hAnimals"></div>`;
   v.append(wrap);
   $('#edHelper',wrap).onclick=()=>openHelperSheet(h.id);
   $('#viewAll',wrap).onclick=()=>go('/animals?helper='+h.id);
   $('#shareSnap',wrap).onclick=()=>helperSnapshot(h.id);
+  $('#feedReport',wrap).onclick=()=>openFeedReport(animals.map(a=>a.id), h.name.split(' ')[0]+'’s animals');
   const hc=$('#hAnimals',wrap);
   if(!animals.length){ hc.innerHTML=emptyState(ICON.animals,'No animals yet','Assign '+h.name+' to animals from each animal’s Edit screen (Helpers field).'); return; }
   animals.forEach(a=>{ const st=animalStats(a); const cf=currentFeed(a.id); const card=el('div','card pad'); card.style.marginBottom='10px';
@@ -3371,6 +3373,52 @@ route('helper',(parts)=>{
     if(a.profileMediaId) Media.url(a.profileMediaId).then(u=>{ if(u){ const t=$('[data-th]',card); t.style.backgroundImage=`url(${u})`; t.style.backgroundSize='cover'; t.textContent=''; }});
     card.onclick=()=>go('/animal/'+a.id); hc.append(card); });
 });
+/* ---- Weekly feed report — the "what to feed" text you send helpers/breeders ---- */
+function fracStr(n){ n=+n; if(!isFinite(n)) return ''; if(n===0) return '0';
+  const whole=Math.floor(n); const frac=+(n-whole).toFixed(3);
+  const map={0.125:'1/8',0.25:'1/4',0.333:'1/3',0.375:'3/8',0.5:'1/2',0.625:'5/8',0.667:'2/3',0.75:'3/4',0.875:'7/8'};
+  let f=''; for(const k in map){ if(Math.abs(frac-parseFloat(k))<0.02){ f=map[k]; break; } }
+  if(f) return whole? whole+' '+f : f;
+  return String(+n.toFixed(2));
+}
+function feedRationLines(cf){
+  if(!cf) return [];
+  const itemStr = it => { const amt=(it.amount===''||it.amount==null)?'':fracStr(it.amount); const u=(it.unit&&it.unit!=='unit')?it.unit:''; return [amt,u,it.product].filter(Boolean).join(' ').trim(); };
+  const filled=(cf.meals||[]).filter(m=>(m.items||[]).some(it=>it.product||it.amount));
+  const sig = m => (m.items||[]).filter(it=>it.product||it.amount).map(it=>it.amount+'|'+it.unit+'|'+it.product).join(',');
+  const sigs=new Set(filled.map(sig));
+  if(filled.length<=1 || sigs.size<=1){ const m=filled[0]; return (m?m.items:[]).filter(it=>it.product||it.amount).map(itemStr); }
+  const out=[]; filled.forEach(m=>{ out.push(m.time+':'); (m.items||[]).filter(it=>it.product||it.amount).forEach(it=>out.push('  '+itemStr(it))); }); return out;
+}
+function feedReportText(animalIds){
+  const d=new Date(); const wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  const dateLabel=`${wd} ${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+  const lines=[`${DB.team.name} — Feeding update`, dateLabel, ''];
+  (animalIds||[]).map(getAnimal).filter(a=>a&&!a.archived).forEach(a=>{
+    const st=animalStats(a); const cf=currentFeed(a.id);
+    const idTag=a.earNotch||a.earTag||a.registration||'';
+    const head=[idTag, [a.breed,a.sex].filter(Boolean).join(' '), `(${a.name})`].filter(Boolean).join(' ').trim();
+    lines.push(head);
+    lines.push((st.curW!=null? st.curW+' lb' : 'No weight yet') + (st.curD? ' ('+fmtShort(st.curD)+')' : ''));
+    const ration=feedRationLines(cf);
+    if(ration.length) ration.forEach(r=>lines.push(r)); else lines.push('No current ration set');
+    lines.push('');
+  });
+  return lines.join('\n').trim()+'\n';
+}
+function openFeedReport(animalIds, subject){
+  const ids=(animalIds||[]).map(getAnimal).filter(a=>a&&!a.archived).map(a=>a.id);
+  if(!ids.length){ toast('No active animals to report','bad'); return; }
+  const body=el('div');
+  body.innerHTML=`<div class="help">${ICON.info}<span>Your weekly feeding rundown${subject?' for <b>'+esc(subject)+'</b>':''} — each animal's latest weight and current ration. Edit anything (add “slop”, a note about a new supplement, etc.), then Copy or Share it into a text.</span></div>
+    <textarea class="control" id="frText" style="min-height:340px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.55;white-space:pre">${esc(feedReportText(ids))}</textarea>`;
+  const foot=el('div'); foot.innerHTML=`<button class="btn" data-copy style="flex:1">${ICON.copy} Copy</button><button class="btn primary" data-share style="flex:1">${ICON.share} Share to text</button>`;
+  const sh=openSheet({title:'Weekly feed report',body,foot});
+  const txt=()=>$('#frText',body).value;
+  const copy=async()=>{ try{ await navigator.clipboard.writeText(txt()); toast('Copied — paste it into a text','good'); }catch(e){ const ta=$('#frText',body); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} toast('Copied','good'); } };
+  $('[data-copy]',sh).onclick=copy;
+  $('[data-share]',sh).onclick=async()=>{ const t=txt(); if(navigator.share){ try{ await navigator.share({text:t}); }catch(e){} } else copy(); };
+}
 function helperSnapshot(id){
   const h=getHelper(id); const animals=animalsForHelper(id).filter(a=>!a.archived).sort((a,b)=>a.name.localeCompare(b.name));
   const w=window.open('','_blank');
