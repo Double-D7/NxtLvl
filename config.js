@@ -14,5 +14,12 @@ window.DFST_CONFIG = {
   // Web-push VAPID PUBLIC key (safe to commit). Pair it with the matching
   // PRIVATE key stored as a Supabase secret — see supabase/PUSH_SETUP.md.
   // Leave empty to disable phone push notifications.
-  vapidPublicKey:  "BBswfXJ8bjSIZF0oa_ftwgocKaUgVWMoj4e2du43IQ8WfWFHYA52vWD48PQCYI_XuTwi9Z-_sFGd43aa5Uni-Os"
+  vapidPublicKey:  "BBswfXJ8bjSIZF0oa_ftwgocKaUgVWMoj4e2du43IQ8WfWFHYA52vWD48PQCYI_XuTwi9Z-_sFGd43aa5Uni-Os",
+
+  // Social sign-in buttons to show on the login screen. ONLY list a provider
+  // AFTER you've actually enabled + configured it in Supabase (Authentication →
+  // Providers). Listing one that isn't enabled makes the button error
+  // ("provider is not enabled"). Start empty = email/password only.
+  //   e.g. ["google"]  or  ["google","apple"]
+  oauthProviders:  []
 };
