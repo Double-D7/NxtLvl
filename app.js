@@ -931,15 +931,14 @@ function renderLogin(){
   const cloud = Cloud.enabled;
   const existing = DB.users.length;
   const isSignup = !cloud ? !existing : loginMode==='signup';
+  // only show a social button for providers actually enabled in Supabase (config.js)
+  const providers = (cloud && window.DFST_CONFIG && Array.isArray(window.DFST_CONFIG.oauthProviders)) ? window.DFST_CONFIG.oauthProviders : [];
+  const oauthHTML = providers.length ? `<div class="oauth">${providers.map(p=>`<button class="btn block" data-oauth="${esc(p)}">${p==='apple'?aicon():gicon()} Continue with ${esc(p.charAt(0).toUpperCase()+p.slice(1))}</button>`).join('')}</div><div class="orline">OR</div>` : '';
   $('#app').innerHTML = `<div class="login"><div class="box">
     <div class="logo">${brandImg()}</div>
     <h1>Show Team</h1><div class="tag">Show livestock, dialed in.</div>
     <div class="card">
-      <div class="oauth">
-        <button class="btn block" data-oauth="google">${gicon()} Continue with Google</button>
-        <button class="btn block" data-oauth="apple">${aicon()} Continue with Apple</button>
-      </div>
-      <div class="orline">OR</div>
+      ${oauthHTML}
       ${isSignup?`<div class="field"><label>Name</label><input class="control" id="lgName" placeholder="Your name" value="${cloud?'':esc(me().name||'')}"></div>`:''}
       <div class="field"><label>Email</label><input class="control" id="lgEmail" type="email" placeholder="you@example.com" value="${(!cloud&&!existing)?'david.devitt@fortressds.com':''}"></div>
       <div class="field"><label>Password</label><input class="control" id="lgPass" type="password" placeholder="••••••••"></div>
