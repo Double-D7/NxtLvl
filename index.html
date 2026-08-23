@@ -250,6 +250,32 @@ textarea.control{min-height:88px;resize:vertical}
 .barn-wrap.daylight .barn-chip{background:#ededed;color:#000;border-color:#8a8a8a}
 .barn-wrap.daylight .barn-chip.active{background:#111;color:#fff;border-color:#111}
 .barn-wrap.daylight .iconbtn{background:#ededed!important;color:#000!important}
+/* ---- QR pen cards ---- */
+.pencard-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pencard{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card);break-inside:avoid;page-break-inside:avoid}
+.pc-body{display:flex;gap:12px;padding:14px;align-items:center}
+.pc-photo{width:74px;height:74px;border-radius:12px;background:var(--line-2);flex:none;display:grid;place-items:center;background-position:center;background-size:cover}
+.pc-photo svg{width:34px;height:34px;opacity:.5}
+.pc-info{flex:1;min-width:0}
+.pc-name{font-size:20px;font-weight:900;letter-spacing:-.3px;line-height:1.05}
+.pc-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.pc-tag{font-size:13px;font-weight:700;margin-top:4px}
+.pc-ex{font-size:12.5px;color:var(--muted)}
+.pc-w{font-size:14px;font-weight:800;margin-top:4px}
+.pc-qr{flex:none;text-align:center;width:120px}
+.pc-qr svg{display:block;width:120px;height:120px;border-radius:6px}
+.pc-scan{font-size:9.5px;color:var(--muted);margin-top:3px;line-height:1.2;font-weight:700}
+.pc-foot{border-top:1px solid var(--line);padding:6px 14px;font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+@media(max-width:640px){.pencard-grid{grid-template-columns:1fr}}
+@media print{
+  body{background:#fff!important}
+  .pencards-wrap{margin:0}
+  .pencard-grid{grid-template-columns:1fr 1fr!important;gap:10px}
+  .pencard{background:#fff!important;border-color:#000!important;box-shadow:none}
+  .pc-name,.pc-tag,.pc-w{color:#000!important}
+  .pc-sub,.pc-ex,.pc-scan,.pc-foot{color:#333!important}
+  .pc-foot{border-color:#999!important}
+}
 
 .kv{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-2);font-size:14px}
 .kv:last-child{border-bottom:none}
@@ -299,6 +325,7 @@ hr.soft{border:none;border-top:1px solid var(--line-2);margin:14px 0}
 <div id="toast"></div>
 <script src="config.js"></script>
 <script src="vendor/supabase.js"></script>
+<script src="vendor/qr.js"></script>
 <script src="calc.js"></script>
 <script src="app.js"></script>
 </body>

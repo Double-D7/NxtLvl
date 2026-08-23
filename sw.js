@@ -3,8 +3,8 @@
    - Static assets (app.js/icons/manifest): cache-first for speed
    - Fully offline-capable via cache fallback
    NOTE: user data (localStorage + IndexedDB) is never touched by this cache. */
-const VERSION = 'dfst-v51';
-const ASSETS = ['index.html', 'app.js', 'calc.js', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'favicon-32.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
+const VERSION = 'dfst-v52';
+const ASSETS = ['index.html', 'app.js', 'calc.js', 'config.js', 'vendor/supabase.js', 'vendor/qr.js', 'manifest.webmanifest', 'favicon-32.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

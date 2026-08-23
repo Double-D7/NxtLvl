@@ -1440,6 +1440,7 @@ route('animals', (parts,q)=>{
       <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 2px 8px">
         <div style="font-size:12.5px;color:var(--muted);font-weight:700">${list.length} ${state.archived?'archived':'animal'}${list.length===1?'':'s'}</div>
         <div style="display:flex;gap:8px">
+          ${!state.archived&&list.length?`<button class="chip sm" id="penCards" style="padding:5px 11px;font-size:12px">${ICON.reports} Pen cards</button>`:''}
           <button class="chip sm" id="saveView" style="padding:5px 11px;font-size:12px">${ICON.star} Save view</button>
           <button class="chip sm" id="toggleArch" style="padding:5px 11px;font-size:12px">${state.archived?'Show active':'Archive'}</button>
         </div>
@@ -1458,6 +1459,7 @@ route('animals', (parts,q)=>{
     $$('[data-filter]',wrap).forEach(b=>b.onclick=()=>{state.filter=state.filter===b.dataset.filter?'':b.dataset.filter;draw();});
     $$('[data-helper]',wrap).forEach(b=>b.onclick=()=>{state.helper=state.helper===b.dataset.helper?'':b.dataset.helper;draw();});
     if($('#manageHelpers',wrap))$('#manageHelpers',wrap).onclick=()=>go('/helpers');
+    if($('#penCards',wrap))$('#penCards',wrap).onclick=()=>openPenCards(list.map(a=>a.id));
     $('#toggleArch',wrap).onclick=()=>{state.archived=!state.archived;draw();};
     $('#moreFilters',wrap).onclick=()=>openFilterSheet(state,draw);
     $('#saveView',wrap).onclick=()=>{ const nm=prompt('Name this saved view'); if(nm){ DB.savedViews.push({name:nm,state:{...state}}); save(); toast('View saved','good'); draw(); } };
@@ -1633,9 +1635,11 @@ function tabOverview(box,a){
     <div class="card pad">${detailKV(a)}</div>
     <div class="section-title">Timeline</div>
     <div class="card pad" id="ovTimeline"></div>
+    <button class="btn block" id="ovPenCard" style="margin-top:12px">${ICON.reports} Print pen card (QR)</button>
     <div style="height:8px"></div>`;
   const cover=$('[data-cover]');
   renderTimeline($('#ovTimeline',box),a);
+  if($('#ovPenCard',box))$('#ovPenCard',box).onclick=()=>openPenCards([a.id]);
   if($('[data-gpopen]',box))$('[data-gpopen]',box).onclick=()=>openGamePlanSheet(a.id);
   if($('[data-gpcard]',box))$('[data-gpcard]',box).onclick=()=>openGamePlanSheet(a.id);
   $$('[data-alert]',box).forEach(li=>{ const type=li.dataset.alert; if(type==='noweight'||type==='nomedia')return; li.onclick=()=>openAlertReview(a.id,type); });
@@ -2980,6 +2984,108 @@ route('barn',()=>{
     list.forEach(a=>box.append(barnCard(a)));
   };
   refresh();
+});
+
+/* ===================================================================
+   QR PEN CARDS — printable barn card per animal, scans to a simplified
+   Barn Card. The QR encodes the app's own authenticated deep link, so
+   private data stays behind the normal login — the QR is just a shortcut.
+   =================================================================== */
+function qrSVG(text, opts){ opts=opts||{};
+  try{ if(typeof qrcode==='undefined') return '';
+    const qr=qrcode(0, opts.ec||'M'); qr.addData(text); qr.make();
+    const n=qr.getModuleCount(); const q=opts.quiet==null?4:opts.quiet; const size=n+q*2;
+    let rects=''; for(let r=0;r<n;r++)for(let c=0;c<n;c++){ if(qr.isDark(r,c)) rects+=`<rect x="${c+q}" y="${r+q}" width="1" height="1"/>`; }
+    const px=opts.size||180;
+    return `<svg width="${px}" height="${px}" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
+  }catch(e){ return ''; }
+}
+const appBaseURL = () => location.origin==='null'||location.protocol==='file:' ? 'https://showteam.app/' : (location.origin+location.pathname);
+const cardURL = id => appBaseURL().replace(/#.*$/,'') + '#/card/' + id;
+
+/* Simplified Barn Card the QR opens — today's feed, tasks, weight, quick log */
+route('card',(parts)=>{
+  const a=getAnimal(parts[1]); if(!a){ setView(emptyState(ICON.animals,'Animal not found','This pen card may be for an animal that was removed.'),'animals'); return; }
+  const v=setView('','animals'); const wrap=el('div','barn-wrap'); const today=todayISO();
+  const st=animalStats(a); const p=Calc.planStatus(a); const cf=currentFeed(a.id);
+  const meals=(cf&&cf.meals||[]).filter(m=>(m.items||[]).some(it=>it.product||it.amount));
+  const ws=weightsFor(a.id); const wDue=weightDueFor(a);
+  const nextWeigh = ws.length ? addDaysISO(ws[ws.length-1].date,7) : today;
+  const tasks=animalTasksToday(a);
+  const alerts=activeWeightAlerts(a).filter(x=>x.k==='bad'||x.k==='warn');
+  wrap.innerHTML=`
+    <div class="barn-head">
+      <button class="iconbtn" style="background:var(--line-2);color:var(--ink)" onclick="go('/animal/${a.id}')">${ICON.back}</button>
+      <div style="flex:1"><div style="font-size:22px;font-weight:900;letter-spacing:-.3px">${esc(a.name)}</div>
+        <div style="font-size:12.5px;color:var(--muted)">${esc(speciesName(a.species))}${a.breed?' · '+esc(a.breed):''}${a.earTag?' · Tag '+esc(a.earTag):''} · Barn Card</div></div>
+      <button class="barn-chip" data-full>Full profile</button>
+    </div>
+    <div class="barn-card">
+      <div class="barn-card-h"><div class="bn" style="font-size:18px">Status</div>
+        <div class="bw">${st.curW!=null?st.curW+' lb':'—'}${p.state!=='no_plan'&&p.state!=='insufficient'?`<br><span style="color:${p.color}">${esc(p.label)}</span>`:''}</div></div>
+      <div style="display:flex;gap:14px;font-size:13px;color:var(--muted);margin-top:4px">
+        <span>Next weigh: <b style="color:var(--ink)">${wDue?'due now':fmtShort(nextWeigh)}</b></span>${st.curD?`<span>Last: ${fmtShort(st.curD)}</span>`:''}</div>
+      ${alerts.length?`<div style="margin-top:10px">${alerts.map(al=>`<div style="font-size:12.5px;color:var(--warn);font-weight:700;display:flex;gap:6px"><span style="width:15px;height:15px">${ICON.info}</span>${esc(al.t)}</div>`).join('')}</div>`:''}
+    </div>
+    <div class="barn-card" id="cardFeed"></div>
+    <div class="barn-card" id="cardTasks"></div>
+    <div class="section-title">Quick log</div>
+    <div class="grid g2" style="gap:10px">
+      <button class="btn" data-q="weight">${ICON.weight} Log weight</button>
+      <button class="btn" data-q="photo">${ICON.camera} Add photo</button>
+      <button class="btn" data-q="note">${ICON.note} Add note</button>
+      <button class="btn" data-q="exercise">${ICON.run} Log exercise</button>
+    </div>`;
+  v.append(wrap);
+  $('[data-full]',wrap).onclick=()=>go('/animal/'+a.id);
+  const drawFeed=()=>{ const box=$('#cardFeed',wrap);
+    box.innerHTML=`<div class="barn-card-h"><div class="bn" style="font-size:18px">Today's feed</div></div>`+
+      (meals.length?meals.map(m=>{ const on=isFed(a.id,today,m.time);
+        return `<div class="barn-meal"><div class="bmh">${esc(m.time)} feed</div><ul class="bmi">${(m.items||[]).filter(it=>it.product||it.amount).map(it=>`<li>${it.amount!==''&&it.amount!=null?esc(fracStr(it.amount))+' ':''}${it.unit&&it.unit!=='unit'?esc(it.unit)+' ':''}${esc(it.product||'')}</li>`).join('')}</ul><button class="barn-fed ${on?'on':''}" data-fed="${esc(m.time)}">${on?'✓ Fed':'Mark fed'}</button></div>`;
+      }).join(''):'<div class="barn-empty">No current ration set</div>');
+    $$('[data-fed]',box).forEach(btn=>btn.onclick=()=>{ setFed(a.id,today,btn.dataset.fed,!isFed(a.id,today,btn.dataset.fed)); drawFeed(); }); };
+  const drawTasks=()=>{ const box=$('#cardTasks',wrap); const tk=animalTasksToday(a);
+    box.innerHTML=`<div class="barn-card-h"><div class="bn" style="font-size:18px">Today's tasks</div></div>`+
+      (tk.length?`<div class="barn-tasks" style="border:none;padding:0;margin:6px 0 0">${tk.map(({t,done})=>`<button class="barn-task ${done?'done':''}" data-task="${t.id}">${done?'✓ ':''}${esc(t.title)}</button>`).join('')}</div>`:'<div class="barn-empty">No tasks today</div>');
+    $$('[data-task]',box).forEach(btn=>btn.onclick=()=>{ const t=(DB.tasks||[]).find(x=>x.id===btn.dataset.task); if(!t)return; const d=taskProgress(t,today).includes(a.id); setTaskAnimalDone(t,today,a.id,!d); save(); drawTasks(); }); };
+  drawFeed(); drawTasks();
+  $$('[data-q]',wrap).forEach(b=>b.onclick=()=>runQuick(b.dataset.q, a.id));
+});
+
+function openPenCards(ids){
+  ids=(ids||[]).map(getAnimal).filter(a=>a&&!a.archived);
+  if(!ids.length){ toast('No animals to print','bad'); return; }
+  if(typeof qrcode==='undefined'){ toast('QR library not loaded — reload and retry','bad'); return; }
+  window._penIds=ids.map(a=>a.id); go('/pencards');
+}
+route('pencards',()=>{
+  const ids=(window._penIds||[]).map(getAnimal).filter(Boolean);
+  const v=setView('','animals'); const wrap=el('div','pencards-wrap');
+  wrap.innerHTML=`<div class="no-print" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <button class="iconbtn" style="background:var(--line-2);color:var(--ink)" onclick="history.length>1?history.back():go('/animals')">${ICON.back}</button>
+      <div style="flex:1;font-weight:800;font-size:17px">Pen cards · ${ids.length}</div>
+      <button class="btn primary sm" data-print>${ICON.reports} Print</button></div>
+    <div class="no-print help" style="margin-bottom:12px">${ICON.info}<span>Print these and clip one to each pen. Scanning a card opens that animal's <b>Barn Card</b> in the app — today's feed, tasks and quick log. Private data still needs a login.</span></div>
+    <div class="pencard-grid" id="pcGrid"></div>`;
+  v.append(wrap);
+  $('[data-print]',wrap).onclick=()=>window.print();
+  const grid=$('#pcGrid',wrap);
+  ids.forEach(a=>{ const st=animalStats(a);
+    const exhibitor=[...new Set((DB.entries||[]).filter(e=>e.animalId===a.id&&e.exhibitor).map(e=>e.exhibitor))][0]||'';
+    const idTag=a.earTag||a.earNotch||a.registration||'';
+    const card=el('div','pencard');
+    card.innerHTML=`<div class="pc-body">
+        <div class="pc-photo" data-ph>${a.profileMediaId?'':spIcon(a.species)}</div>
+        <div class="pc-info"><div class="pc-name">${esc(a.name)}</div>
+          <div class="pc-sub">${esc(speciesName(a.species))}${a.breed?' · '+esc(a.breed):''}</div>
+          ${idTag?`<div class="pc-tag">Tag ${esc(idTag)}</div>`:''}
+          ${exhibitor?`<div class="pc-ex">${esc(exhibitor)}</div>`:''}
+          ${st.curW!=null?`<div class="pc-w">${st.curW} lb</div>`:''}</div>
+        <div class="pc-qr">${qrSVG(cardURL(a.id),{size:120})}<div class="pc-scan">Scan for today's feed &amp; tasks</div></div>
+      </div><div class="pc-foot">showteam.app · ${esc(DB.team.name)}</div>`;
+    if(a.profileMediaId) Media.url(a.profileMediaId).then(u=>{ const ph=$('[data-ph]',card); if(u&&ph){ ph.style.backgroundImage=`url(${u})`; ph.style.backgroundSize='cover'; ph.innerHTML=''; }});
+    grid.append(card);
+  });
 });
 
 /* ===================================================================
