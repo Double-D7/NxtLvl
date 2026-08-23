@@ -3539,14 +3539,29 @@ route('show',(parts)=>{
       ${s.start>=todayISO()?`<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="background:var(--purple);color:#fff;border-radius:12px;padding:8px 14px;text-align:center"><div style="font-size:24px;font-weight:800" class="tnum">${daysBetween(todayISO(),s.start)}</div><div style="font-size:9px;font-weight:700">DAYS</div></div><div style="font-size:13px;color:var(--muted);font-weight:600">until show day</div></div>`:''}
       ${[['Dates',fmtDate(s.start)+(s.end&&s.end!==s.start?' – '+fmtDate(s.end):'')],['Location',s.location||s.city],['Entry deadline',s.entryDeadline?fmtDate(s.entryDeadline):''],['Weigh-in',s.weighIn?fmtDate(s.weighIn):''],['Judge',s.judge],['Organization',s.org],['Entry fee',s.fee?money(s.fee):'']].filter(r=>r[1]).map(r=>`<div class="kv"><span class="k">${r[0]}</span><span class="v">${esc(r[1])}</span></div>`).join('')}
     </div>
-    <div class="btn-row" style="margin:12px 0 4px"><button class="btn primary" id="showDayBtn" style="flex:1">${ICON.clipboard} Show-day mode</button><button class="btn ghost" id="showRecBtn">${ICON.medal} Record book</button></div>
+    <div class="btn-row" style="margin:12px 0 4px"><button class="btn primary" id="showDayBtn" style="flex:1">${ICON.clipboard} Show-day mode</button><button class="btn" id="packBtn" style="flex:1">${ICON.boxes} Packing list</button></div>
+    <div id="shReady"></div>
     <div class="section-title">Who's going <button class="more" id="addEnt2">${ICON.plus} Choose animals</button></div>
     <div id="shEntries"></div>`;
   v.append(wrap);
   $('#edShow',wrap).onclick=()=>openShowSheet(s.id);
   $('#showDayBtn',wrap).onclick=()=>go('/showday/'+s.id);
-  $('#showRecBtn',wrap).onclick=()=>go('/records');
+  $('#packBtn',wrap).onclick=()=>openPackingList(s.id);
   $('#addEnt2',wrap).onclick=()=>openShowRoster(s.id);
+  // Readiness snapshot — only when it's still upcoming and animals are entered
+  (()=>{ const rc=$('#shReady',wrap); if(s.start<todayISO()||!entries.length){ return; }
+    let onW=0, needW=0, conflicts=0, noPlan=0;
+    entries.forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const st=animalStats(a);
+      const tgt = e.showWeight? +e.showWeight : (a.targetWeight||null);
+      if(st.curW==null) needW++; else if(tgt){ if(Math.abs(st.curW-tgt)<=Math.max(5,tgt*0.03)) onW++; }
+      if(!a.targetWeight) noPlan++;
+      if((DB.medLog||[]).some(d=>d.animalId===a.id && doseInWithdrawal(d) && medShowConflict(a.id, doseWithdrawalEnds(d)))) conflicts++; });
+    rc.innerHTML=`<div class="grid g3" style="margin:10px 0 2px">
+      <div class="stat"><div class="k">On weight</div><div class="v tnum" style="color:var(--good)">${onW}<small>/${entries.length}</small></div></div>
+      <div class="stat"><div class="k">Need weighed</div><div class="v tnum" style="color:${needW?'var(--warn)':'var(--ink)'}">${needW}</div></div>
+      <div class="stat"><div class="k">Withdrawal ⚠</div><div class="v tnum" style="color:${conflicts?'var(--bad)':'var(--ink)'}">${conflicts}</div></div>
+    </div>`;
+  })();
   const ec=$('#shEntries',wrap);
   if(!entries.length){ ec.innerHTML=`<div class="card"><div class="empty">${ICON.animals}<div class="h">No animals yet</div><div class="p">Tap “Choose animals” to set who's going — you can fill in division, class and weight later.</div></div></div>`; return; }
   const L=el('div','list'); entries.forEach(e=>{ const a=getAnimal(e.animalId); if(!a)return; const r=e.result||{}; const li=el('div','li'); li.style.cursor='pointer';
@@ -3593,6 +3608,64 @@ function openShowSheet(id){
   $('[data-save]',sh).onclick=()=>{ const data={name:$('#shName',body).value.trim(),type:$('#shType',body).value,location:$('#shLoc',body).value.trim(),start:$('#shStart',body).value,end:$('#shEnd',body).value,entryDeadline:$('#shDl',body).value,weighIn:$('#shWi',body).value,judge:$('#shJudge',body).value.trim(),fee:$('#shFee',body).value||null,org:$('#shOrg',body).value.trim()}; if(!data.name){toast('Name the show','bad');return;}
     if(id){Object.assign(DB.shows.find(x=>x.id===id),data);}else{DB.shows.push(stamp({id:uid('show'),...data}));} logAct('show','Show: '+data.name); save(); closeSheet(); toast('Show saved','good'); render(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete show','Remove this show and its entries?','Delete',true)){DB.entries=DB.entries.filter(e=>e.showId!==id);DB.shows=DB.shows.filter(x=>x.id!==id);save();closeSheet();go('/shows');} };
+}
+/* ---- Packing list (reusable) + feed-to-pack math ---- */
+const PACK_TEMPLATE=[
+  ['Animal equipment', ['Halter / lead','Show stick / whip','Show box','Water buckets','Feed pans','Muzzle (if used)','Fitting stand / chute']],
+  ['Feed', ['Show feed (see feed to pack)','Supplements / top dress','Water from home','Electrolytes','Hay (if used)']],
+  ['Grooming', ['Clippers + blades','Brushes / combs / scotch comb','Adhesive / paint (as allowed)','Oil / conditioner','Blower','Rags / towels','Wash supplies']],
+  ['Health & papers', ['Health papers','Registration papers','Entry confirmation','Vet contact','First-aid kit']],
+  ['Exhibitor', ['Show clothes','Boots','Number / armband','Cash','Water bottle','Sunscreen / hat']],
+  ['Pen & bedding', ['Bedding / shavings','Pen setup / zip ties','Fan','Stall / pen card']],
+  ['Trailer', ['Trailer checked / hitched','Spare tire','Straps','Fuel']],
+];
+function feedToPack(showId, days){ const ids=DB.entries.filter(e=>e.showId===showId).map(e=>e.animalId); const per={};
+  ids.map(getAnimal).filter(Boolean).forEach(a=>{ const cf=currentFeed(a.id); if(!cf)return;
+    (cf.meals||[]).forEach(m=>(m.items||[]).forEach(it=>{ if(!it.product)return; const key=it.product.trim();
+      const lb=toLb(it.amount, it.unit||'lb'); per[key]=per[key]||{lb:0,other:0,unit:it.unit||'lb'};
+      if(lb!=null) per[key].lb += lb*days; else per[key].other += (+it.amount||0)*days; })); });
+  return per; }
+function openPackingList(showId){
+  const s=DB.shows.find(x=>x.id===showId); if(!s) return;
+  s.packing = s.packing || {}; const pk=s.packing;
+  const defaultNights = (s.end&&s.end!==s.start) ? Math.max(1, daysBetween(s.start,s.end)+1) : 1;
+  if(pk.nights==null) pk.nights = defaultNights;
+  pk.checked = pk.checked || {};       // { "Cat|Label": true }
+  pk.custom  = pk.custom  || [];        // [{cat,label}]
+  const body=el('div');
+  const draw=()=>{
+    const daysAway = Math.max(1, (+pk.nights||1)+1);          // days on the road incl. show day
+    const margin = pk.margin!=null?+pk.margin:1;               // extra safety days
+    const feed = feedToPack(showId, daysAway+margin);
+    const feedKeys = Object.keys(feed);
+    const allItems = PACK_TEMPLATE.map(([cat,items])=>[cat, items.slice()]);
+    (pk.custom||[]).forEach(c=>{ const g=allItems.find(x=>x[0]===c.cat); if(g) g[1].push(c.label); else allItems.push([c.cat,[c.label]]); });
+    const total = allItems.reduce((n,[,items])=>n+items.length,0);
+    const done = allItems.reduce((n,[cat,items])=>n+items.filter(l=>pk.checked[cat+'|'+l]).length,0);
+    body.innerHTML=`
+      <div class="help">${ICON.info}<span>A reusable packing checklist for <b>${esc(s.name)}</b>. Feed to pack is figured from each animal's current ration × days away + a safety margin. Your checks save on this show.</span></div>
+      <div class="field-row"><div class="field" style="flex:1"><label>Nights away</label><input class="control" type="number" inputmode="numeric" id="pkNights" value="${pk.nights}"></div>
+        <div class="field" style="flex:1"><label>Safety margin (days)</label><input class="control" type="number" inputmode="numeric" id="pkMargin" value="${margin}"></div></div>
+      <div class="card pad" style="margin-bottom:12px"><div style="font-weight:800;font-size:13px;margin-bottom:6px">${ICON.sack} Feed to pack · ${daysAway+margin} days</div>
+        ${feedKeys.length?feedKeys.map(k=>{ const f=feed[k]; const lbStr=f.lb>0?`${round(f.lb,1)} lb`:''; const otherStr=f.other>0?`${round(f.other,1)} ${esc(f.unit)}`:''; return `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${[lbStr,otherStr].filter(Boolean).join(' + ')||'—'}</span></div>`; }).join(''):'<div style="color:var(--muted);font-size:13px">No rations set on the animals going — add a feed program to auto-figure feed to pack.</div>'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-weight:800;font-size:13px">Checklist</div><div style="font-size:12.5px;color:var(--muted);font-weight:700">${done}/${total} packed</div></div>
+      ${allItems.map(([cat,items])=>`<div class="section-title" style="margin-top:10px">${esc(cat)}</div><div class="list">${items.map(l=>{ const k=cat+'|'+l; const on=!!pk.checked[k]; return `<label class="li" style="cursor:pointer"><div class="main"><div class="t1" style="${on?'color:var(--muted);text-decoration:line-through':''}">${esc(l)}</div></div><input type="checkbox" data-pk="${esc(k)}" ${on?'checked':''} style="width:22px;height:22px"></label>`; }).join('')}</div>`).join('')}
+      <button class="btn block" id="pkAdd" style="margin-top:12px">${ICON.plus} Add item</button>`;
+    $('#pkNights',body).onchange=()=>{ pk.nights=Math.max(0,+$('#pkNights',body).value||0); save(); draw(); };
+    $('#pkMargin',body).onchange=()=>{ pk.margin=Math.max(0,+$('#pkMargin',body).value||0); save(); draw(); };
+    $$('[data-pk]',body).forEach(cb=>cb.onchange=()=>{ const k=cb.dataset.pk; if(cb.checked)pk.checked[k]=true; else delete pk.checked[k]; save(); draw(); });
+    $('#pkAdd',body).onclick=async()=>{ const label=prompt('Item to add'); if(!label)return; const cat=prompt('Category','Misc')||'Misc'; pk.custom.push({cat:cat.trim(),label:label.trim()}); save(); draw(); };
+  };
+  draw();
+  const foot=el('div'); foot.innerHTML=`<button class="btn" data-copy style="flex:1">${ICON.copy} Copy list</button><button class="btn primary" data-reset style="flex:1">Reset checks</button>`;
+  const sh=openSheet({title:'Packing list',body,foot});
+  $('[data-copy]',sh).onclick=async()=>{ const daysAway=Math.max(1,(+pk.nights||1)+1)+ (pk.margin!=null?+pk.margin:1); const feed=feedToPack(showId,daysAway);
+    const lines=[`${s.name} — packing list`,''];
+    const fk=Object.keys(feed); if(fk.length){ lines.push('FEED TO PACK ('+daysAway+' days):'); fk.forEach(k=>{ const f=feed[k]; lines.push('  '+k+': '+[f.lb>0?round(f.lb,1)+' lb':'',f.other>0?round(f.other,1)+' '+f.unit:''].filter(Boolean).join(' + ')); }); lines.push(''); }
+    const allItems=PACK_TEMPLATE.map(([c,i])=>[c,i.slice()]); (pk.custom||[]).forEach(c=>{const g=allItems.find(x=>x[0]===c.cat);if(g)g[1].push(c.label);else allItems.push([c.cat,[c.label]]);});
+    allItems.forEach(([cat,items])=>{ lines.push(cat.toUpperCase()+':'); items.forEach(l=>lines.push('  ['+(pk.checked[cat+'|'+l]?'x':' ')+'] '+l)); lines.push(''); });
+    const t=lines.join('\n'); try{ await navigator.clipboard.writeText(t); toast('Copied','good'); }catch(e){ toast('Copy failed','bad'); } };
+  $('[data-reset]',sh).onclick=async()=>{ if(await confirmSheet('Reset checks','Uncheck everything on this packing list?','Reset')){ pk.checked={}; save(); draw(); } };
 }
 
 /* ===================================================================
