@@ -1663,11 +1663,12 @@ function tabOverview(box,a){
     <div class="card pad">${detailKV(a)}</div>
     <div class="section-title">Timeline</div>
     <div class="card pad" id="ovTimeline"></div>
-    <button class="btn block" id="ovPenCard" style="margin-top:12px">${ICON.reports} Print pen card (QR)</button>
+    <div class="btn-row" style="margin-top:12px"><button class="btn" id="ovSeason" style="flex:1">${ICON.trend} Season review</button><button class="btn" id="ovPenCard" style="flex:1">${ICON.reports} Pen card (QR)</button></div>
     <div style="height:8px"></div>`;
   const cover=$('[data-cover]');
   renderTimeline($('#ovTimeline',box),a);
   if($('#ovPenCard',box))$('#ovPenCard',box).onclick=()=>openPenCards([a.id]);
+  if($('#ovSeason',box))$('#ovSeason',box).onclick=()=>go('/season/'+a.id);
   if($('[data-gpopen]',box))$('[data-gpopen]',box).onclick=()=>openGamePlanSheet(a.id);
   if($('[data-gpcard]',box))$('[data-gpcard]',box).onclick=()=>openGamePlanSheet(a.id);
   $$('[data-alert]',box).forEach(li=>{ const type=li.dataset.alert; if(type==='noweight'||type==='nomedia')return; li.onclick=()=>openAlertReview(a.id,type); });
@@ -4352,6 +4353,7 @@ route('more',()=>{
       ${moreRow('team',ICON.team,'Team & members')}
       ${moreRow('coach',ICON.target,'Game Plan')}
       ${moreRow('records',ICON.medal,'Record Book')}
+      ${moreRow('season',ICON.trend,'Season Review')}
       ${moreRow('reports',ICON.reports,'Reports & analytics')}
       ${moreRow('archive',ICON.archive,'Archive')}
       ${moreRow('shows',ICON.shows,'Shows')}
@@ -4887,6 +4889,95 @@ route('records',(parts,q)=>{
   }
   $('#rbPrint',wrap).onclick=()=>printRecordBook(animalId);
   $$('[data-af]',wrap).forEach(b=>b.onclick=()=>{ const id=b.dataset.af; go(id?'/records?animal='+id:'/records'); });
+});
+/* ===================================================================
+   SEASON REVIEW — end-of-project "what worked?" analytics. Reuses the
+   authoritative calc/costing; describes correlation ("during this program…"),
+   never causation.
+   =================================================================== */
+function nearestWeight(id, dateISO){ const ws=weightsFor(id); if(!ws.length||!dateISO)return null;
+  let best=null,bd=1e9; ws.forEach(w=>{ const d=Math.abs(daysBetween(w.date,dateISO)); if(d<bd){bd=d;best=w;} }); return best?+best.weight:null; }
+function placingNum(r){ const n=parseInt(String((r&&r.placing)||'').replace(/[^0-9]/g,''),10); return isFinite(n)?n:999; }
+function bestResultOf(id){ const ent=(DB.entries||[]).filter(e=>e.animalId===id&&e.result&&e.result.placing);
+  if(!ent.length) return null; return ent.slice().sort((x,y)=>{ const bx=isBanner(x.result)?0:1, by=isBanner(y.result)?0:1; if(bx!==by)return bx-by; return placingNum(x.result)-placingNum(y.result); })[0]; }
+function programActiveOn(id, dateISO){ if(!dateISO)return null; return feedFor(id).find(f=>f.startDate<=dateISO && (!f.endDate||f.endDate>=dateISO))||null; }
+function seasonReview(a){ const id=a.id; const st=animalStats(a);
+  const programs=feedFor(id).slice().sort((x,y)=>x.startDate<y.startDate?-1:1);
+  const progRows=programs.map(f=>{ const ps=feedProgramStats(f); const dc=feedDailyCost(f); return {f, ps, dailyCost:dc.cost, runCost:feedProgramCost(f)}; });
+  const rated=progRows.filter(r=>r.ps.adg!=null);
+  const bestGain=rated.slice().sort((x,y)=>y.ps.adg-x.ps.adg)[0]||null;
+  const feedCost=feedCostForAnimal(id), bedCost=beddingCostForAnimal(id);
+  const otherExp=(DB.expenses||[]).filter(e=>e.animalId===id).reduce((s,e)=>s+(+e.amount||0),0);
+  const investment=feedCost+bedCost+otherExp;
+  const income=(DB.income||[]).filter(x=>x.animalId===id).reduce((s,x)=>s+(+x.amount||0),0)
+    +(DB.entries||[]).filter(e=>e.animalId===id&&e.result).reduce((s,e)=>s+(+e.result.salePrice||0)+(+e.result.premium||0),0);
+  const gain=st.gainTotal>0?st.gainTotal:null;
+  const costPerLb=gain?investment/gain:null;
+  const shows=(DB.entries||[]).filter(e=>e.animalId===id).map(e=>{ const sh=DB.shows.find(s=>s.id===e.showId); if(!sh)return null;
+    return {show:sh, weight:(e.showWeight?+e.showWeight:nearestWeight(id,sh.start)), result:e.result||{}}; }).filter(Boolean).sort((x,y)=>x.show.start<y.show.start?-1:1);
+  const best=bestResultOf(id); const bestShow=best?DB.shows.find(s=>s.id===best.showId):null;
+  const bestProgram=best&&bestShow?programActiveOn(id,bestShow.start):null;
+  const recs=recsForAnimal(id).filter(r=>r.status==='accepted');
+  return {st, progRows, rated, bestGain, feedCost, bedCost, otherExp, investment, income, net:income-investment, gain, costPerLb, shows, best, bestShow, bestProgram, recs};
+}
+route('season',(parts,q)=>{
+  const animalId=(parts&&parts[1])||(q&&q.get('animal')); const a=animalId?getAnimal(animalId):null;
+  const v=setView('','more'); const wrap=el('div'); v.append(wrap);
+  if(!a){
+    const list=DB.animals.slice().sort((x,y)=>(!!x.archived-!!y.archived)|| x.name.localeCompare(y.name));
+    // barn-level rollup
+    const rev=list.map(seasonReview); const inv=rev.reduce((s,r)=>s+r.investment,0), inc=rev.reduce((s,r)=>s+r.income,0);
+    const gains=rev.map(r=>r.gain).filter(Boolean); const cpl=rev.map(r=>r.costPerLb).filter(v=>v!=null);
+    const avgCpl=cpl.length?cpl.reduce((s,v)=>s+v,0)/cpl.length:null;
+    wrap.innerHTML=`${pageHeader('Season Review')}
+      <div class="help" style="margin-bottom:12px">${ICON.info}<span>Your barn's institutional memory. Pick an animal for a full end-of-project review, or scan the herd rollup below. Figures describe what happened <b>during</b> each program — not what any product “caused.”</span></div>
+      <div class="grid g3">
+        <div class="stat"><div class="k">Invested</div><div class="v tnum" style="font-size:18px">${money(inv)}</div></div>
+        <div class="stat"><div class="k">Income</div><div class="v tnum" style="font-size:18px">${money(inc)}</div></div>
+        <div class="stat"><div class="k">Avg cost/lb gain</div><div class="v tnum" style="font-size:18px">${avgCpl!=null?money(avgCpl):'—'}</div></div>
+      </div>
+      <div class="section-title">Animals</div><div id="seasonList"></div>`;
+    const L=el('div','list'); list.forEach((x,i)=>{ const r=rev[i]; const li=el('div','li'); li.style.cursor='pointer';
+      li.innerHTML=`<div class="thumb" data-th style="flex:none">${esc(initials(x.name))}</div><div class="main"><div class="t1">${esc(x.name)}${x.archived?' <span class="pill gray" style="font-size:9px">archived</span>':''}</div><div class="t2">${r.gain?'+'+r.gain+' lb':'—'}${r.costPerLb!=null?' · '+money(r.costPerLb)+'/lb gain':''}${r.net?' · net '+money(r.net):''}</div></div><div class="r">${ICON.chev}</div>`;
+      if(x.profileMediaId) Media.url(x.profileMediaId).then(u=>{ const t=$('[data-th]',li); if(u&&t){ t.style.backgroundImage=`url(${u})`; t.style.backgroundSize='cover'; t.textContent=''; }});
+      li.onclick=()=>go('/season/'+x.id); L.append(li); });
+    $('#seasonList',wrap).append(L);
+    return;
+  }
+  const r=seasonReview(a); const proj=a.project||{};
+  const progLine = pr => { const f=pr.f; const label=(f.name||'Program')+' · '+fmtShort(f.startDate)+(f.endDate?'–'+fmtShort(f.endDate):'–now');
+    const adg = pr.ps.adg!=null? pr.ps.adg+' lb/d'+(pr.ps.gain!=null?` (${pr.ps.gain>0?'+':''}${pr.ps.gain} lb)`:'') : 'not enough weight data';
+    const isBest = r.bestGain && pr.f.id===r.bestGain.f.id;
+    return `<div class="kv"><span class="k">${esc(label)}${isBest?' <span class="pill good" style="font-size:9px">best gain</span>':''}</span><span class="v">${esc(adg)}${pr.dailyCost>0?' · '+money(pr.dailyCost)+'/d':''}</span></div>`; };
+  wrap.innerHTML=`${pageHeader(a.name+' — Season Review','/season')}
+    <div class="grid g3">
+      <div class="stat"><div class="k">Total gain</div><div class="v tnum">${r.gain!=null?r.gain:'—'}${r.gain!=null?'<small> lb</small>':''}</div><div class="sub">${r.st.startW??'—'}→${r.st.curW??'—'} lb</div></div>
+      <div class="stat"><div class="k">Invested</div><div class="v tnum" style="font-size:18px">${money(r.investment)}</div><div class="sub">feed ${money(r.feedCost)}</div></div>
+      <div class="stat"><div class="k">Cost/lb gain</div><div class="v tnum" style="font-size:18px">${r.costPerLb!=null?money(r.costPerLb):'—'}</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:4px">
+      <div class="stat"><div class="k">Income</div><div class="v tnum" style="font-size:18px">${money(r.income)}</div></div>
+      <div class="stat"><div class="k">Net</div><div class="v tnum" style="font-size:18px;color:${r.net>=0?'var(--good)':'var(--bad)'}">${money(r.net)}</div></div>
+    </div>
+    <div class="section-title">Feed programs &amp; gain</div>
+    <div class="card pad">${r.progRows.length?r.progRows.map(progLine).join(''):'<div style="color:var(--muted);font-size:13px">No feed programs recorded.</div>'}</div>
+    ${r.bestGain?`<div class="help">${ICON.trend}<span>Best gain came <b>during</b> ${esc(r.bestGain.f.name||'a program')} — ${r.bestGain.ps.adg} lb/day. This is what the animal did on that program, not proof the product caused it.</span></div>`:''}
+    ${r.shows.length?`<div class="section-title">Weight at each show</div><div class="card pad">${r.shows.map(s=>`<div class="kv"><span class="k">${esc(s.show.name)} · ${fmtShort(s.show.start)}</span><span class="v">${s.weight!=null?s.weight+' lb':'—'}${s.result.placing?' · placed '+esc(s.result.placing)+(s.result.inClass?'/'+s.result.inClass:''):''}</span></div>`).join('')}</div>`:''}
+    ${r.best&&r.bestShow?`<div class="section-title">Best result</div><div class="card pad"><div style="font-weight:800">${esc(r.best.result.divisionPlacing||('Placed '+r.best.result.placing))} · ${esc(r.bestShow.name)}</div>${r.bestProgram?`<div style="font-size:12.5px;color:var(--muted);margin-top:4px">Feed program active then: <b style="color:var(--ink)">${esc(r.bestProgram.name||'—')}</b></div>`:''}</div>`:''}
+    ${r.recs.length?`<div class="section-title">Coach adjustments accepted</div><div class="card pad">${r.recs.map(rc=>`<div class="kv"><span class="k">${fmtShort((rc.reviewedAt||rc.date||'').slice(0,10))} · ${esc(recTypeLabel(rc.type))}</span><span class="v" style="max-width:60%;white-space:normal;text-align:right">${esc((rc.resultText||rc.text||'').slice(0,80))}</span></div>`).join('')}</div>`:''}
+    <div class="section-title">What to remember next year</div>
+    <div class="card pad">${proj.reflection?`<div style="font-size:13.5px;line-height:1.5">${esc(proj.reflection)}</div>`:'<div style="color:var(--muted);font-size:13px">No reflection yet.</div>'}<button class="btn block" id="srReflect" style="margin-top:10px">${ICON.edit} ${proj.reflection?'Edit':'Add'} reflection</button></div>
+    <button class="btn block" id="srCopy" style="margin-top:12px">${ICON.copy} Copy season summary</button>
+    <div style="height:8px"></div>`;
+  $('#srReflect',wrap).onclick=()=>openProjectSheet(a.id);
+  $('#srCopy',wrap).onclick=async()=>{ const L=[`${a.name} — Season Review`,''];
+    L.push(`Gain: ${r.gain!=null?r.gain+' lb':'—'} (${r.st.startW??'—'}→${r.st.curW??'—'})`);
+    L.push(`Invested ${money(r.investment)} · Income ${money(r.income)} · Net ${money(r.net)}${r.costPerLb!=null?' · '+money(r.costPerLb)+'/lb gain':''}`);
+    L.push(''); L.push('Feed programs:'); r.progRows.forEach(pr=>L.push('  '+(pr.f.name||'Program')+': '+(pr.ps.adg!=null?pr.ps.adg+' lb/d':'n/a')));
+    if(r.bestGain)L.push('Best gain during: '+(r.bestGain.f.name||'')+' ('+r.bestGain.ps.adg+' lb/d)');
+    if(r.shows.length){ L.push(''); L.push('At shows:'); r.shows.forEach(s=>L.push('  '+s.show.name+': '+(s.weight!=null?s.weight+' lb':'—')+(s.result.placing?' · '+s.result.placing:''))); }
+    if(proj.reflection){ L.push(''); L.push('Remember: '+proj.reflection); }
+    const t=L.join('\n'); try{ await navigator.clipboard.writeText(t); toast('Copied','good'); }catch(e){ toast('Copy failed','bad'); } };
 });
 function activeAnimalsWithResults(){ const ids=new Set(DB.entries.filter(e=>e.result&&e.result.placing).map(e=>e.animalId)); return DB.animals.filter(a=>ids.has(a.id)); }
 function showDateOf(e){ const sh=DB.shows.find(s=>s.id===e.showId); return sh?sh.start:''; }
