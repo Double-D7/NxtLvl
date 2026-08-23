@@ -3354,6 +3354,7 @@ route('helper',(parts)=>{
   const animals=animalsForHelper(h.id).filter(a=>!a.archived).sort((a,b)=>a.name.localeCompare(b.name));
   wrap.innerHTML=`${pageHeader(h.name,'/helpers',`<button class="iconbtn" style="background:var(--line-2);color:var(--ink)" id="edHelper">${ICON.edit}</button>`)}
     <button class="btn primary block" id="feedReport" style="margin-bottom:8px">${ICON.reports} Weekly feed report</button>
+    <button class="btn block" id="weightReport" style="margin-bottom:12px">${ICON.weight} Current weights report</button>
     <div class="btn-row" style="margin-bottom:12px"><button class="btn" id="viewAll" style="flex:1">${ICON.animals} Filter herd</button><button class="btn" id="shareSnap" style="flex:1">${ICON.share} Snapshot</button></div>
     <div class="section-title">${h.name.split(' ')[0]}’s animals · ${animals.length}</div>
     <div id="hAnimals"></div>`;
@@ -3362,6 +3363,7 @@ route('helper',(parts)=>{
   $('#viewAll',wrap).onclick=()=>go('/animals?helper='+h.id);
   $('#shareSnap',wrap).onclick=()=>helperSnapshot(h.id);
   $('#feedReport',wrap).onclick=()=>openFeedReport(animals.map(a=>a.id), h.name.split(' ')[0]+'’s animals');
+  $('#weightReport',wrap).onclick=()=>openWeightReport(animals.map(a=>a.id), h.name.split(' ')[0]+'’s animals');
   const hc=$('#hAnimals',wrap);
   if(!animals.length){ hc.innerHTML=emptyState(ICON.animals,'No animals yet','Assign '+h.name+' to animals from each animal’s Edit screen (Helpers field).'); return; }
   animals.forEach(a=>{ const st=animalStats(a); const cf=currentFeed(a.id); const card=el('div','card pad'); card.style.marginBottom='10px';
@@ -3415,6 +3417,41 @@ function openFeedReport(animalIds, subject){
   const sh=openSheet({title:'Weekly feed report',body,foot});
   const txt=()=>$('#frText',body).value;
   const copy=async()=>{ try{ await navigator.clipboard.writeText(txt()); toast('Copied — paste it into a text','good'); }catch(e){ const ta=$('#frText',body); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} toast('Copied','good'); } };
+  $('[data-copy]',sh).onclick=copy;
+  $('[data-share]',sh).onclick=async()=>{ const t=txt(); if(navigator.share){ try{ await navigator.share({text:t}); }catch(e){} } else copy(); };
+}
+/* ---- Current weights report — the weekly "weights + gain" text you send with videos ---- */
+function weightReportText(animalIds){
+  const d=new Date(); const wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  let h=d.getHours(); const m=String(d.getMinutes()).padStart(2,'0'); const ap=h<12?'AM':'PM'; h=h%12; if(h===0)h=12;
+  const dateLabel=`Weights ${wd} ${d.getMonth()+1}-${d.getDate()}-${String(d.getFullYear()).slice(2)} (${h}:${m} ${ap})`;
+  const lines=[`${DB.team.name} — Weight update`, dateLabel, ''];
+  (animalIds||[]).map(getAnimal).filter(a=>a&&!a.archived).forEach(a=>{
+    const st=animalStats(a);
+    const idTag=a.earNotch||a.earTag||a.registration||'';
+    const head=[idTag, [a.breed,a.sex].filter(Boolean).join(' '), `(${a.name})`].filter(Boolean).join(' ').trim();
+    lines.push(head);
+    if(st.curW!=null){
+      let wl=`${st.curW} lb`+(st.curD?' ('+fmtShort(st.curD)+')':'');
+      if(st.gainPeriod!=null && st.periodDays){ const sign=st.gainPeriod>=0?'+':''; wl+=` · ${sign}${st.gainPeriod} lb in ${st.periodDays}d`+(st.adgPeriod!=null?` (${st.adgPeriod} lb/d)`:''); }
+      else if(st.adgLife!=null){ wl+=` · ${st.adgLife} lb/d`; }
+      lines.push(wl);
+      if(a.targetWeight){ const gap=st.curW-a.targetWeight; lines.push(gap>=0?`  ${Math.abs(gap)} lb over ${a.targetWeight} target`:`  ${Math.abs(gap)} lb to ${a.targetWeight} target`); }
+    } else lines.push('No weight yet');
+    lines.push('');
+  });
+  return lines.join('\n').trim()+'\n';
+}
+function openWeightReport(animalIds, subject){
+  const ids=(animalIds||[]).map(getAnimal).filter(a=>a&&!a.archived).map(a=>a.id);
+  if(!ids.length){ toast('No active animals to report','bad'); return; }
+  const body=el('div');
+  body.innerHTML=`<div class="help">${ICON.info}<span>This week's weigh-ins${subject?' for <b>'+esc(subject)+'</b>':''} — each animal's latest weight and gain since the previous weigh-in. Edit anything, then Copy or Share it into a text to send with your videos.</span></div>
+    <textarea class="control" id="wrText" style="min-height:340px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.55;white-space:pre">${esc(weightReportText(ids))}</textarea>`;
+  const foot=el('div'); foot.innerHTML=`<button class="btn" data-copy style="flex:1">${ICON.copy} Copy</button><button class="btn primary" data-share style="flex:1">${ICON.share} Share to text</button>`;
+  const sh=openSheet({title:'Current weights report',body,foot});
+  const txt=()=>$('#wrText',body).value;
+  const copy=async()=>{ try{ await navigator.clipboard.writeText(txt()); toast('Copied — paste it into a text','good'); }catch(e){ const ta=$('#wrText',body); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} toast('Copied','good'); } };
   $('[data-copy]',sh).onclick=copy;
   $('[data-share]',sh).onclick=async()=>{ const t=txt(); if(navigator.share){ try{ await navigator.share({text:t}); }catch(e){} } else copy(); };
 }
