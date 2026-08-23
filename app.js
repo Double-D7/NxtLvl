@@ -741,6 +741,7 @@ function renderChrome(activeTop){
         <div class="brandmark">${brandImg()}</div>
         <div><h1>${esc(DB.team.name)}</h1><div class="sub">${esc(DB.team.subtitle||'Show Livestock')}</div></div>
         <div class="header-actions">
+          <button class="iconbtn sync-badge" id="hSync" aria-label="Sync status" style="display:none"><span class="sync-dot"></span></button>
           <button class="iconbtn" id="hSearch" aria-label="Search">${ICON.search}</button>
           <button class="iconbtn" id="hBell" aria-label="Alerts">${ICON.bell}</button>
           <button class="avatar" id="hMe">${esc(initials(me().name))}</button>
@@ -749,6 +750,7 @@ function renderChrome(activeTop){
       <nav class="bottomnav"></nav>`;
     $('#hSearch').onclick=openSearch; $('#hBell').onclick=openAlerts; $('#hMe').onclick=()=>go('/more');
   }
+  updateSyncBadge();
   const nav=$('.bottomnav'); nav.innerHTML='';
   // brand block — only shown in the desktop sidebar (CSS hides it on mobile)
   const brand=el('div','nav-brand',`<div class="nav-brand-logo">${brandImg()}</div><div class="nav-brand-name">${esc(DB.team.name)}</div>`);
@@ -759,6 +761,12 @@ function renderChrome(activeTop){
   });
 }
 function setView(html, activeTop){ renderChrome(activeTop); const v=$('#view'); v.innerHTML = typeof html==='string'?html:''; if(typeof html!=='string')v.append(html); window.scrollTo(0,0); return v; }
+/* Sync-status dot in the header — only meaningful (and shown) in cloud mode. */
+function updateSyncBadge(){ const b=document.getElementById('hSync'); if(!b) return;
+  if(typeof Cloud==='undefined' || !Cloud.enabled || !Cloud.teamId){ b.style.display='none'; return; }
+  const s=Cloud.syncState(); b.style.display=''; b.title=s.label;
+  b.innerHTML=`<span class="sync-dot${s.k==='sync'?' pulse':''}" style="background:${s.color}"></span>`;
+  b.onclick=()=>toast(s.label, s.k==='ok'?'good':(s.k==='offline'?'':'')); }
 
 /* header helper for sub-pages (back button) */
 function pageHeader(title, backHash, right){
@@ -865,12 +873,14 @@ const Cloud = {
   },
   async push(){
     if(!this.enabled || !this.teamId) return;
-    if(!navigator.onLine){ this.pending=true; return; }
+    if(!navigator.onLine){ this.pending=true; updateSyncBadge&&updateSyncBadge(); return; }
+    this.syncing=true; updateSyncBadge&&updateSyncBadge();
     const tok=this.token(); this.sentTokens.push(tok); if(this.sentTokens.length>12)this.sentTokens.shift();
     const payload={ data:DB, name:DB.team?.name, updated_at:new Date().toISOString(), write_token:tok };
     const {error}=await this.sb.from('teams').update(payload).eq('id',this.teamId);
     if(error){ console.error('push failed',error); this.pending=true; }
     else this.pending=false;
+    this.syncing=false; updateSyncBadge&&updateSyncBadge();
   },
   subscribe(){
     if(this.channel){ try{ this.sb.removeChannel(this.channel); }catch(e){} }
@@ -880,18 +890,42 @@ const Cloud = {
         if(row.write_token && this.sentTokens.includes(row.write_token)) return; // ignore our own echoes
         this.applyRemote(row.data);
       }).subscribe();
-    window.addEventListener('online', ()=>{ if(this.pending) this.push(); });
+    window.addEventListener('online', ()=>{ updateSyncBadge&&updateSyncBadge(); if(this.pending) this.mergePush(); });
+    window.addEventListener('offline', ()=>{ this.pending=true; updateSyncBadge&&updateSyncBadge(); });
+  },
+  syncState(){
+    if(!this.enabled || !this.teamId) return {k:'local', label:'On this device', color:'var(--muted)'};
+    if(!navigator.onLine) return {k:'offline', label:'Offline — saved, will sync', color:'var(--warn)'};
+    if(this.syncing || this.pending) return {k:'sync', label:'Syncing…', color:'var(--info)'};
+    return {k:'ok', label:'Synced', color:'var(--good)'};
   },
   applyRemote(data){
     if(!data) return;
-    const keepUser=DB.currentUserId, keepRecent=DB._recentAnimals, keepScale=DB.lastScale;
+    const keepRecent=DB._recentAnimals, keepScale=DB.lastScale;
     this.applying=true;
-    DB = mergeDefaults(data);
-    DB.currentUserId=keepUser; DB._recentAnimals=keepRecent; DB.lastScale=keepScale;
+    // Record-level merge so unsynced LOCAL edits aren't clobbered by an
+    // incoming remote update (and vice-versa). Falls back to replace if the
+    // merge module somehow isn't present.
+    const remote = mergeDefaults(data);
+    DB = (typeof STMerge!=='undefined') ? mergeDefaults(STMerge.mergeTeamDocs(DB, remote)) : remote;
+    DB._recentAnimals=keepRecent; DB.lastScale=keepScale;
     save(true);
     this.applying=false;
-    // Don't yank the UI out from under an open editor; refresh quietly instead.
     if(!sheetStack.length){ render(); } else { toast('Synced changes from your team',''); }
+  },
+  // On reconnect (or after a failed push) reconcile with the current cloud
+  // doc before writing, so a teammate's edits made while we were offline are
+  // merged in rather than overwritten.
+  async mergePush(){
+    if(!this.enabled || !this.teamId) return;
+    if(!navigator.onLine){ this.pending=true; updateSyncBadge&&updateSyncBadge(); return; }
+    try{
+      const {data:row}=await this.sb.from('teams').select('data').eq('id',this.teamId).single();
+      if(row && row.data && typeof STMerge!=='undefined'){
+        this.applying=true; DB = mergeDefaults(STMerge.mergeTeamDocs(DB, mergeDefaults(row.data))); save(true); this.applying=false;
+      }
+    }catch(e){ /* fall through to a plain push */ }
+    return this.push();
   },
   async signOut(){ try{ if(this.channel) this.sb.removeChannel(this.channel); await this.sb.auth.signOut(); }catch(e){} this.user=null; this.teamId=null; this.channel=null; },
 };
