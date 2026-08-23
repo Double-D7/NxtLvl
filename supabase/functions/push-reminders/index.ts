@@ -108,16 +108,29 @@ async function sendTo(sub: any, payload: object): Promise<boolean> {
   }
 }
 
+// A device is in its quiet-hours window (local time) → skip the push.
+function inQuietHours(prefs: any, tzOffset: number): boolean {
+  if (!prefs || !prefs.quietOn) return false;
+  const off = typeof tzOffset === "number" ? tzOffset : 0; // minutes east of UTC
+  const local = new Date(Date.now() + off * 60000);
+  const hm = local.getUTCHours() * 60 + local.getUTCMinutes();
+  const parse = (s: string) => { const [h, m] = String(s || "").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  const start = parse(prefs.quietStart || "21:00"), end = parse(prefs.quietEnd || "06:00");
+  if (start === end) return false;
+  return start < end ? (hm >= start && hm < end) : (hm >= start || hm < end); // wraps past midnight
+}
+
 Deno.serve(async () => {
   const { data: teams, error: te } = await admin.from("teams").select("id,data");
   if (te) return new Response(JSON.stringify({ error: te.message }), { status: 500 });
 
-  let sent = 0, considered = 0;
+  let sent = 0, considered = 0, quiet = 0;
   for (const team of teams || []) {
     const { data: subs } = await admin.from("push_subscriptions").select("*").eq("team_id", team.id);
     if (!subs || !subs.length) continue;
     for (const sub of subs) {
       considered++;
+      if (inQuietHours(sub.prefs, sub.tz_offset)) { quiet++; continue; } // respect quiet hours
       const lines = linesForTeam(team.data || {}, sub.prefs || {});
       if (!lines.length) continue;
       const payload = {
@@ -129,7 +142,7 @@ Deno.serve(async () => {
       if (await sendTo(sub, payload)) sent++;
     }
   }
-  return new Response(JSON.stringify({ ok: true, considered, sent }), {
+  return new Response(JSON.stringify({ ok: true, considered, sent, quiet }), {
     headers: { "content-type": "application/json" },
   });
 });

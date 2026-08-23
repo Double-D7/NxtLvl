@@ -16,10 +16,13 @@ create table if not exists public.push_subscriptions (
   p256dh      text not null,
   auth        text not null,
   prefs       jsonb not null default '{}'::jsonb,
+  tz_offset   int,                                -- device minutes east of UTC, for quiet hours
   ua          text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+-- add the column on existing installs (safe to re-run)
+alter table public.push_subscriptions add column if not exists tz_offset int;
 create index if not exists push_team_idx on public.push_subscriptions(team_id);
 
 alter table public.push_subscriptions enable row level security;
