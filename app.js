@@ -719,7 +719,7 @@ function renderChrome(activeTop){
   const brand=el('div','nav-brand',`<div class="nav-brand-logo">${brandImg()}</div><div class="nav-brand-name">${esc(DB.team.name)}</div>`);
   brand.onclick=()=>go('/dashboard'); nav.appendChild(brand);
   NAV_MAIN.forEach(([id,label,icon])=>{
-    if(id==='__add'){ const b=el('button','navitem fab',`<span class="fab-btn">${icon}</span><span class="navlabel">Add entry</span>`); b.onclick=openQuickAdd; nav.appendChild(b); return; }
+    if(id==='__add'){ const b=el('button','navitem fab',`<span class="fab-btn">${icon}</span><span class="navlabel">Add entry</span>`); b.onclick=()=>openQuickAdd(); nav.appendChild(b); return; }
     const b=el('button','navitem'+(activeTop===id?' active':''),`${icon}<span>${label}</span>`); b.onclick=()=>go('/'+id); nav.appendChild(b);
   });
 }
@@ -2762,36 +2762,118 @@ function tabActivity(box,a){
 /* ===================================================================
    QUICK BARN ADD
    =================================================================== */
-function openQuickAdd(){
+// The center + is a universal Quick Log. Opened from an animal profile it
+// preselects that animal; opened globally it lets you pick. Recently used
+// actions surface first so the common few taps get even faster.
+const QUICK_ACTS=[
+  ['Weight',ICON.weight,'var(--purple-3)','weight'],
+  ['Rapid weigh',ICON.weight,'#0EA5B7','rapidweigh'],
+  ['Change feed',ICON.feed,'var(--teal-3)','feed'],
+  ['Log care',ICON.layover,'#38BDF8','care'],
+  ['Health',ICON.health,'var(--bad)','health'],
+  ['Exercise',ICON.run,'var(--warn)','exercise'],
+  ['Measurement',ICON.trend,'#A78BFA','measure'],
+  ['Photo',ICON.camera,'var(--info)','photo'],
+  ['Video',ICON.video,'var(--teal-3)','video'],
+  ['Expense',ICON.money,'#F59E0B','expense'],
+  ['Note',ICON.note,'var(--muted)','note'],
+  ['New event',ICON.cal,'#60A5FA','event'],
+  ['New task',ICON.check,'var(--good)','task'],
+  ['New animal',ICON.animals,'var(--purple)','animal'],
+];
+const QA_MAP=Object.fromEntries(QUICK_ACTS.map(a=>[a[3],a]));
+const GLOBAL_ACTS=['rapidweigh','event','task','animal'];  // not animal-scoped
+function currentAnimalId(){ const m=(location.hash||'').match(/#\/animal\/([^\/?]+)/); return m?m[1]:null; }
+function openQuickAdd(preId){
   const body=el('div');
-  const acts=[['Add weight',ICON.weight,'var(--purple-3)','weight'],['Log care',ICON.layover,'#38BDF8','care'],['Upload photo',ICON.camera,'var(--info)','photo'],['Upload video',ICON.video,'var(--teal-3)','video'],['Change feed',ICON.feed,'var(--teal-3)','feed'],['Health record',ICON.health,'var(--bad)','health'],['Log exercise',ICON.run,'var(--warn)','exercise'],['Add note',ICON.note,'var(--muted)','note'],['New event',ICON.cal,'#60A5FA','event'],['New animal',ICON.animals,'var(--purple)','animal'],['New task',ICON.check,'var(--good)','task']];
-  const recent=(DB._recentAnimals||[]).map(getAnimal).filter(Boolean).slice(0,6);
   const active=activeAnimals();
-  body.innerHTML=`<div class="grid g3" style="gap:10px">${acts.map(([l,ic,c,k])=>`<button class="card" data-act="${k}" style="padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="width:30px;height:30px;color:${c}">${ic}</span><span style="font-size:12px;font-weight:700;line-height:1.2">${l}</span></button>`).join('')}</div>
-    <div id="qaAnimals" style="display:none;margin-top:16px"></div>`;
-  const sh=openSheet({title:'Quick add',body});
-  let pending=null;
-  const pickAnimal=(kind)=>{ pending=kind; const box=$('#qaAnimals',body); box.style.display='block';
+  let ctx = (preId&&getAnimal(preId)) || (currentAnimalId()&&getAnimal(currentAnimalId())) || null;
+  const tile=([l,ic,c,k])=>`<button class="card" data-act="${k}" style="padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="width:30px;height:30px;color:${c}">${ic}</span><span style="font-size:12px;font-weight:700;line-height:1.2">${l}</span></button>`;
+  const draw=()=>{
+    const recentActs=(DB._recentActions||[]).map(k=>QA_MAP[k]).filter(Boolean).slice(0,4);
+    body.innerHTML=`
+      ${ctx?`<div class="card pad" style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><div class="thumb" data-ctxth style="flex:none">${esc(initials(ctx.name))}</div><div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.4px">Logging for</div><div style="font-weight:800">${esc(ctx.name)}</div></div><button data-change style="background:none;border:none;color:var(--purple-3);font-weight:700;font-size:12.5px;cursor:pointer">Change</button></div>`:''}
+      ${recentActs.length?`<div class="section-title" style="margin-top:0">Recent</div><div class="grid g4" style="gap:10px;margin-bottom:14px">${recentActs.map(tile).join('')}</div><div class="section-title">All actions</div>`:''}
+      <div class="grid g3" style="gap:10px">${QUICK_ACTS.map(tile).join('')}</div>
+      <div id="qaAnimals" style="display:none;margin-top:16px"></div>`;
+    if(ctx&&ctx.profileMediaId) Media.url(ctx.profileMediaId).then(u=>{ const t=$('[data-ctxth]',body); if(u&&t){ t.style.backgroundImage=`url(${u})`; t.style.backgroundSize='cover'; t.textContent=''; }});
+    if($('[data-change]',body)) $('[data-change]',body).onclick=()=>{ ctx=null; draw(); };
+    $$('[data-act]',body).forEach(b=>b.onclick=()=>choose(b.dataset.act));
+  };
+  const pickAnimal=(kind)=>{ const box=$('#qaAnimals',body); box.style.display='block';
     box.innerHTML=`<div class="section-title" style="margin-top:0">Pick an animal</div><div style="position:relative;margin-bottom:8px"><span style="position:absolute;left:12px;top:13px;color:var(--muted)">${ICON.search}</span><input class="control" id="qaSearch" placeholder="Search…" style="padding-left:40px"></div><div id="qaList"></div>`;
     const paint=(q='')=>{ const list=active.filter(a=>a.name.toLowerCase().includes(q.toLowerCase())).slice(0,30); const L=el('div','list');
       list.forEach(a=>{ const li=animalRow(a,''); li.onclick=()=>{ closeSheet(); runQuick(kind,a.id); }; L.append(li); }); $('#qaList',box).innerHTML=''; $('#qaList',box).append(L); };
-    paint(); $('#qaSearch',box).oninput=e=>paint(e.target.value); $('#qaSearch',box).focus();
+    paint(); $('#qaSearch',box).oninput=e=>paint(e.target.value); $('#qaSearch',box).focus(); box.scrollIntoView({block:'nearest'});
   };
-  $$('[data-act]',body).forEach(b=>b.onclick=()=>{ const k=b.dataset.act;
-    if(k==='animal'){ closeSheet(); openAnimalForm(); }
-    else if(k==='task'){ closeSheet(); openTaskSheet(); }
-    else if(k==='event'){ closeSheet(); openEventSheet(null, todayISO()); }
-    else pickAnimal(k); });
+  const choose=(k)=>{ DB._recentActions=[k,...(DB._recentActions||[]).filter(x=>x!==k)].slice(0,8); save(true);
+    if(k==='rapidweigh'){ closeSheet(); openRapidWeigh(); return; }
+    if(k==='animal'){ closeSheet(); openAnimalForm(); return; }
+    if(k==='task'){ closeSheet(); openTaskSheet(); return; }
+    if(k==='event'){ closeSheet(); openEventSheet(null, todayISO()); return; }
+    if(ctx){ closeSheet(); runQuick(k, ctx.id); } else pickAnimal(k);
+  };
+  openSheet({title: ctx?'Quick log':'Quick add', body});
+  draw();
 }
 function runQuick(kind,id){ DB._recentAnimals=[id,...(DB._recentAnimals||[]).filter(x=>x!==id)].slice(0,8); save();
   if(kind==='weight')openWeightSheet(id);
   else if(kind==='feed')openFeedSheet(id);
   else if(kind==='note')openNoteSheet(id);
+  else if(kind==='expense')openExpenseSheet(id);
   else if(kind==='photo'){ hiddenFile('image/*',f=>addMedia(id,f,'photo')).click(); }
   else if(kind==='video'){ hiddenFile('video/*',f=>addMedia(id,f,'video')).click(); }
   else if(kind==='health'){ go('/animal/'+id+'/health'); setTimeout(()=>$('#addH')&&$('#addH').click(),120); }
   else if(kind==='exercise'){ go('/animal/'+id+'/exercise'); setTimeout(()=>$('#addX')&&$('#addX').click(),120); }
+  else if(kind==='measure'){ go('/animal/'+id+'/measurements'); setTimeout(()=>$('#addM')&&$('#addM').click(),140); }
   else if(kind==='care'){ const lay=(DB.layovers||[]).filter(l=>(l.animalIds||[]).includes(id)).sort((x,y)=>x.start<y.start?1:-1)[0]||activeLayover(); openCareSheet({layoverId:lay?lay.id:null, animalId:id, date:todayISO(), markDone:true}); }
+}
+/* ---- Rapid Weigh Mode — one big input per animal, Save & Next ---- */
+function openRapidWeigh(){
+  if(!can('addRecord')){ toast('Your role can’t add weights','bad'); return; }
+  const animals=activeAnimals(); if(!animals.length){ toast('No active animals','bad'); return; }
+  const body=el('div'); let i=0; const saved=[];
+  openSheet({title:'Rapid weigh', body});
+  const draw=()=>{
+    if(i>=animals.length){
+      body.innerHTML=`<div style="text-align:center;padding:22px 8px">
+        <div style="font-size:42px">⚖️</div>
+        <div style="font-size:19px;font-weight:800;margin-top:8px">Weighed ${saved.length} of ${animals.length}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">${saved.length?saved.map(esc).join(' · '):'Nothing saved'}</div>
+        <button class="btn primary block" data-done style="margin-top:18px">Done</button></div>`;
+      $('[data-done]',body).onclick=()=>{ save(); closeSheet(); toast(saved.length?`Logged ${saved.length} weigh-in${saved.length===1?'':'s'}`:'No weights added', saved.length?'good':'info'); render(); };
+      return;
+    }
+    const a=animals[i]; const ws=weightsFor(a.id); const last=ws.length?+ws[ws.length-1].weight:(a.startWeight!=null?+a.startWeight:'');
+    body.innerHTML=`
+      <div style="text-align:center;color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.4px">${i+1} OF ${animals.length}</div>
+      <div style="text-align:center;font-size:22px;font-weight:800;margin-top:2px">${esc(a.name)}</div>
+      <div style="text-align:center;color:var(--muted);font-size:12.5px;margin-bottom:14px">${esc(speciesName(a.species))}${a.earTag?' · Tag '+esc(a.earTag):''}${last!==''?` · last ${last} lb`:' · no weights yet'}</div>
+      <div class="stepper" style="margin-bottom:12px"><button data-step="-1">−</button><div class="val"><span id="rwVal" class="tnum">${last||0}</span><small> lb</small></div><button data-step="1">+</button></div>
+      <input class="control" type="number" inputmode="decimal" id="rwInput" value="${last!==''?last:''}" placeholder="lb" style="text-align:center;font-size:22px;font-weight:800">
+      <div id="rwCalc" style="margin-top:10px"></div>
+      <div class="btn-row" style="margin-top:16px"><button class="btn" data-skip style="flex:1">Skip</button><button class="btn primary" data-next style="flex:2">${i+1<animals.length?'Save &amp; Next':'Save &amp; Finish'}</button></div>`;
+    const inp=$('#rwInput',body);
+    const calc=()=>{ const val=+inp.value; const prev=ws[ws.length-1];
+      if(val&&prev){ const g=round(val-prev.weight,1); const d=daysBetween(prev.date,todayISO()); const adg=d>0?round(g/d,2):null;
+        $('#rwCalc',body).innerHTML=`<div class="card pad" style="background:var(--line-2);border:none"><div style="display:flex;justify-content:space-around;text-align:center;font-size:12px"><div><div style="color:var(--muted);font-weight:700">GAIN</div><div style="font-weight:800;font-size:16px;color:${g>=0?'var(--good)':'var(--bad)'}" class="tnum">${g>=0?'+':''}${g}</div></div><div><div style="color:var(--muted);font-weight:700">DAYS</div><div style="font-weight:800;font-size:16px" class="tnum">${d}</div></div><div><div style="color:var(--muted);font-weight:700">ADG</div><div style="font-weight:800;font-size:16px;color:var(--purple-3)" class="tnum">${adg??'—'}</div></div></div></div>`; }
+      else $('#rwCalc',body).innerHTML=''; };
+    $('#rwVal',body).textContent=inp.value||0;
+    inp.oninput=()=>{ $('#rwVal',body).textContent=inp.value||0; calc(); };
+    $$('[data-step]',body).forEach(b=>b.onclick=()=>{ inp.value=clamp(round((+inp.value||0)+(+b.dataset.step),1),0,3000); inp.oninput(); });
+    calc();
+    const advance=()=>{ i++; draw(); };
+    $('[data-skip]',body).onclick=advance;
+    $('[data-next]',body).onclick=()=>{ const val=+inp.value;
+      if(val>0){ DB.weights.push(stamp({id:uid('w'),animalId:a.id,weight:val,date:todayISO(),time:nowTime(),scale:DB.lastScale||'',by:DB.currentUserId})); logAct('weight','Logged '+val+' lb (rapid weigh)',a.id); saved.push(a.name);
+        const prevMax=ws.length?Math.max(...ws.map(w=>+w.weight)):(a.startWeight!=null?+a.startWeight:0);
+        if(a.targetWeight&&val>=+a.targetWeight&&prevMax<+a.targetWeight) milestone('goal:'+a.id+':'+a.targetWeight,`${a.name} hit the goal!`,`${val} lb — target reached`,'🎯');
+        save(true); }
+      advance();
+    };
+    setTimeout(()=>inp.focus(),60);
+  };
+  draw();
 }
 
 /* ===================================================================
