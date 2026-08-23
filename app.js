@@ -275,6 +275,8 @@ function blankDB(){
     layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
     meds:[], medLog:[], alertAcks:{},
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
+    // Configurable plan-status thresholds (lb). Drives On-Plan classification.
+    settings:{ plan:{ tolLb:8, criticalLb:20, aheadPaceLb:8 } },
   };
 }
 function seedBreeds(db){ let order=0; for(const sp of Object.keys(BREEDS)) for(const nm of BREEDS[sp]) db.breeds.push({id:uid('br'),speciesId:sp,name:nm,system:true,active:true,order:order++}); }
@@ -360,6 +362,41 @@ function animalStats(a){
   }
   return s;
 }
+/* ===================================================================
+   Calc — DB-aware wrappers over the pure STCalc core (calc.js).
+   The UI calls these; they gather data from DB and delegate the math to
+   STCalc so there is ONE authoritative, tested calculation source.
+   =================================================================== */
+const PLAN_META = {
+  ahead:          { label:'Ahead of plan',   color:'var(--teal-3)',  rank:1 },
+  onplan:         { label:'On plan',         color:'var(--good)',    rank:2 },
+  slightly_behind:{ label:'Slightly behind', color:'var(--warn)',    rank:3 },
+  needs_attention:{ label:'Needs attention', color:'var(--bad)',     rank:4 },
+  insufficient:   { label:'Insufficient data',color:'var(--muted)',  rank:5 },
+  no_plan:        { label:'No plan set',     color:'var(--muted)',   rank:6 },
+};
+const Calc = {
+  planThresholds(){ return Object.assign({}, STCalc.PLAN_DEFAULTS, (DB.settings&&DB.settings.plan)||{}); },
+  targetState(a){ return a&&a.targetDate ? STCalc.targetState(todayISO(), a.targetDate) : null; },
+  rollingAdg(id, win){ return STCalc.rollingAdg(weightsFor(id), todayISO(), win); },
+  // On-Plan status for an animal. Projection keeps existing lifetime-ADG
+  // semantics (st.adgLife) so numbers users already see are preserved.
+  planStatus(a){
+    const st=animalStats(a);
+    const res=STCalc.planStatus({
+      curW:st.curW, startW:st.startW, startD:st.startD,
+      targetW:a.targetWeight, targetD:a.targetDate, todayISO:todayISO(),
+      adgForProjection: st.adgLife,
+      rangeLow: a.targetRangeLow!=null?a.targetRangeLow:null,
+      rangeHigh: a.targetRangeHigh!=null?a.targetRangeHigh:null,
+      thresholds: this.planThresholds(),
+    });
+    const meta=PLAN_META[res.state]||PLAN_META.no_plan;
+    return { ...res, color:meta.color, rank:meta.rank, st };   // res.label may be more specific (e.g. "Trending heavy")
+  },
+  // Feed cost with an explicit completeness signal (never implies certainty).
+  feedCost(f){ const dc=feedDailyCost(f); const cc=STCalc.feedCostCompleteness(dc.cost, dc.uncosted.length); return { ...cc, cost:dc.cost, uncosted:dc.uncosted }; },
+};
 function weightAlerts(a){
   const s=animalStats(a); const out=[];
   const ws=weightsFor(a.id);
@@ -658,7 +695,7 @@ function go(hash){ if(location.hash===('#'+hash)) render(); else location.hash=h
 function parseHash(){ const h=(location.hash||'#/dashboard').slice(1); const [path,...rest]=h.split('?'); const parts=path.split('/').filter(Boolean); return {parts, q:new URLSearchParams(rest.join('?'))}; }
 
 const NAV_MAIN = [
-  ['dashboard','Dashboard',ICON.dash],['animals','Animals',ICON.animals],
+  ['dashboard','Today',ICON.dash],['animals','Animals',ICON.animals],
   ['__add','Add Entry',ICON.plus],['calendar','Calendar',ICON.cal],['more','More',ICON.more],
 ];
 function renderChrome(activeTop){
@@ -1142,6 +1179,13 @@ route('dashboard', ()=>{
   const wrap=el('div');
   const u=me(); const lay=activeLayover(); const showSoon=upcoming.find(s=>daysBetween(todayISO(),s.start)>=0&&daysBetween(todayISO(),s.start)<=1);
   const streak=activityStreak(); const herdAdg=herdAvgAdg(active); const gainer=biggestGainer(active,7);
+  // Plan status across the herd — the heart of Barn Pulse ("on plan?" not "who's fastest?")
+  const planStates=active.map(a=>({a, p:Calc.planStatus(a)}));
+  const withPlan=planStates.filter(x=>x.p.state!=='no_plan');
+  const cOnPlan=planStates.filter(x=>x.p.state==='ahead'||x.p.state==='onplan').length;
+  const cAttention=planStates.filter(x=>x.p.state==='slightly_behind').length;
+  const cCritical=planStates.filter(x=>x.p.state==='needs_attention').length;
+  const daysToShow=nextShow?daysBetween(todayISO(),nextShow.start):null;
   const ctx={active,needWeigh,nextShow,showSoon,lay,todayTasks,taskCount:todayTasks.length};
   const focus=todaysFocus(ctx);
   const shownSp=DB.species.filter(s=>(bySpecies[s.id]||0)>0);
@@ -1155,12 +1199,35 @@ route('dashboard', ()=>{
         <div style="font-size:15.5px;font-weight:700;line-height:1.45;margin-top:10px">${esc(barnBriefing(ctx))}</div>
       </div>
     </div>`));
+  // BARN PULSE — the 5-second command-center read
+  wrap.append((()=>{
+    const pill=(n,label,color,go)=> n>0
+      ? `<button class="stat" style="text-align:left;border-left:3px solid ${color}"${go?` onclick="go('${go}')"`:''}><div class="v tnum" style="font-size:20px;color:${color}">${n}</div><div class="sub">${label}</div></button>`
+      : `<div class="stat" style="opacity:.5"><div class="v tnum" style="font-size:20px">${n}</div><div class="sub">${label}</div></div>`;
+    const c=el('div','card pad'); c.style.marginTop='12px';
+    const showChip = daysToShow!=null
+      ? `<button class="stat" style="text-align:left;border-left:3px solid var(--purple-3)" onclick="go('/show/${nextShow.id}')"><div class="v tnum" style="font-size:20px;color:var(--purple-3)">${daysToShow}</div><div class="sub">${daysToShow===1?'day':'days'} to show</div></button>`
+      : `<div class="stat" style="opacity:.5"><div class="v tnum" style="font-size:20px">—</div><div class="sub">no show set</div></div>`;
+    c.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Barn Pulse · ${active.length} animal${active.length===1?'':'s'}</div>
+        ${withPlan.length?`<button onclick="go('/coach')" style="background:none;border:none;font-size:12px;font-weight:700;color:var(--purple-3);display:flex;align-items:center;gap:2px;cursor:pointer">Game Plan ${ICON.chev}</button>`:''}</div>
+      <div class="grid g3" style="gap:8px">
+        ${pill(cOnPlan,'On plan','var(--good)','/coach')}
+        ${pill(cAttention,'Watch','var(--warn)','/coach')}
+        ${pill(cCritical,'Critical','var(--bad)','/coach')}
+        ${pill(needWeigh.length,'Need weighed','var(--teal-3)','/animals')}
+        ${pill(todayTasks.length,'Tasks today','var(--purple-3)')}
+        ${showChip}
+      </div>
+      ${!withPlan.length?`<div class="help" style="margin-top:10px">${ICON.target}<span>Set a target weight + show date on your animals to see who's on plan. <button onclick="go('/coach')" style="background:none;border:none;padding:0;color:var(--purple-3);font-weight:700;cursor:pointer;text-decoration:underline">Start a Game Plan</button></span></div>`:''}`;
+    return c;
+  })());
   // MOMENTUM TILES (animated)
   wrap.append(htmlToFrag(`<div class="grid g4" style="margin-top:12px">
     <button class="stat" style="text-align:left" onclick="go('/animals')"><div class="k">Active</div><div class="v tnum" data-count="${active.length}">0</div><div class="sub">animals</div></button>
     <div class="stat" style="flex-direction:row;align-items:center;gap:8px;display:flex"><div style="flex:none">${ringSVG(active.length?weighedThisWeek/active.length*100:0,'var(--teal-3)',weighedThisWeek+'/'+active.length,'weighed')}</div><div style="min-width:0"><div class="k">This week</div><div class="sub" style="margin-top:3px">${needWeigh.length} to go</div></div></div>
     <div class="stat"><div class="k">Streak</div><div class="v tnum" style="color:#FB923C" data-count="${streak}">0</div><div class="sub">${streak===1?'day':'days'} 🔥</div></div>
-    <div class="stat"><div class="k">Herd ADG</div><div class="v tnum" style="font-size:22px">${herdAdg??'—'}${herdAdg!=null?'<small> lb/d</small>':''}</div><div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${gainer?'🚀 '+esc(gainer.a.name)+' +'+gainer.gain:'lifetime avg'}</div></div>
+    <div class="stat"><div class="k">Herd ADG</div><div class="v tnum" style="font-size:22px">${herdAdg??'—'}${herdAdg!=null?'<small> lb/d</small>':''}</div><div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${withPlan.length?cOnPlan+'/'+withPlan.length+' on plan':'lifetime avg'}</div></div>
   </div>`));
   // TODAY'S FOCUS — the one next best action
   wrap.append((()=>{ const c=el('div','card pad'); c.style.cssText='margin-top:12px;display:flex;align-items:center;gap:13px;border-left:4px solid '+focus.color+(focus.go||focus.fn?';cursor:pointer':'');
@@ -1513,7 +1580,7 @@ function tabOverview(box,a){
       <div class="stat"><div class="k">Current weight</div><div class="v tnum">${st.curW??'—'}${st.curW!=null?'<small> lb</small>':''}</div><div class="sub">${st.curD?relDays(st.curD):'no weights'}</div></div>
       <div class="stat"><div class="k">Avg daily gain</div><div class="v tnum">${st.adgLife??'—'}${st.adgLife!=null?'<small> lb/d</small>':''}</div><div class="sub">${st.adgPeriod!=null?'Recent '+st.adgPeriod+' lb/d':'lifetime'}</div></div>
       <div class="stat"><div class="k">Total gain</div><div class="v tnum">${st.gainTotal??'—'}${st.gainTotal!=null?'<small> lb</small>':''}</div><div class="sub">from ${st.startW??'—'} lb start</div></div>
-      <div class="stat"><div class="k">Days owned</div><div class="v tnum">${st.daysOwned??'—'}</div><div class="sub">${a.targetDate?daysBetween(todayISO(),a.targetDate)+'d to target':''}</div></div>
+      <div class="stat"><div class="k">Days owned</div><div class="v tnum">${st.daysOwned??'—'}</div><div class="sub">${(()=>{ const ts=Calc.targetState(a); return ts?esc(ts.label):''; })()}</div></div>
     </div>
     ${a.targetWeight&&st.projWeight!=null?`<div class="card pad" style="margin-top:12px">
       <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted);font-weight:700">Projected on ${fmtShort(a.targetDate)}</span><span style="font-weight:800" class="tnum">${st.projWeight} lb</span></div>
@@ -1709,10 +1776,10 @@ function feedCard(f,showActions){
       ${(f.meals||[]).map(m=>`<div style="background:var(--line-2);border-radius:12px;padding:9px 11px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:4px">${esc(m.time)}</div>${(m.items||[]).map(it=>`<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:1px 0"><span>${esc(it.product)}</span><span class="tnum" style="font-weight:700;color:var(--ink-2)">${it.amount} ${esc(it.unit)}</span></div>`).join('')||'<span style="color:var(--muted);font-size:12px">—</span>'}</div>`).join('')}
     </div>
     ${f.advisorRec?`<div class="help" style="margin-top:10px">${ICON.wand}<span><b>Advisor:</b> ${esc(f.advisorRec)}</span></div>`:''}
-    ${(()=>{ const dc=feedDailyCost(f); if(dc.cost<=0&&!dc.uncosted.length) return '';
-      const runCost=dc.cost*feedProgramDays(f);
-      return `<div style="display:flex;gap:14px;margin-top:10px;font-size:12px;font-weight:700;color:var(--muted);flex-wrap:wrap">${dc.cost>0?`<span>Feed <b class="tnum" style="color:var(--ink)">${money(dc.cost)}/day</b></span><span>This program <b class="tnum" style="color:var(--ink)">${money(runCost)}</b></span>`:''}${dc.uncosted.length?`<span style="color:var(--warn)">Unpriced: ${esc(dc.uncosted.join(', '))}</span>`:''}</div>`; })()}
-    ${fs.adg!=null?`<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;font-weight:700;color:var(--muted)"><span>Gain <b class="tnum" style="color:var(--ink)">${fs.gain>0?'+':''}${fs.gain} lb</b></span><span>ADG <b class="tnum" style="color:var(--ink)">${fs.adg} lb/d</b></span></div>`:''}
+    ${(()=>{ const cc=Calc.feedCost(f); if(cc.cost<=0&&!cc.uncostedCount) return '';
+      const runCost=cc.cost*feedProgramDays(f);
+      return `<div style="display:flex;gap:14px;margin-top:10px;font-size:12px;font-weight:700;color:var(--muted);flex-wrap:wrap">${cc.cost>0?`<span>${cc.complete?'Feed':'Known feed cost:'} <b class="tnum" style="color:var(--ink)">${money(cc.cost)}/day</b></span><span>This program <b class="tnum" style="color:var(--ink)">${money(runCost)}</b></span>`:''}${cc.note?`<span style="color:var(--warn)">${esc(cc.note)}</span>`:''}</div>`; })()}
+    <div style="display:flex;gap:14px;margin-top:8px;font-size:12px;font-weight:700;color:var(--muted)">${fs.adg!=null?`<span>Gain <b class="tnum" style="color:var(--ink)">${fs.gain>0?'+':''}${fs.gain} lb</b></span><span>Program ADG <b class="tnum" style="color:var(--ink)">${fs.adg} lb/d</b></span>`:`<span>Program ADG <b style="color:var(--ink-2)">Not enough weight data</b></span>`}</div>
   </div>`;
 }
 function tabFeed(box,a){
@@ -1846,9 +1913,9 @@ function openFeedSheet(animalId, feedId, dupFrom){
       if(p.unit && UNITS.includes(p.unit) && (!f.meals[mi].items[ii].amount || f.meals[mi].items[ii].unit==='lb')){
         f.meals[mi].items[ii].unit=p.unit; const sel=$('[data-u="'+mi+'-'+ii+'"]',body); if(sel)sel.value=p.unit; }
       updateCost(); }));
-    const updateCost=()=>{ collectMeals(); const dc=feedDailyCost(f); const est=$('#fCostEst',body); if(!est)return;
-      est.innerHTML = dc.cost>0 ? `<div class="help">${ICON.money}<span>Estimated <b>${money(dc.cost)}/day</b> at your current feed prices${dc.uncosted.length?` · unpriced: ${esc(dc.uncosted.join(', '))}`:''}</span></div>`
-        : (dc.uncosted.length?`<div class="help">${ICON.info}<span>Price these in <b>Feed &amp; bedding costs</b> to auto-cost this ration: ${esc(dc.uncosted.join(', '))}</span></div>`:''); };
+    const updateCost=()=>{ collectMeals(); const cc=Calc.feedCost(f); const est=$('#fCostEst',body); if(!est)return;
+      est.innerHTML = cc.cost>0 ? `<div class="help">${ICON.money}<span>${cc.complete?'Feed cost':'Known feed cost'} <b>${money(cc.cost)}/day</b>${cc.note?` · <span style="color:var(--warn)">${esc(cc.note)}</span>`:''}</span></div>`
+        : (cc.uncostedCount?`<div class="help">${ICON.info}<span>Price these in <b>Feed &amp; bedding costs</b> to auto-cost this ration: ${esc(cc.uncosted.join(', '))}</span></div>`:''); };
     $$('[data-p],[data-a],[data-u]',body).forEach(inp=>inp.addEventListener('input',updateCost));
     updateCost();
   };
