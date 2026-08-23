@@ -1747,12 +1747,22 @@ function weighInAnomaly(animalId, weight, date, excludeId){
     if(adg< -0.6) return `That's higher than the next weigh-in on ${fmtShort(later.date)} (${later.weight} lb) — is the weight and date right?`; } }
   return null;
 }
+/* Coach-recommendations section for an animal (compose + review in context) */
+function recsSectionEl(a){
+  const box=el('div'); const recs=recsForAnimal(a.id); const pending=recs.filter(r=>r.status==='pending');
+  box.append(htmlToFrag(`<div class="section-title" style="display:flex;align-items:center">Coach recommendations${pending.length?` <span class="pill warn" style="font-size:10px;margin-left:6px">${pending.length} pending</span>`:''}${canRecommend()?`<button class="more" data-newrec style="margin-left:auto">+ New</button>`:''}</div>`));
+  if($('[data-newrec]',box)) $('[data-newrec]',box).onclick=()=>openRecSheet(a.id);
+  if(!recs.length){ box.append(htmlToFrag(`<div class="card pad" style="color:var(--muted);font-size:13px">No recommendations yet.${canRecommend()?' Suggest a ration, target, exercise or care change — the owner reviews it before anything changes.':''}</div>`)); }
+  else recs.slice(0,8).forEach(r=>box.append(renderRecCard(r,{showAnimal:false})));
+  return box;
+}
 /* ---------- PLAN (per-animal Game Plan) ---------- */
 function tabPlan(box,a){
   const wrap=el('div');
   if(!coachEligible(a)){
     wrap.innerHTML=`<div class="help">${ICON.target}<span>Set a target weight and show date to coach <b>${esc(a.name)}</b> to the ring — required daily gain, projected finish, and whether you're on pace, behind or getting heavy.</span></div>
       <button class="btn primary block" data-setplan style="margin-top:12px">${ICON.target} Set a Game Plan</button>`;
+    wrap.append(recsSectionEl(a));
     box.append(wrap);
     $('[data-setplan]',wrap).onclick=()=>openGamePlanSheet(a.id);
     return;
@@ -1779,6 +1789,7 @@ function tabPlan(box,a){
     ${advice.length?`<div class="section-title">Coach's read</div><div class="card pad" style="font-size:13.5px;line-height:1.6">${advice.map(t=>`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="color:${p.color};flex:none;width:16px;height:16px;margin-top:1px">${ICON.trend}</span><span>${esc(t)}</span></div>`).join('')}</div>`:''}
     ${upcoming?`<div class="section-title">Next checkpoint</div><div class="card pad"><div style="display:flex;justify-content:space-between;font-size:13.5px"><span style="color:var(--muted);font-weight:700">${fmtDate(upcoming.date)}</span><span style="font-weight:800" class="tnum">aim ${upcoming.ideal} lb</span></div></div>`:''}
     ${marks.length?`<div class="section-title">Pace checkpoints</div><div class="card pad">${marks.map(m=>{ const hit=m.actual!=null; const good=hit&&m.actual>=m.ideal-cs.tol; return `<div class="kv"><span class="k">${fmtShort(m.date)}${m.future?' <span style="color:var(--muted)">·upcoming</span>':''}</span><span class="v">aim ${m.ideal}${hit?` · <span style="color:${good?'var(--good)':'var(--bad)'}">${m.actual} lb</span>`:m.future?'':' · —'}</span></div>`; }).join('')}</div>`:''}`;
+  wrap.append(recsSectionEl(a));
   box.append(wrap);
   $('[data-edit]',wrap).onclick=()=>openGamePlanSheet(a.id);
   $('[data-weight]',wrap).onclick=()=>go('/animal/'+a.id+'/weight');
@@ -3857,6 +3868,91 @@ function exportBackup(){ download('dfst-backup-'+todayISO()+'.json',JSON.stringi
    TEAM
    =================================================================== */
 const ROLE_COLORS={Owner:'#4C1D95',Administrator:'#6D28D9',Editor:'#0D9488',Contributor:'#0891B2',Viewer:'#6B7280',Advisor:'#B45309'};
+/* ===================================================================
+   COACH RECOMMENDATIONS — recommend → owner reviews → accept / modify /
+   decline, with a full audit trail. An accepted rec is CONVERTED into the
+   appropriate ShowTeam record (target change, task, ration note, advisor
+   note). A recommendation never silently changes the owner's program.
+   =================================================================== */
+const REC_TYPES=[
+  ['ration','Adjust ration'],
+  ['target','Change target weight/date'],
+  ['exercise','Exercise change'],
+  ['weight','Request a weigh-in'],
+  ['photos','Request photos'],
+  ['care','Care instruction'],
+  ['note','General note'],
+];
+const recTypeLabel = t => (REC_TYPES.find(x=>x[0]===t)||[,'Recommendation'])[1];
+const canRecommend = () => can('comment') || can('edit');
+function openRecSheet(animalId, recId){
+  if(!canRecommend()){ toast('Your role can’t send recommendations','bad'); return; }
+  const a=getAnimal(animalId); if(!a) return;
+  const r = recId ? {...DB.recs.find(x=>x.id===recId)} : { animalId, type:'ration', text:'', urgent:false, payload:{} };
+  const body=el('div');
+  body.innerHTML=`
+    <div class="help">${ICON.info}<span>Send a recommendation for <b>${esc(a.name)}</b>. It goes to the owner to <b>accept, modify or decline</b> — it never changes the program on its own.</span></div>
+    <div class="field"><label>Type</label><select class="control" id="rcType">${REC_TYPES.map(([v,l])=>`<option value="${v}" ${r.type===v?'selected':''}>${l}</option>`).join('')}</select></div>
+    <div id="rcTarget" style="display:none"><div class="field-row"><div class="field" style="flex:1"><label>Target weight</label><input class="control" type="number" inputmode="decimal" id="rcTW" value="${(r.payload&&r.payload.targetWeight)||a.targetWeight||''}"></div><div class="field" style="flex:1"><label>Show date</label><input class="control" type="date" id="rcTD" value="${(r.payload&&r.payload.targetDate)||a.targetDate||''}"></div></div></div>
+    <div class="field"><label>Recommendation</label><textarea class="control" id="rcText" placeholder="e.g. Bump Game On to 3 oz AM and add a night feeding — he can carry more cover.">${esc(r.text||'')}</textarea></div>
+    <label class="li" style="border:1px solid var(--line);border-radius:12px;margin:0"><div class="main"><div class="t1" style="font-size:13.5px">Mark urgent</div><div class="t2">Flag it for the owner’s attention</div></div><input type="checkbox" id="rcUrgent" ${r.urgent?'checked':''} style="width:22px;height:22px"></label>`;
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">${recId?'Save':'Send recommendation'}</button>`;
+  const sh=openSheet({title:recId?'Edit recommendation':'Coach recommendation',body,foot});
+  const tgl=()=>{ $('#rcTarget',body).style.display = $('#rcType',body).value==='target'?'block':'none'; };
+  $('#rcType',body).onchange=tgl; tgl();
+  $('[data-save]',sh).onclick=()=>{ const type=$('#rcType',body).value; const text=$('#rcText',body).value.trim();
+    if(!text && type!=='target'){ toast('Add a note','bad'); return; }
+    const payload = type==='target' ? { targetWeight:$('#rcTW',body).value||null, targetDate:$('#rcTD',body).value||null } : {};
+    if(recId){ const R=DB.recs.find(x=>x.id===recId); Object.assign(R,{type,text,urgent:$('#rcUrgent',body).checked,payload}); touch(R); }
+    else { DB.recs.push(stamp({id:uid('rec'),animalId,advisorId:DB.currentUserId,date:todayISO(),type,text,urgent:$('#rcUrgent',body).checked,payload,status:'pending'})); logAct('advisor',`Recommended (${recTypeLabel(type)}) for ${a.name}`,animalId); }
+    save(); closeSheet(); toast('Recommendation sent','good'); render();
+  };
+}
+// Convert an accepted recommendation into the right ShowTeam record.
+function applyRec(r, finalText){
+  const a=getAnimal(r.animalId); if(!a) return '';
+  const txt=(finalText!=null?finalText:r.text)||'';
+  if(r.type==='target'){ const p=r.payload||{}; if(p.targetWeight)a.targetWeight=+p.targetWeight; if(p.targetDate)a.targetDate=p.targetDate; touch(a);
+    return `Applied target ${a.targetWeight||'—'} lb${a.targetDate?' by '+fmtShort(a.targetDate):''}`; }
+  if(r.type==='weight'){ DB.tasks.push(stamp({id:uid('t'),done:false,doneDates:[],title:`Weigh ${a.name} — coach requested`,date:todayISO(),priority:'High',animalIds:[a.id],recur:''})); return 'Created a weigh-in task'; }
+  if(r.type==='photos'){ DB.tasks.push(stamp({id:uid('t'),done:false,doneDates:[],title:`Photos of ${a.name} — coach requested`,date:todayISO(),priority:'Normal',animalIds:[a.id],recur:''})); return 'Created a photo task'; }
+  if(r.type==='ration'){ const cf=currentFeed(a.id); if(cf){ cf.advisorRec=txt; touch(cf); } DB.notes.push(stamp({id:uid('n'),animalId:a.id,type:'Advisor feedback',date:todayISO(),by:r.advisorId,text:txt,pinned:false})); return 'Noted on the current ration'; }
+  DB.notes.push(stamp({id:uid('n'),animalId:a.id,type:'Advisor feedback',date:todayISO(),by:r.advisorId,text:txt,pinned:false})); return 'Saved as an advisor note';
+}
+function reviewRec(r, decision, finalText){
+  if(!can('edit')){ toast('Only the owner’s team can review','bad'); return; }
+  const a=getAnimal(r.animalId);
+  r.reviewedBy=DB.currentUserId; r.reviewedAt=nowISO(); r.decision=decision;
+  if(decision==='declined'){ r.status='declined'; logAct('advisor',`Declined rec for ${a?a.name:''}`,r.animalId); toast('Recommendation declined',''); }
+  else { r.status='accepted'; if(finalText!=null)r.resultText=finalText; r.applied=applyRec(r, finalText);
+    logAct('advisor',`${decision==='modified'?'Modified & accepted':'Accepted'} rec for ${a?a.name:''} — ${r.applied}`,r.animalId); toast('Recommendation applied','good'); }
+  touch(r); save(); render();
+}
+function openRecModify(r){ const body=el('div');
+  body.innerHTML=`<div class="help">${ICON.info}<span>Adjust the recommendation before you accept it — your edited version is what gets applied and recorded.</span></div>
+    <div class="field"><label>Recommendation</label><textarea class="control" id="rmText" style="min-height:120px">${esc(r.text||'')}</textarea></div>`;
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">${ICON.check} Accept modified</button>`;
+  const sh=openSheet({title:'Modify & accept',body,foot});
+  $('[data-save]',sh).onclick=()=>{ const t=$('#rmText',body).value.trim(); if(!t){toast('Add text','bad');return;} closeSheet(); reviewRec(r,'modified',t); };
+}
+function recStatusPill(r){ if(r.status==='pending') return '<span class="pill warn" style="font-size:10px">Pending</span>';
+  if(r.status==='accepted') return `<span class="pill good" style="font-size:10px">${r.decision==='modified'?'Modified':'Accepted'}</span>`;
+  return '<span class="pill gray" style="font-size:10px">Declined</span>'; }
+function renderRecCard(r, opts){ opts=opts||{}; const a=getAnimal(r.animalId); const card=el('div','card pad'); card.style.marginBottom='10px';
+  const canReview = r.status==='pending' && can('edit');
+  card.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
+      <span class="pill p" style="font-size:10px">${esc(userName(r.advisorId))} · ${esc(recTypeLabel(r.type))}</span>
+      <span style="display:flex;gap:6px;align-items:center">${r.urgent&&r.status==='pending'?'<span class="pill bad" style="font-size:10px">Urgent</span>':''}${recStatusPill(r)}</span></div>
+    ${opts.showAnimal!==false&&a?`<div style="font-weight:800;font-size:13px;margin-bottom:2px">${esc(a.name)}</div>`:''}
+    ${r.type==='target'&&r.payload?`<div style="font-size:12.5px;color:var(--muted);margin-bottom:3px">Suggested target ${r.payload.targetWeight||'—'} lb${r.payload.targetDate?' by '+fmtShort(r.payload.targetDate):''}</div>`:''}
+    <div style="font-size:14px;line-height:1.5">${esc(r.resultText||r.text||'')}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">Sent ${fmtShort((r.date||r.createdAt||'').slice(0,10))}${r.reviewedAt?` · ${r.decision==='declined'?'declined':(r.decision==='modified'?'modified & accepted':'accepted')} ${fmtShort(r.reviewedAt.slice(0,10))} by ${esc(userName(r.reviewedBy))}`:''}${r.applied?` · ${esc(r.applied)}`:''}</div>`;
+  if(canReview){ const bar=el('div','btn-row'); bar.style.marginTop='10px'; bar.innerHTML=`<button class="btn sm teal" data-acc>${ICON.check} Accept</button><button class="btn sm" data-mod>Modify</button><button class="btn sm ghost" data-dec>Decline</button>`;
+    $('[data-acc]',bar).onclick=()=>reviewRec(r,'accepted'); $('[data-mod]',bar).onclick=()=>openRecModify(r); $('[data-dec]',bar).onclick=()=>reviewRec(r,'declined'); card.append(bar); }
+  return card;
+}
+function recsForAnimal(id){ return DB.recs.filter(r=>r.animalId===id).sort((a,b)=>((b.date||'')+(b.createdAt||''))<((a.date||'')+(a.createdAt||''))?-1:1); }
 route('team',()=>{
   const v=setView('','team'); const wrap=el('div');
   wrap.innerHTML=`${pageHeader('Team',null,can('invite')?`<button class="btn primary sm" id="inv">${ICON.plus} Invite</button>`:'')}
@@ -3875,15 +3971,10 @@ route('team',()=>{
       <span class="badge-role" style="background:${ROLE_COLORS[u.role]}22;color:${ROLE_COLORS[u.role]}">${esc(u.role)}</span>`;
     if(can('manageTeam'))li.onclick=()=>openMemberSheet(u.id); L.append(li); });
   $('#members',wrap).append(L);
-  const rc=$('#recs',wrap); const recs=DB.recs.slice().sort((a,b)=>a.date<b.date?1:-1);
-  if(!recs.length)rc.innerHTML='<div class="empty" style="padding:14px">No advisor recommendations yet.</div>';
-  else recs.forEach(r=>{ const a=getAnimal(r.animalId); const card=el('div','card pad'); card.style.marginBottom='10px';
-    card.innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="pill p" style="font-size:10px">${esc(userName(r.advisorId))} · ${esc(r.type||'Rec')}</span>${r.urgent?'<span class="pill bad" style="font-size:10px">Urgent</span>':`<span class="pill ${r.status==='accepted'?'good':r.status==='declined'?'gray':'warn'}" style="font-size:10px">${esc(r.status)}</span>`}</div>
-      <div style="font-weight:700;font-size:13px;margin-bottom:2px">${esc(a?a.name:'')}</div><div style="font-size:14px;line-height:1.5">${esc(r.text)}</div>`;
-    if(r.status==='pending'&&can('edit')){ const bar=el('div','btn-row'); bar.style.marginTop='10px'; bar.innerHTML=`<button class="btn sm teal" data-acc>${ICON.check} Accept</button><button class="btn sm ghost" data-dec>Decline</button>`;
-      $('[data-acc]',bar).onclick=()=>{r.status='accepted';logAct('advisor','Accepted rec for '+(a?a.name:''),r.animalId);save();toast('Recommendation accepted','good');render();};
-      $('[data-dec]',bar).onclick=()=>{r.status='declined';save();render();}; card.append(bar); }
-    rc.append(card); });
+  const rc=$('#recs',wrap);
+  const recs=DB.recs.slice().sort((a,b)=>{ const ap=a.status==='pending'?0:1, bp=b.status==='pending'?0:1; if(ap!==bp)return ap-bp; return (a.date||'')<(b.date||'')?1:-1; });
+  if(!recs.length)rc.innerHTML='<div class="empty" style="padding:14px">No coach recommendations yet.</div>';
+  else recs.forEach(r=>rc.append(renderRecCard(r)));
 });
 function openInvite(){ const body=el('div');
   body.innerHTML=`<div class="field"><label>Email</label><input class="control" id="ivEmail" type="email" placeholder="name@example.com"></div>
