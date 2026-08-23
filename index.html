@@ -216,6 +216,40 @@ textarea.control{min-height:88px;resize:vertical}
 .subtabbar::-webkit-scrollbar{display:none}
 .subtab{padding:6px 12px;border-radius:999px;font-weight:700;font-size:12.5px;color:var(--muted);white-space:nowrap;background:transparent;border:1px solid var(--line)}
 .subtab.active{background:var(--line-2);color:var(--purple-3);border-color:var(--purple-3)}
+/* ---- Barn Mode ---- */
+.barn-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.barn-filters{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -14px 14px;padding:0 14px 2px}
+.barn-filters::-webkit-scrollbar{display:none}
+.barn-chip{padding:9px 15px;border-radius:999px;font-weight:800;font-size:14px;white-space:nowrap;background:var(--line-2);color:var(--ink);border:1px solid var(--line)}
+.barn-chip.active{background:var(--purple);color:#fff;border-color:var(--purple)}
+.barn-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+.barn-card-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px}
+.barn-card-h .bn{font-size:23px;font-weight:900;letter-spacing:-.3px}
+.barn-card-h .bw{font-size:15px;font-weight:800;color:var(--muted);text-align:right;line-height:1.35}
+.barn-meal{margin-top:10px}
+.barn-meal .bmh{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.barn-meal .bmi{list-style:none;margin:5px 0 8px;padding:0}
+.barn-meal .bmi li{font-size:16.5px;font-weight:600;padding:2px 0;line-height:1.35}
+.barn-fed{width:100%;padding:14px;border-radius:12px;font-size:16px;font-weight:800;background:var(--line-2);color:var(--ink);border:2px solid var(--line)}
+.barn-fed.on{background:rgba(16,185,129,.16);color:var(--good);border-color:var(--good)}
+.barn-tasks{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.barn-tasks .bth{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px}
+.barn-task{display:block;width:100%;text-align:left;padding:14px;border-radius:12px;font-size:16.5px;font-weight:700;background:var(--line-2);color:var(--ink);border:1px solid var(--line);margin-bottom:8px}
+.barn-task.done{color:var(--muted);text-decoration:line-through;opacity:.7}
+.barn-task .due{float:right;color:var(--warn);font-weight:800;font-size:13px;text-decoration:none}
+.barn-empty{color:var(--muted);font-size:14px;padding:6px 0}
+.barn-wrap.daylight{background:#fff;color:#0a0a0a;margin:-14px;padding:16px;min-height:100vh}
+.barn-wrap.daylight .barn-card{background:#fff;border-color:#c4c4c4}
+.barn-wrap.daylight .barn-card-h .bn{color:#000}
+.barn-wrap.daylight .barn-card-h .bw,.barn-wrap.daylight .barn-meal .bmh,.barn-wrap.daylight .barn-tasks .bth,.barn-wrap.daylight #barnSub{color:#333!important}
+.barn-wrap.daylight .barn-meal .bmi li{color:#000}
+.barn-wrap.daylight .barn-fed{background:#ededed;color:#000;border-color:#7a7a7a}
+.barn-wrap.daylight .barn-fed.on{background:#0a7d38;color:#fff;border-color:#0a7d38}
+.barn-wrap.daylight .barn-tasks{border-color:#d0d0d0}
+.barn-wrap.daylight .barn-task{background:#f1f1f1;color:#000;border-color:#9a9a9a}
+.barn-wrap.daylight .barn-chip{background:#ededed;color:#000;border-color:#8a8a8a}
+.barn-wrap.daylight .barn-chip.active{background:#111;color:#fff;border-color:#111}
+.barn-wrap.daylight .iconbtn{background:#ededed!important;color:#000!important}
 
 .kv{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-2);font-size:14px}
 .kv:last-child{border-bottom:none}

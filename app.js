@@ -273,10 +273,10 @@ function blankDB(){
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
     layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
-    meds:[], medLog:[], alertAcks:{},
+    meds:[], medLog:[], alertAcks:{}, fedLog:{},
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
     // Configurable plan-status thresholds (lb). Drives On-Plan classification.
-    settings:{ plan:{ tolLb:8, criticalLb:20, aheadPaceLb:8 } },
+    settings:{ plan:{ tolLb:8, criticalLb:20, aheadPaceLb:8 }, barnDaylight:false },
   };
 }
 function seedBreeds(db){ let order=0; for(const sp of Object.keys(BREEDS)) for(const nm of BREEDS[sp]) db.breeds.push({id:uid('br'),speciesId:sp,name:nm,system:true,active:true,order:order++}); }
@@ -422,6 +422,13 @@ function isAcked(a,type){ const ack=alertAck(a.id,type); return !!(ack && ack.si
 function setAlertAck(a,type,note){ DB.alertAcks=DB.alertAcks||{}; const k=ackKey(a.id,type); if(note==null){ delete DB.alertAcks[k]; } else { DB.alertAcks[k]={note, sig:alertSig(a,type), by:DB.currentUserId, at:nowISO()}; } }
 const activeWeightAlerts = a => weightAlerts(a).filter(al=>!al.acked);
 function currentFeed(id){ return feedFor(id).find(f=>!f.endDate) || feedFor(id)[0] || null; }
+/* Per-animal, per-day, per-meal "fed" marks (Barn Mode). Kept in DB.fedLog
+   keyed animalId|date|mealTime so it syncs like any other record. */
+const fedKey = (animalId,date,time) => animalId+'|'+date+'|'+(time||'AM');
+const isFed = (animalId,date,time) => !!(DB.fedLog && DB.fedLog[fedKey(animalId,date,time)]);
+function setFed(animalId,date,time,val){ DB.fedLog=DB.fedLog||{}; const k=fedKey(animalId,date,time);
+  if(val){ DB.fedLog[k]={by:DB.currentUserId,at:nowISO()}; logAct('feed',(time||'')+' feed given',animalId); } else delete DB.fedLog[k];
+  save(); }
 function feedProgramStats(f){
   const ws=weightsFor(f.animalId);
   const inRange = d => d>=f.startDate && (!f.endDate || d<=f.endDate);
@@ -1222,6 +1229,8 @@ route('dashboard', ()=>{
       ${!withPlan.length?`<div class="help" style="margin-top:10px">${ICON.target}<span>Set a target weight + show date on your animals to see who's on plan. <button onclick="go('/coach')" style="background:none;border:none;padding:0;color:var(--purple-3);font-weight:700;cursor:pointer;text-decoration:underline">Start a Game Plan</button></span></div>`:''}`;
     return c;
   })());
+  // BARN MODE entry — big-touch chore screen
+  wrap.append(htmlToFrag(`<button class="btn block" onclick="go('/barn')" style="margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;padding:14px"><span style="width:20px;height:20px">${ICON.layover}</span> Barn Mode — do chores</button>`));
   // MOMENTUM TILES (animated)
   wrap.append(htmlToFrag(`<div class="grid g4" style="margin-top:12px">
     <button class="stat" style="text-align:left" onclick="go('/animals')"><div class="k">Active</div><div class="v tnum" data-count="${active.length}">0</div><div class="sub">animals</div></button>
@@ -2875,6 +2884,92 @@ function openRapidWeigh(){
   };
   draw();
 }
+/* ===================================================================
+   BARN MODE — big-touch chore screen. Feed + today's tasks per animal,
+   completable in place, with barn filters and an outdoor "daylight" mode.
+   =================================================================== */
+function animalTasksToday(a){ const today=todayISO(); const out=[];
+  (DB.tasks||[]).forEach(t=>{ if(!taskLiveIds(t).includes(a.id)) return;
+    if(!taskOccurrences(t,today,today).length) return;
+    out.push({t, done:taskProgress(t,today).includes(a.id)}); });
+  return out; }
+function weightDueFor(a){ const ws=weightsFor(a.id); return !ws.length || daysBetween(ws[ws.length-1].date,todayISO())>=7; }
+function animalHasRemaining(a){ const today=todayISO();
+  const cf=currentFeed(a.id); const meals=(cf&&cf.meals||[]).filter(m=>(m.items||[]).some(it=>it.product||it.amount));
+  if(meals.some(m=>!isFed(a.id,today,m.time))) return true;
+  if(animalTasksToday(a).some(x=>!x.done)) return true;
+  if(weightDueFor(a)) return true;
+  return false; }
+route('barn',()=>{
+  const v=setView('','dashboard'); const wrap=el('div','barn-wrap');
+  if(DB.settings&&DB.settings.barnDaylight) wrap.classList.add('daylight');
+  const state={ mode:'all', val:null, remaining:false };
+  wrap.innerHTML=`
+    <div class="barn-head">
+      <button class="iconbtn" style="background:var(--line-2);color:var(--ink)" data-close>${ICON.back}</button>
+      <div style="flex:1"><div style="font-size:20px;font-weight:900;letter-spacing:-.3px">Barn Mode</div><div style="font-size:12.5px;color:var(--muted)" id="barnSub"></div></div>
+      <button class="barn-chip" data-daylight>${DB.settings&&DB.settings.barnDaylight?'☀ Daylight':'🌙 Dark'}</button>
+    </div>
+    <div class="barn-filters" id="bFilters"></div>
+    <div id="barnList"></div>`;
+  v.append(wrap);
+  $('[data-close]',wrap).onclick=()=>go('/dashboard');
+  $('[data-daylight]',wrap).onclick=()=>{ DB.settings=DB.settings||{}; DB.settings.barnDaylight=!DB.settings.barnDaylight; save(true);
+    wrap.classList.toggle('daylight'); $('[data-daylight]',wrap).textContent=DB.settings.barnDaylight?'☀ Daylight':'🌙 Dark'; };
+
+  // filter chips adapt to the data present
+  const species=[...new Set(activeAnimals().map(a=>a.species))].map(id=>({id, name:speciesName(id)}));
+  const helpers=(DB.helpers||[]).filter(h=>activeAnimals().some(a=>(a.helperIds||[]).includes(h.id)));
+  const pens=[...new Set(activeAnimals().map(a=>a.penLocation).filter(Boolean))];
+  const chip=(label,active,on)=>{ const b=el('button','barn-chip'+(active?' active':''),esc(label)); b.onclick=on; return b; };
+  const fbox=$('#bFilters',wrap);
+  const rebuildFilters=()=>{ fbox.innerHTML='';
+    fbox.append(chip('All', state.mode==='all', ()=>{ state.mode='all'; state.val=null; refresh(); }));
+    species.forEach(s=>fbox.append(chip(s.name, state.mode==='species'&&state.val===s.id, ()=>{ state.mode='species'; state.val=s.id; refresh(); })));
+    helpers.forEach(h=>fbox.append(chip(h.name.split(' ')[0], state.mode==='helper'&&state.val===h.id, ()=>{ state.mode='helper'; state.val=h.id; refresh(); })));
+    pens.forEach(p=>fbox.append(chip(p, state.mode==='pen'&&state.val===p, ()=>{ state.mode='pen'; state.val=p; refresh(); })));
+    fbox.append(chip('Only remaining', state.remaining, ()=>{ state.remaining=!state.remaining; refresh(); }));
+  };
+
+  const barnCard=(a)=>{ const today=todayISO();
+    const st=animalStats(a); const p=Calc.planStatus(a); const cf=currentFeed(a.id);
+    const meals=(cf&&cf.meals||[]).filter(m=>(m.items||[]).some(it=>it.product||it.amount));
+    const tasks=animalTasksToday(a); const wDue=weightDueFor(a);
+    const card=el('div','barn-card');
+    const mealHTML=meals.length?meals.map(m=>{ const on=isFed(a.id,today,m.time);
+      return `<div class="barn-meal"><div class="bmh">${esc(m.time)} feed</div><ul class="bmi">${(m.items||[]).filter(it=>it.product||it.amount).map(it=>`<li>${it.amount!==''&&it.amount!=null?esc(fracStr(it.amount))+' ':''}${it.unit&&it.unit!=='unit'?esc(it.unit)+' ':''}${esc(it.product||'')}</li>`).join('')}</ul><button class="barn-fed ${on?'on':''}" data-fed="${esc(m.time)}">${on?'✓ Fed':'Mark fed'}</button></div>`;
+    }).join(''):'<div class="barn-empty">No current ration set</div>';
+    card.innerHTML=`
+      <div class="barn-card-h"><div class="bn">${esc(a.name)}</div>
+        <div class="bw">${st.curW!=null?st.curW+' lb':'—'}${p.state!=='no_plan'&&p.state!=='insufficient'?`<br><span style="color:${p.color}">${esc(p.label)}</span>`:''}</div></div>
+      ${mealHTML}
+      ${(tasks.length||wDue)?`<div class="barn-tasks"><div class="bth">Today</div>
+        ${wDue?`<button class="barn-task" data-wt>⚖️ Log weight<span class="due">due</span></button>`:''}
+        ${tasks.map(({t,done})=>`<button class="barn-task ${done?'done':''}" data-task="${t.id}">${done?'✓ ':''}${esc(t.title)}</button>`).join('')}
+      </div>`:''}`;
+    $$('[data-fed]',card).forEach(btn=>btn.onclick=()=>{ const time=btn.dataset.fed; setFed(a.id,today,time,!isFed(a.id,today,time)); refresh(); });
+    if($('[data-wt]',card)) $('[data-wt]',card).onclick=()=>openWeightSheet(a.id);
+    $$('[data-task]',card).forEach(btn=>btn.onclick=()=>{ const t=(DB.tasks||[]).find(x=>x.id===btn.dataset.task); if(!t)return;
+      const done=taskProgress(t,today).includes(a.id); setTaskAnimalDone(t,today,a.id,!done); save(); refresh(); });
+    return card;
+  };
+
+  const refresh=()=>{
+    rebuildFilters();
+    let list=activeAnimals();
+    if(state.mode==='species') list=list.filter(a=>a.species===state.val);
+    else if(state.mode==='helper') list=list.filter(a=>(a.helperIds||[]).includes(state.val));
+    else if(state.mode==='pen') list=list.filter(a=>a.penLocation===state.val);
+    if(state.remaining) list=list.filter(animalHasRemaining);
+    list.sort((a,b)=>a.name.localeCompare(b.name));
+    const remain=activeAnimals().filter(animalHasRemaining).length;
+    $('#barnSub',wrap).textContent=`${remain} animal${remain===1?'':'s'} still need something today`;
+    const box=$('#barnList',wrap); box.innerHTML='';
+    if(!list.length){ box.innerHTML=emptyState(ICON.check,'All caught up','Nothing left for this filter — nice work.'); return; }
+    list.forEach(a=>box.append(barnCard(a)));
+  };
+  refresh();
+});
 
 /* ===================================================================
    GLOBAL SEARCH
