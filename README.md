@@ -88,8 +88,13 @@ Once connected you get:
   URLs; still cached on-device for offline viewing.
 - **Team permissions** — enforced by **Row-Level Security** so you can only
   read/write teams you belong to.
-- **Offline-friendly** — each device keeps a local cache and syncs when back
-  online.
+- **Offline-first & conflict-safe** — every device keeps a full local copy, so
+  weigh-ins, feed, tasks and everything else work with no signal in the barn. A
+  header **sync dot** shows On this device / Offline (saved, will sync) /
+  Syncing / Synced. When you come back online, changes are reconciled with a
+  **record-level merge** (`merge.js`, unit-tested) instead of a blind overwrite:
+  two people's offline weigh-ins both survive, a record edited on both sides
+  keeps the newer version, and nothing is silently clobbered.
 
 ### How it's architected
 
@@ -105,7 +110,8 @@ upgraded later (e.g. to per-record tables) without touching any screen. See the
 - `index.html` — app shell + styles
 - `app.js` — the entire application (data layer, `Cloud` sync module, router, views)
 - `calc.js` — **the single authoritative calculation core** (`STCalc`): ADG variants (last-weigh / rolling / lifetime / feed-program), required ADG, projected weight, human target-date states, cost-completeness, and plan status. Pure (no DOM/DB) so it's unit-tested in isolation; app.js's `Calc` wrappers feed it data from `DB`.
-- `tests/calc.test.mjs` — dependency-free unit tests for the calc core (same-day / missing / edited / backdated / deleted weights, feed-program boundaries, timezone edges, future & past targets). Run with `npm test`.
+- `merge.js` — **conflict-safe team-document merge** (`STMerge`) used by cloud sync: reconciles two copies of the team JSON at the record level so offline edits from multiple people union instead of overwriting. Pure and unit-tested.
+- `tests/calc.test.mjs`, `tests/merge.test.mjs` — dependency-free unit tests for the calc core and the sync merge (same-day / missing / edited / backdated / deleted weights, feed-program boundaries, timezone edges, future & past targets; and offline-merge conflict cases). Run with `npm test`.
 - `config.js` — Supabase keys (empty = local-only; fill in to enable cloud)
 - `vendor/supabase.js` — vendored Supabase JS client (offline-capable)
 - `vendor/qr.js` — vendored QR-code generator (MIT, Kazuhiko Arase; zero deps, offline) used for printable pen cards

@@ -322,6 +322,10 @@ hr.soft{border:none;border-top:1px solid var(--line-2);margin:14px 0}
 .orline{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:11px;font-weight:700;margin:4px 0 14px}
 .orline:before,.orline:after{content:"";flex:1;height:1px;background:var(--line)}
 .badge-role{font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.4px}
+.sync-dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--muted)}
+.sync-dot.pulse{animation:syncpulse 1s ease-in-out infinite}
+@keyframes syncpulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.sync-dot.pulse{animation:none}}
 
 @media print{
   .app-header,.bottomnav,.tabbar,.no-print{display:none!important}
@@ -482,7 +486,7 @@ body.app-booted #marketing{display:none!important}
   function boot(){
     document.body.classList.add('app-booted');
     var mk=document.getElementById('marketing'); if(mk) mk.parentNode.removeChild(mk);
-    ['config.js','vendor/supabase.js','vendor/qr.js','calc.js','app.js'].forEach(function(src){
+    ['config.js','vendor/supabase.js','vendor/qr.js','calc.js','merge.js','app.js'].forEach(function(src){
       var s=document.createElement('script'); s.src=src; s.async=false; document.body.appendChild(s);
     });
   }
