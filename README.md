@@ -65,6 +65,13 @@ surfaces. High-contrast for bright outdoor barn use, large touch targets,
 bottom navigation with a quick-add button, confirmation toasts, and helpful
 empty states.
 
+**Accessibility & performance:** every icon-only control has an accessible name;
+decorative icons are hidden from screen readers; sheets are real dialogs
+(`role="dialog"`, `aria-modal`, labelled, **Escape to close**, focus moved in);
+toasts announce via an `aria-live` region; keyboard users get a visible focus
+outline. Progress images lazy-load and decode async, and videos don't preload —
+so galleries stay light on a phone in the barn.
+
 ## Shared multi-user cloud sync (Supabase)
 
 The app runs **local-first** out of the box (data on-device). To let multiple
