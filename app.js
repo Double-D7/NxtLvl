@@ -4736,12 +4736,62 @@ function recordStats(animalId){
   const points=res.reduce((s,e)=>s+(+e.result.points||0),0);
   return {count:res.length, shows:shows.size, banners:banners.length, wins:wins.length, premium, sale, points, res, bannerList:banners};
 }
+/* Record Book Readiness — how complete an animal's project record is, scored
+   from records that already exist plus optional youth-project fields. */
+function recordReadiness(a){ const id=a.id; const proj=a.project||{};
+  const hasExpense = pat => (DB.expenses||[]).some(e=>e.animalId===id && (!pat||new RegExp(pat,'i').test(e.category||'')));
+  const items=[
+    {k:'id', label:'Animal identification', done:!!(a.name&&(a.earTag||a.earNotch||a.registration||a.scrapieTag||a.tattoo||a.brand||a.rfid)), fix:()=>openAnimalForm(id)},
+    {k:'acq', label:'Acquisition date', done:!!a.acquiredDate, fix:()=>openAnimalForm(id)},
+    {k:'price', label:'Purchase price', done:hasExpense('purchase|buy|acquis')||a.purchasePrice!=null, fix:()=>openExpenseSheet(id)},
+    {k:'weights', label:'Weigh-ins (2+)', done:weightsFor(id).length>=2, fix:()=>go('/animal/'+id+'/weight')},
+    {k:'feed', label:'Feed program', done:!!currentFeed(id), fix:()=>go('/animal/'+id+'/feed')},
+    {k:'expenses', label:'Expenses logged', done:hasExpense(), fix:()=>openExpenseSheet(id)},
+    {k:'income', label:'Income / sale', done:(DB.income||[]).some(x=>x.animalId===id)||(DB.entries||[]).some(e=>e.animalId===id&&e.result&&e.result.salePrice), fix:()=>go('/animal/'+id+'/expenses')},
+    {k:'health', label:'Health record', done:(DB.health||[]).some(h=>h.animalId===id), fix:()=>go('/animal/'+id+'/health')},
+    {k:'photos', label:'Photos (3+)', done:mediaFor(id).length>=3, fix:()=>go('/animal/'+id+'/media')},
+    {k:'result', label:'Show result', done:(DB.entries||[]).some(e=>e.animalId===id&&e.result&&e.result.placing), fix:()=>go('/animal/'+id+'/shows')},
+    {k:'goals', label:'Project goals', done:!!(proj.goals&&proj.goals.trim()), fix:()=>openProjectSheet(id)},
+    {k:'hours', label:'Project hours', done:+proj.hours>0, fix:()=>openProjectSheet(id)},
+    {k:'journal', label:'Journal / skills learned', done:!!((proj.journal&&proj.journal.trim())||(proj.skills&&proj.skills.trim())), fix:()=>openProjectSheet(id)},
+    {k:'reflection', label:'Final reflection', done:!!(proj.reflection&&proj.reflection.trim()), fix:()=>openProjectSheet(id)},
+  ];
+  const done=items.filter(i=>i.done).length, total=items.length;
+  return {items, done, total, pct:Math.round(done/total*100), missing:items.filter(i=>!i.done)};
+}
+function openProjectSheet(id){ const a=getAnimal(id); if(!a) return; a.project=a.project||{}; const p=a.project;
+  const body=el('div');
+  body.innerHTML=`
+    <div class="help">${ICON.info}<span>Youth-project details for <b>${esc(a.name)}</b>'s record book — goals, hours, what you learned, and your end-of-project reflection. All optional, all count toward readiness.</span></div>
+    <div class="field"><label>Project goals</label><textarea class="control" id="prGoals" placeholder="What are you trying to accomplish this project?">${esc(p.goals||'')}</textarea></div>
+    <div class="field"><label>Project hours</label><input class="control" type="number" inputmode="decimal" id="prHours" value="${p.hours??''}" placeholder="Total hours worked"></div>
+    <div class="field"><label>Learning journal</label><textarea class="control" id="prJournal" placeholder="Notes on what happened and what you tried">${esc(p.journal||'')}</textarea></div>
+    <div class="field"><label>Skills learned</label><textarea class="control" id="prSkills" placeholder="Clipping, feeding, showmanship, record-keeping…">${esc(p.skills||'')}</textarea></div>
+    <div class="field"><label>Community / service</label><textarea class="control" id="prService" placeholder="Fair volunteering, mentoring, etc. (if applicable)">${esc(p.service||'')}</textarea></div>
+    <div class="field"><label>Final reflection</label><textarea class="control" id="prReflect" placeholder="What worked, what you'd change, what you're proud of">${esc(p.reflection||'')}</textarea></div>`;
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">Save</button>`;
+  const sh=openSheet({title:'Project details',body,foot});
+  $('[data-save]',sh).onclick=()=>{ Object.assign(a.project,{goals:$('#prGoals',body).value.trim(),hours:$('#prHours',body).value===''?null:+$('#prHours',body).value,journal:$('#prJournal',body).value.trim(),skills:$('#prSkills',body).value.trim(),service:$('#prService',body).value.trim(),reflection:$('#prReflect',body).value.trim()}); touch(a); save(); closeSheet(); toast('Saved','good'); render(); };
+}
+function readinessCardEl(a){ const r=recordReadiness(a); const box=el('div','card pad'); box.style.marginBottom='12px';
+  const col = r.pct>=90?'var(--good)':r.pct>=60?'var(--warn)':'var(--bad)';
+  box.innerHTML=`<div style="display:flex;align-items:center;gap:14px">
+      <div style="flex:none">${ringSVG(r.pct,col,r.pct+'%','ready')}</div>
+      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">Record book · ${r.done}/${r.total} complete</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${r.missing.length?'Still needs: '+esc(r.missing.slice(0,3).map(m=>m.label.toLowerCase()).join(', '))+(r.missing.length>3?` +${r.missing.length-3} more`:''):'All in — ready to submit 🎉'}</div></div></div>
+    ${r.missing.length?`<div class="list" style="margin-top:10px">${r.missing.map((m,i)=>`<button class="li" data-miss="${i}" style="width:100%;text-align:left"><div class="dot" style="background:${col}"></div><div class="main"><div class="t1" style="font-size:13.5px">${esc(m.label)}</div></div>${ICON.chev}</button>`).join('')}</div>`:''}
+    <button class="btn block" data-proj style="margin-top:10px">${ICON.edit} Project details (goals, hours, reflection)</button>`;
+  $$('[data-miss]',box).forEach(btn=>btn.onclick=()=>{ const m=r.missing[+btn.dataset.miss]; if(m&&m.fix)m.fix(); });
+  $('[data-proj]',box).onclick=()=>openProjectSheet(a.id);
+  return box;
+}
 route('records',(parts,q)=>{
   const animalId=q&&q.get('animal'); const a=animalId?getAnimal(animalId):null;
   const v=setView('','more'); const wrap=el('div'); v.append(wrap);
   const st=recordStats(animalId);
   const animals=activeAnimalsWithResults();
   wrap.innerHTML=`${pageHeader(a?a.name+' — Record book':'Record Book', a?'/records':null, `<button class="btn sm" id="rbPrint">${ICON.download} Print</button>`)}
+    <div id="rbReadiness"></div>
     ${!a&&animals.length?`<div class="chips" style="flex-wrap:wrap;white-space:normal;margin-bottom:12px"><button class="chip active" data-af="">All animals</button>${animals.map(x=>`<button class="chip" data-af="${x.id}">${esc(x.name)}</button>`).join('')}</div>`:''}
     ${st.count?`<div class="grid g4">
       <div class="stat"><div class="k">Wins</div><div class="v tnum">${st.wins}</div><div class="sub">class firsts</div></div>
@@ -4765,6 +4815,18 @@ route('records',(parts,q)=>{
       const card=el('div','card pad'); card.innerHTML=byShow[sid].map(e=>{ const an=getAnimal(e.animalId); const r=e.result;
         return `<div class="kv"><span class="k">${esc(an?an.name:'')}${e.cls?' · '+esc(e.cls):e.division?' · '+esc(e.division):''}</span><span class="v">${isBanner(r)?ICON.rosette.replace('width="24" height="24"','width="14" height="14"'):''} ${esc(r.placing)}${r.inClass?'/'+r.inClass:''}${r.divisionPlacing?' · '+esc(r.divisionPlacing):''}</span></div>`;
       }).join(''); rc.append(card); });
+  }
+  // Record-book readiness: a full card for one animal, or a "who needs work" list
+  const rbr=$('#rbReadiness',wrap);
+  if(a){ rbr.append(readinessCardEl(a)); }
+  else { const list=activeAnimals().filter(isVisibleAnimal).map(x=>({x, r:recordReadiness(x)})).sort((p,q)=>p.r.pct-q.r.pct);
+    if(list.length){ rbr.append(htmlToFrag(`<div class="section-title" style="margin-top:0">Record book readiness</div>`));
+      const L=el('div','list'); list.forEach(({x,r})=>{ const col=r.pct>=90?'var(--good)':r.pct>=60?'var(--warn)':'var(--bad)'; const li=el('div','li'); li.style.cursor='pointer';
+        li.innerHTML=`<div class="thumb" data-th style="flex:none">${esc(initials(x.name))}</div><div class="main"><div class="t1">${esc(x.name)}</div><div class="t2">${r.missing.length?r.missing.length+' item'+(r.missing.length===1?'':'s')+' to go':'Complete 🎉'}</div>
+          <div style="height:6px;background:var(--line-2);border-radius:4px;overflow:hidden;margin-top:6px"><div style="height:100%;width:${r.pct}%;background:${col};border-radius:4px"></div></div></div>
+          <div class="r"><b class="tnum" style="color:${col}">${r.pct}%</b></div>`;
+        if(x.profileMediaId) Media.url(x.profileMediaId).then(u=>{ const t=$('[data-th]',li); if(u&&t){ t.style.backgroundImage=`url(${u})`; t.style.backgroundSize='cover'; t.textContent=''; }});
+        li.onclick=()=>go('/records?animal='+x.id); L.append(li); }); rbr.append(L); }
   }
   $('#rbPrint',wrap).onclick=()=>printRecordBook(animalId);
   $$('[data-af]',wrap).forEach(b=>b.onclick=()=>{ const id=b.dataset.af; go(id?'/records?animal='+id:'/records'); });
