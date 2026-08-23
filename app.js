@@ -2884,6 +2884,7 @@ function openRapidWeigh(){
   };
   draw();
 }
+<<<<<<< HEAD
 /* ===================================================================
    BARN MODE — big-touch chore screen. Feed + today's tasks per animal,
    completable in place, with barn filters and an outdoor "daylight" mode.
@@ -2970,6 +2971,8 @@ route('barn',()=>{
   };
   refresh();
 });
+=======
+>>>>>>> origin/main
 
 /* ===================================================================
    GLOBAL SEARCH
