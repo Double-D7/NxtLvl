@@ -273,10 +273,11 @@ function blankDB(){
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
     layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
-    meds:[], medLog:[], alertAcks:{}, fedLog:{},
+    meds:[], medLog:[], alertAcks:{}, fedLog:{}, evals:[],
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
     // Configurable plan-status thresholds (lb). Drives On-Plan classification.
-    settings:{ plan:{ tolLb:8, criticalLb:20, aheadPaceLb:8 }, barnDaylight:false },
+    settings:{ plan:{ tolLb:8, criticalLb:20, aheadPaceLb:8 }, barnDaylight:false,
+      scoreCats:['Muscle','Width','Shape','Finish','Freshness','Skin & hair','Mobility','Showmanship','Brace','Presentation'] },
   };
 }
 function seedBreeds(db){ let order=0; for(const sp of Object.keys(BREEDS)) for(const nm of BREEDS[sp]) db.breeds.push({id:uid('br'),speciesId:sp,name:nm,system:true,active:true,order:order++}); }
@@ -1579,7 +1580,7 @@ const ANIMAL_GROUPS = [
   ['overview','Overview', [['overview','Overview']]],
   ['plan',    'Plan',     [['plan','Game Plan'],['weight','Weight'],['feed','Feed']]],
   ['care',    'Care',     [['care','Daily'],['health','Health'],['meds','Meds'],['exercise','Exercise']]],
-  ['progress','Progress', [['media','Photos'],['measurements','Measure'],['shows','Shows']]],
+  ['progress','Progress', [['media','Photos'],['scorecard','Scorecard'],['measurements','Measure'],['shows','Shows']]],
   ['records', 'Records',  [['pedigree','Pedigree'],['expenses','Expenses'],['notes','Notes'],['activity','History']]],
 ];
 const groupForLeaf = leaf => ANIMAL_GROUPS.find(g => g[2].some(t => t[0]===leaf)) || ANIMAL_GROUPS[0];
@@ -1621,7 +1622,7 @@ route('animal',(parts)=>{
   const at=$('.tab.active',hero); if(at) at.scrollIntoView({inline:'center',block:'nearest'});
   const ast=$('.subtab.active',hero); if(ast) ast.scrollIntoView({inline:'center',block:'nearest'});
   const body=$('#tabBody',hero);
-  ({overview:tabOverview,plan:tabPlan,weight:tabWeight,feed:tabFeed,care:tabCare,media:tabMedia,measurements:tabMeasure,health:tabHealth,meds:tabMeds,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
+  ({overview:tabOverview,plan:tabPlan,weight:tabWeight,feed:tabFeed,care:tabCare,media:tabMedia,scorecard:tabScorecard,measurements:tabMeasure,health:tabHealth,meds:tabMeds,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
 });
 
 /* ---------- OVERVIEW ---------- */
@@ -2046,6 +2047,62 @@ function openFeedSheet(animalId, feedId, dupFrom){
 
 /* ---------- MEDIA TAB ---------- */
 let mediaView='timeline', mediaOrder='asc';
+/* ---------- SCORECARD (coach evaluations over time) ---------- */
+const scoreCats = () => (DB.settings&&Array.isArray(DB.settings.scoreCats)&&DB.settings.scoreCats.length) ? DB.settings.scoreCats : ['Muscle','Width','Shape','Finish','Freshness','Skin & hair','Mobility','Showmanship','Brace','Presentation'];
+const evalsFor = id => (DB.evals||[]).filter(e=>e.animalId===id).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1);
+function evalAvg(e){ const vals=Object.values((e&&e.scores)||{}).map(Number).filter(v=>isFinite(v)&&v>0); return vals.length?round(vals.reduce((s,v)=>s+v,0)/vals.length,1):null; }
+function tabScorecard(box,a){
+  const evs=evalsFor(a.id); const cats=scoreCats(); const wrap=el('div');
+  wrap.innerHTML=`<div class="help">${ICON.info}<span>A coach's eye over time. Score <b>${esc(a.name)}</b> on the traits that matter, add notes, and watch each one improve. Scores are a human coach's read — the app never auto-grades.</span></div>
+    <div class="btn-row" style="margin:0 0 4px"><button class="btn primary" data-new style="flex:2">${ICON.plus} New evaluation</button><button class="btn" data-cats style="flex:1">${ICON.settings} Traits</button></div>`;
+  box.append(wrap);
+  $('[data-new]',wrap).onclick=()=>openEvalSheet(a.id);
+  $('[data-cats]',wrap).onclick=()=>openScoreCatsSheet();
+  if(!evs.length){ wrap.append(htmlToFrag(emptyState(ICON.star,'No evaluations yet','Tap “New evaluation” to score muscle, shape, finish, freshness and more — then track improvement over time.'))); return; }
+  const overall=evs.map(e=>({x:e.date,y:evalAvg(e)})).filter(p=>p.y!=null);
+  if(overall.length>=2) wrap.append(htmlToFrag(`<div class="section-title">Overall</div><div class="card pad">${lineChart([{name:'Avg',color:'var(--purple-3)',data:overall}],{})}</div>`));
+  wrap.append(htmlToFrag(`<div class="section-title">Traits · latest</div>`));
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
+  cats.forEach(c=>{ const series=evs.map(e=>e.scores&&e.scores[c]!=null?+e.scores[c]:null).filter(v=>v!=null);
+    if(!series.length) return; const lv=series[series.length-1], fv=series[0], delta=round(lv-fv,1);
+    grid.append(htmlToFrag(`<div class="stat" style="align-items:stretch;text-align:left"><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="k" style="text-transform:none;letter-spacing:0">${esc(c)}</span><b class="tnum" style="font-size:16px">${lv}</b></div><div style="height:6px;background:var(--line-2);border-radius:4px;overflow:hidden;margin-top:6px"><div style="height:100%;width:${clamp(lv*10,0,100)}%;background:var(--teal-3);border-radius:4px"></div></div>${series.length>=2?`<div style="font-size:11px;color:${delta>=0?'var(--good)':'var(--bad)'};font-weight:700;margin-top:3px">${delta>=0?'▲ +':'▼ '}${Math.abs(delta)} since first</div>`:''}</div>`)); });
+  wrap.append(grid);
+  wrap.append(htmlToFrag(`<div class="section-title">History</div>`));
+  const L=el('div','list'); evs.slice().reverse().forEach(e=>{ const avg=evalAvg(e); const li=el('div','li'); li.style.cursor='pointer';
+    li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.star}</div><div class="main"><div class="t1">${fmtDate(e.date)}${e.by?' · '+esc(userName(e.by)):''}</div><div class="t2">${avg!=null?'avg '+avg+'/10':''}${e.note?' · '+esc(e.note.slice(0,50)):''}</div></div><div class="r"><b class="tnum">${avg??'—'}</b></div>`;
+    li.onclick=()=>openEvalSheet(a.id,e.id); L.append(li); }); wrap.append(L);
+}
+function openEvalSheet(animalId, evalId){
+  if(!can('addRecord')&&!can('comment')){ toast('Your role can’t add evaluations','bad'); return; }
+  const cats=scoreCats();
+  const e = evalId ? {...(DB.evals||[]).find(x=>x.id===evalId)} : { animalId, date:todayISO(), by:DB.currentUserId, scores:{}, note:'' };
+  const body=el('div');
+  body.innerHTML=`
+    <div class="field"><label>Date</label><input class="control" type="date" id="evDate" value="${e.date}"></div>
+    ${cats.map(c=>{ const v=e.scores&&e.scores[c]!=null?e.scores[c]:''; return `<div class="field"><label>${esc(c)} <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">/10</span></label><input class="control ev-score" type="number" min="1" max="10" inputmode="numeric" data-cat="${esc(c)}" value="${v}"></div>`; }).join('')}
+    <div class="field"><label>Notes</label><textarea class="control" id="evNote" placeholder="What you saw — strengths and what to work on">${esc(e.note||'')}</textarea></div>`;
+  const foot=el('div'); foot.innerHTML=`${evalId?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">Save evaluation</button>`;
+  const sh=openSheet({title:evalId?'Edit evaluation':'New evaluation',body,foot});
+  $('[data-save]',sh).onclick=()=>{ const scores={}; $$('.ev-score',body).forEach(inp=>{ const v=+inp.value; if(v>0)scores[inp.dataset.cat]=clamp(Math.round(v),1,10); });
+    const data={date:$('#evDate',body).value, note:$('#evNote',body).value.trim(), scores};
+    if(evalId){ const T=(DB.evals).find(x=>x.id===evalId); Object.assign(T,data); touch(T); }
+    else { DB.evals.push(stamp({id:uid('ev'),animalId,by:DB.currentUserId,...data})); logAct('eval','Scored '+((getAnimal(animalId)||{}).name||''),animalId); }
+    save(); closeSheet(); toast('Evaluation saved','good'); render(); };
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete evaluation','Remove this evaluation?','Delete',true)){ DB.evals=DB.evals.filter(x=>x.id!==evalId); save(); closeSheet(); render(); } };
+}
+function openScoreCatsSheet(){
+  if(!can('edit')){ toast('Your role can’t edit traits','bad'); return; }
+  const cats=[...scoreCats()]; const body=el('div');
+  const draw=()=>{ body.innerHTML=`<div class="help">${ICON.info}<span>The traits you score. Add your own (leg set, hip, base width…) or remove ones you don't use.</span></div><div id="catList"></div><button class="btn block" id="catAdd" style="margin-top:10px">${ICON.plus} Add trait</button>`;
+    const L=el('div','list'); cats.forEach((c,i)=>{ const li=el('div','li'); li.innerHTML=`<div class="main"><input class="control" value="${esc(c)}" data-ci="${i}" style="border:none;background:transparent;padding:0;font-weight:600"></div><button class="iconbtn" style="background:var(--line-2);color:var(--bad)" data-del="${i}">${ICON.x}</button>`; L.append(li); }); $('#catList',body).innerHTML=''; $('#catList',body).append(L);
+    $$('[data-ci]',body).forEach(inp=>inp.onchange=()=>{ cats[+inp.dataset.ci]=inp.value; });
+    $$('[data-del]',body).forEach(b=>b.onclick=()=>{ cats.splice(+b.dataset.del,1); draw(); });
+    $('#catAdd',body).onclick=()=>{ cats.push('New trait'); draw(); }; };
+  draw();
+  const foot=el('div'); foot.innerHTML=`<button class="btn primary" data-save style="flex:1">Save traits</button>`;
+  const sh=openSheet({title:'Evaluation traits',body,foot});
+  $('[data-save]',sh).onclick=()=>{ DB.settings=DB.settings||{}; DB.settings.scoreCats=cats.map(c=>c.trim()).filter(Boolean); save(); closeSheet(); toast('Saved','good'); render(); };
+}
 function tabMedia(box,a){
   const items=mediaFor(a.id);
   const photos=items.filter(m=>m.kind!=='video').slice().sort((x,y)=>(x.captured||x.date)<(y.captured||y.date)?-1:1);
