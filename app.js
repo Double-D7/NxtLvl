@@ -274,7 +274,8 @@ function blankDB(){
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
     layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
     meds:[], medLog:[], alertAcks:{}, fedLog:{}, evals:[],
-    notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true },
+    notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true,
+      quietOn:false, quietStart:'21:00', quietEnd:'06:00' },
     // Configurable plan-status thresholds (lb). Drives On-Plan classification.
     settings:{ plan:{ tolLb:8, criticalLb:20, aheadPaceLb:8 }, barnDaylight:false,
       scoreCats:['Muscle','Width','Shape','Finish','Freshness','Skin & hair','Mobility','Showmanship','Brace','Presentation'] },
@@ -1014,7 +1015,7 @@ const Push = {
     if(!(Cloud.enabled&&Cloud.teamId)) return false;
     const j=this.subJSON(sub);
     const row={ endpoint:j.endpoint, p256dh:j.p256dh, auth:j.auth, team_id:Cloud.teamId, user_id:(Cloud.user&&Cloud.user.id)||null,
-      prefs:DB.notifPrefs||{}, ua:(navigator.userAgent||'').slice(0,180), updated_at:new Date().toISOString() };
+      prefs:DB.notifPrefs||{}, tz_offset:-(new Date().getTimezoneOffset()), ua:(navigator.userAgent||'').slice(0,180), updated_at:new Date().toISOString() };
     try{ const {error}=await Cloud.sb.from('push_subscriptions').upsert(row,{onConflict:'endpoint'}); if(error)throw error; return true; }
     catch(e){ console.error('save sub',e); toast('Couldn’t save subscription (run supabase/push.sql?)','bad'); return false; }
   },
@@ -4521,8 +4522,15 @@ function openNotif(){ const body=el('div'); const p=DB.notifPrefs;
     body.innerHTML=`<div id="pushBox"></div>
       <div class="section-title" style="margin-top:6px">Notify me about</div>
       <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Applies to phone push and in-app alerts.</p>`+
-      items.map(([k,l])=>`<label class="li" style="border:1px solid var(--line);border-radius:12px;margin-bottom:8px"><div class="main"><div class="t1" style="font-size:14px">${l}</div></div><input type="checkbox" data-n="${k}" ${p[k]?'checked':''} style="width:22px;height:22px"></label>`).join('');
-    $$('[data-n]',body).forEach(c=>c.onchange=()=>{p[c.dataset.n]=c.checked;save(); if(Push.ready()&&Push.permission()==='granted')Push.syncOnLoad();});
+      items.map(([k,l])=>`<label class="li" style="border:1px solid var(--line);border-radius:12px;margin-bottom:8px"><div class="main"><div class="t1" style="font-size:14px">${l}</div></div><input type="checkbox" data-n="${k}" ${p[k]?'checked':''} style="width:22px;height:22px"></label>`).join('')
+      +`<div class="section-title" style="margin-top:14px">Quiet hours</div>
+        <label class="li" style="border:1px solid var(--line);border-radius:12px;margin-bottom:8px"><div class="main"><div class="t1" style="font-size:14px">Silence phone push overnight</div><div class="t2">No push notifications during the window below (in-app alerts still show)</div></div><input type="checkbox" id="nQuiet" ${p.quietOn?'checked':''} style="width:22px;height:22px"></label>
+        <div class="field-row" id="nQuietRow" style="${p.quietOn?'':'display:none'}"><div class="field" style="flex:1"><label>From</label><input class="control" type="time" id="nQStart" value="${esc(p.quietStart||'21:00')}"></div><div class="field" style="flex:1"><label>To</label><input class="control" type="time" id="nQEnd" value="${esc(p.quietEnd||'06:00')}"></div></div>`;
+    const pushSync=()=>{ if(Push.ready()&&Push.permission()==='granted')Push.syncOnLoad(); };
+    $$('[data-n]',body).forEach(c=>c.onchange=()=>{p[c.dataset.n]=c.checked;save(); pushSync();});
+    $('#nQuiet',body).onchange=()=>{ p.quietOn=$('#nQuiet',body).checked; $('#nQuietRow',body).style.display=p.quietOn?'':'none'; save(); pushSync(); };
+    if($('#nQStart',body))$('#nQStart',body).onchange=()=>{ p.quietStart=$('#nQStart',body).value; save(); pushSync(); };
+    if($('#nQEnd',body))$('#nQEnd',body).onchange=()=>{ p.quietEnd=$('#nQEnd',body).value; save(); pushSync(); };
     drawPush(pushState);
   };
   const drawPush=async(state)=>{
