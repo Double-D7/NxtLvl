@@ -3660,8 +3660,8 @@ route('helper',(parts)=>{
   const v=setView('','more'); const wrap=el('div');
   const animals=animalsForHelper(h.id).filter(a=>!a.archived).sort((a,b)=>a.name.localeCompare(b.name));
   wrap.innerHTML=`${pageHeader(h.name,'/helpers',`<button class="iconbtn" style="background:var(--line-2);color:var(--ink)" id="edHelper">${ICON.edit}</button>`)}
-    <button class="btn primary block" id="feedReport" style="margin-bottom:8px">${ICON.reports} Weekly feed report</button>
-    <button class="btn block" id="weightReport" style="margin-bottom:12px">${ICON.weight} Current weights report</button>
+    <button class="btn primary block" id="coachBrief" style="margin-bottom:8px">${ICON.reports} Weekly coach brief</button>
+    <div class="btn-row" style="margin-bottom:12px"><button class="btn" id="feedReport" style="flex:1">${ICON.feed} Feed report</button><button class="btn" id="weightReport" style="flex:1">${ICON.weight} Weights report</button></div>
     <div class="btn-row" style="margin-bottom:12px"><button class="btn" id="viewAll" style="flex:1">${ICON.animals} Filter herd</button><button class="btn" id="shareSnap" style="flex:1">${ICON.share} Snapshot</button></div>
     <div class="section-title">${h.name.split(' ')[0]}’s animals · ${animals.length}</div>
     <div id="hAnimals"></div>`;
@@ -3669,6 +3669,7 @@ route('helper',(parts)=>{
   $('#edHelper',wrap).onclick=()=>openHelperSheet(h.id);
   $('#viewAll',wrap).onclick=()=>go('/animals?helper='+h.id);
   $('#shareSnap',wrap).onclick=()=>helperSnapshot(h.id);
+  $('#coachBrief',wrap).onclick=()=>openCoachBrief(animals.map(a=>a.id), h.name.split(' ')[0]+'’s animals');
   $('#feedReport',wrap).onclick=()=>openFeedReport(animals.map(a=>a.id), h.name.split(' ')[0]+'’s animals');
   $('#weightReport',wrap).onclick=()=>openWeightReport(animals.map(a=>a.id), h.name.split(' ')[0]+'’s animals');
   const hc=$('#hAnimals',wrap);
@@ -3759,6 +3760,57 @@ function openWeightReport(animalIds, subject){
   const sh=openSheet({title:'Current weights report',body,foot});
   const txt=()=>$('#wrText',body).value;
   const copy=async()=>{ try{ await navigator.clipboard.writeText(txt()); toast('Copied — paste it into a text','good'); }catch(e){ const ta=$('#wrText',body); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} toast('Copied','good'); } };
+  $('[data-copy]',sh).onclick=copy;
+  $('[data-share]',sh).onclick=async()=>{ const t=txt(); if(navigator.share){ try{ await navigator.share({text:t}); }catch(e){} } else copy(); };
+}
+/* ---- Weekly Coach Brief — the full weekly rundown for a coach/helper ---- */
+function coachBriefText(animalIds){
+  const d=new Date(); const wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  const dateLabel=`${wd} ${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+  const since=addDaysISO(todayISO(),-14);
+  const lines=[`${DB.team.name} — Weekly coach brief`, dateLabel, ''];
+  (animalIds||[]).map(getAnimal).filter(a=>a&&!a.archived).forEach(a=>{
+    const st=animalStats(a); const p=Calc.planStatus(a); const cs=coachEligible(a)?coachStatus(a):null;
+    const idTag=a.earNotch||a.earTag||a.registration||'';
+    lines.push(`▶ ${a.name}${idTag?` (${idTag})`:''}${[a.breed,a.sex].filter(Boolean).length?' — '+[a.breed,a.sex].filter(Boolean).join(' '):''}`);
+    // weight + gain + 7-day ADG
+    let wl = st.curW!=null ? `  Weight: ${st.curW} lb${st.curD?' ('+fmtShort(st.curD)+')':''}` : '  Weight: none yet';
+    if(st.gainPeriod!=null&&st.periodDays) wl+=`, ${st.gainPeriod>=0?'+':''}${st.gainPeriod} lb in ${st.periodDays}d`;
+    const r7=Calc.rollingAdg(a.id,7); if(r7!=null) wl+=`, 7-day ADG ${r7}`;
+    lines.push(wl);
+    // plan status
+    if(cs){ const ts=Calc.targetState(a); lines.push(`  Plan: ${p.label} — target ${cs.target} lb${cs.tdate?' by '+fmtShort(cs.tdate):''}${ts?' ('+ts.label+')':''}${cs.reqAdg!=null?`, need ${cs.reqAdg}/d`:''}${cs.proj!=null?`, proj ${cs.proj}`:''}`); }
+    else lines.push('  Plan: none set');
+    // current ration
+    const cf=currentFeed(a.id); const ration=feedRationLines(cf);
+    if(ration.length){ lines.push('  Ration:'); ration.forEach(x=>lines.push(/:\s*$/.test(x)?'    '+x.trim():'    • '+x.trim())); } else lines.push('  Ration: none set');
+    // recent feed changes
+    const fc=feedFor(a.id).filter(f=>f.startDate>=since).sort((x,y)=>x.startDate<y.startDate?-1:1).map(f=>fmtShort(f.startDate)+' '+(f.name||'program'));
+    if(fc.length) lines.push('  Feed changes: '+fc.join('; '));
+    // recent notes (health/care/advisor/etc, last 14d)
+    const notes=(DB.notes||[]).filter(n=>n.animalId===a.id && (n.date||'')>=since).sort((x,y)=>(x.date||'')<(y.date||'')?1:-1).slice(0,3).map(n=>`${n.type}: ${n.text}`);
+    if(notes.length){ lines.push('  Notes:'); notes.forEach(x=>lines.push('   - '+x)); }
+    // upcoming shows the animal is entered in
+    const showIds=[...new Set((DB.entries||[]).filter(e=>e.animalId===a.id).map(e=>e.showId))];
+    const ups=(DB.shows||[]).filter(s=>showIds.includes(s.id)&&s.start>=todayISO()).sort((x,y)=>x.start<y.start?-1:1).map(s=>s.name+' '+fmtShort(s.start));
+    if(ups.length) lines.push('  Upcoming: '+ups.join('; '));
+    // pending recommendations awaiting review
+    const pend=recsForAnimal(a.id).filter(r=>r.status==='pending').length;
+    if(pend) lines.push(`  ⚑ ${pend} recommendation${pend===1?'':'s'} awaiting review`);
+    lines.push('');
+  });
+  return lines.join('\n').trim()+'\n';
+}
+function openCoachBrief(animalIds, subject){
+  const ids=(animalIds||[]).map(getAnimal).filter(a=>a&&!a.archived).map(a=>a.id);
+  if(!ids.length){ toast('No active animals to brief','bad'); return; }
+  const body=el('div');
+  body.innerHTML=`<div class="help">${ICON.info}<span>An auto-generated weekly brief${subject?' for <b>'+esc(subject)+'</b>':''} — weight & 7-day gain, plan status, current ration, recent feed changes, notes and upcoming shows. Edit anything, then Copy or Share it.</span></div>
+    <textarea class="control" id="cbText" style="min-height:360px;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre">${esc(coachBriefText(ids))}</textarea>`;
+  const foot=el('div'); foot.innerHTML=`<button class="btn" data-copy style="flex:1">${ICON.copy} Copy</button><button class="btn primary" data-share style="flex:1">${ICON.share} Share</button>`;
+  const sh=openSheet({title:'Weekly coach brief',body,foot});
+  const txt=()=>$('#cbText',body).value;
+  const copy=async()=>{ try{ await navigator.clipboard.writeText(txt()); toast('Copied','good'); }catch(e){ const ta=$('#cbText',body); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} toast('Copied','good'); } };
   $('[data-copy]',sh).onclick=copy;
   $('[data-share]',sh).onclick=async()=>{ const t=txt(); if(navigator.share){ try{ await navigator.share({text:t}); }catch(e){} } else copy(); };
 }
