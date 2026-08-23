@@ -212,6 +212,10 @@ textarea.control{min-height:88px;resize:vertical}
 .tabbar::-webkit-scrollbar{display:none}
 .tab{padding:8px 14px;border-radius:999px;font-weight:700;font-size:13px;color:var(--muted);white-space:nowrap;background:var(--line-2)}
 .tab.active{background:var(--purple);color:#fff}
+.subtabbar{display:flex;gap:6px;overflow-x:auto;padding:8px 14px;background:var(--card);border-bottom:1px solid var(--line);scrollbar-width:none;margin:0 -14px}
+.subtabbar::-webkit-scrollbar{display:none}
+.subtab{padding:6px 12px;border-radius:999px;font-weight:700;font-size:12.5px;color:var(--muted);white-space:nowrap;background:transparent;border:1px solid var(--line)}
+.subtab.active{background:var(--line-2);color:var(--purple-3);border-color:var(--purple-3)}
 
 .kv{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-2);font-size:14px}
 .kv:last-child{border-bottom:none}
