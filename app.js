@@ -308,6 +308,16 @@ function touch(obj){ obj.updatedAt=nowISO(); obj.updatedBy=DB.currentUserId; }
 /* ---- lookups ---- */
 const getAnimal = id => DB.animals.find(a=>a.id===id);
 const activeAnimals = () => DB.animals.filter(a=>!a.archived);
+/* Animal-level permissions: a member can be assigned to specific animals so
+   they only see those. Owner/Administrator (rank ≥ 5) always see everything.
+   A member is "scoped" if they have a non-empty assignedAnimalIds, or they're
+   an Advisor (assigned-only by role). Unscoped members see all. This gates
+   VISIBILITY in the animal-facing screens; it never changes stored data. */
+function isScopedUser(u){ u=(u&&typeof u==='object')?u:me(); const rank=ROLE_RANK[u.role]||0; if(rank>=5) return false;
+  return (Array.isArray(u.assignedAnimalIds)&&u.assignedAnimalIds.length>0) || u.role==='Advisor'; }
+function isVisibleAnimal(a,u){ u=(u&&typeof u==='object')?u:me(); if(!isScopedUser(u)) return true;
+  const ids=u.assignedAnimalIds; return (Array.isArray(ids)&&ids.includes(a.id)) || a.advisorId===u.id; }
+const visibleAnimals = () => DB.animals.filter(a=>!a.archived && isVisibleAnimal(a));
 const breedsFor = sp => DB.breeds.filter(b=>b.speciesId===sp && b.active).sort((a,b)=>(a.order||0)-(b.order||0));
 const weightsFor = id => DB.weights.filter(w=>w.animalId===id).sort((a,b)=>a.date<b.date?-1:1);
 const feedFor = id => DB.feed.filter(f=>f.animalId===id).sort((a,b)=>a.startDate<b.startDate?1:-1);
@@ -1162,7 +1172,7 @@ function todaysFocus(ctx){
   return {icon:ICON.star,color:'var(--good)',title:'All caught up',sub:'Nice work — the barn’s dialed in',go:null};
 }
 route('dashboard', ()=>{
-  const active=activeAnimals();
+  const active=activeAnimals().filter(a=>isVisibleAnimal(a));
   const bySpecies={}; DB.species.filter(s=>s.active).forEach(s=>bySpecies[s.id]=0);
   active.forEach(a=>bySpecies[a.species]=(bySpecies[a.species]||0)+1);
   const weighDay=DB.team.weighDay;
@@ -1413,7 +1423,7 @@ route('animals', (parts,q)=>{
     filter:q.get('filter')||'', q:q.get('q')||'', archived:false, sort:'name' };
   const wrap=el('div'); v.append(wrap);
   const draw=()=>{
-    let list=DB.animals.filter(a=>!!a.archived===state.archived);
+    let list=DB.animals.filter(a=>!!a.archived===state.archived && isVisibleAnimal(a));
     if(state.species) list=list.filter(a=>a.species===state.species);
     if(state.status) list=list.filter(a=>a.status===state.status);
     if(state.sex) list=list.filter(a=>a.sex===state.sex);
@@ -4123,7 +4133,7 @@ route('team',()=>{
   v.append(wrap);
   if($('#inv',wrap))$('#inv',wrap).onclick=()=>openInvite();
   const L=el('div','list');
-  DB.users.forEach(u=>{ const assigned=u.role==='Advisor'?DB.animals.filter(a=>a.advisorId===u.id).length:null; const li=el('div','li');
+  DB.users.forEach(u=>{ const assigned=(Array.isArray(u.assignedAnimalIds)&&u.assignedAnimalIds.length)?u.assignedAnimalIds.length:(u.role==='Advisor'?DB.animals.filter(a=>a.advisorId===u.id).length:null); const li=el('div','li');
     li.innerHTML=`<div class="thumb" style="background:${ROLE_COLORS[u.role]||'var(--muted)'};color:#fff">${esc(initials(u.name))}</div>
       <div class="main"><div class="t1">${esc(u.name)}${u.id===DB.currentUserId?' <span class="pill gray" style="font-size:9px">You</span>':''}</div><div class="t2">${esc(u.email||'')}${assigned!=null?' · '+assigned+' animals':''}${u.invited&&!u.verified?' · invite pending':''}</div></div>
       <span class="badge-role" style="background:${ROLE_COLORS[u.role]}22;color:${ROLE_COLORS[u.role]}">${esc(u.role)}</span>`;
@@ -4151,13 +4161,21 @@ function openInvite(){ const body=el('div');
 }
 function openMemberSheet(uid_){ const u=DB.users.find(x=>x.id===uid_);
   const body=el('div');
+  const assigned=[...(u.assignedAnimalIds||[])];
+  const scopedRole=r=>(ROLE_RANK[r]||0)<5; // Owner/Admin always see all
   body.innerHTML=`<div class="field"><label>Name</label><input class="control" id="mbName" value="${esc(u.name)}"></div>
     <div class="field"><label>Role</label><select class="control" id="mbRole">${ROLES.map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
-    <div class="help">${ICON.info}<span>${esc(roleDesc(u.role))}</span></div>`;
+    <div class="help">${ICON.info}<span id="mbDesc">${esc(roleDesc(u.role))}</span></div>
+    <div class="field" id="mbAssignWrap" style="display:none"><label>Animal access <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">(leave empty for all)</span></label><div id="mbAnimals"></div></div>`;
   const foot=el('div'); foot.innerHTML=`${u.id!==DB.currentUserId&&u.role!=='Owner'?`<button class="btn danger" data-del>Remove</button>`:''}<button class="btn primary" data-save style="flex:1">Save</button>`;
   const sh=openSheet({title:u.name,body,foot});
-  $('#mbRole',body).onchange=()=>$('.help span',body).textContent=roleDesc($('#mbRole',body).value);
-  $('[data-save]',sh).onclick=()=>{ u.name=$('#mbName',body).value.trim(); u.role=$('#mbRole',body).value; save(); closeSheet(); toast('Saved','good'); render(); };
+  mountAnimalPicker($('#mbAnimals',body), assigned);
+  const syncScope=()=>{ const r=$('#mbRole',body).value; $('#mbDesc',body).textContent=roleDesc(r);
+    $('#mbAssignWrap',body).style.display = scopedRole(r) ? 'block' : 'none'; };
+  $('#mbRole',body).onchange=syncScope; syncScope();
+  $('[data-save]',sh).onclick=()=>{ u.name=$('#mbName',body).value.trim(); u.role=$('#mbRole',body).value;
+    if(scopedRole(u.role) && assigned.length) u.assignedAnimalIds=[...assigned]; else delete u.assignedAnimalIds;
+    save(); closeSheet(); toast('Saved','good'); render(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Remove member','Remove '+u.name+' from the team?','Remove',true)){DB.users=DB.users.filter(x=>x.id!==uid_);save();closeSheet();render();} };
 }
 function roleDesc(r){ return {Owner:'Full access — manage team, billing, and everything.',Administrator:'Manage animals, records, most settings; can invite.',Editor:'Add and edit animals, weights, feed, media, notes, results.',Contributor:'Add weights, feed, media and notes; view records.',Viewer:'View approved animals, progress and reports only.',Advisor:'View assigned animals and leave recommendations only.'}[r]||''; }
