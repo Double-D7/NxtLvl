@@ -1534,7 +1534,17 @@ function openAnimalForm(id){
 /* ===================================================================
    ANIMAL PROFILE (tabbed)
    =================================================================== */
-const ANIMAL_TABS=[['overview','Overview'],['weight','Weight'],['feed','Feed'],['care','Care'],['media','Media'],['measurements','Measure'],['health','Health'],['meds','Meds'],['exercise','Exercise'],['shows','Shows'],['pedigree','Pedigree'],['expenses','Expenses'],['notes','Notes'],['activity','History']];
+// Animal profile IA: 14 leaf views grouped into 5 primary categories. URLs
+// stay leaf-based (/animal/<id>/<leaf>) so every existing deep link still
+// resolves; the group is derived from the leaf for the two-level tab bar.
+const ANIMAL_GROUPS = [
+  ['overview','Overview', [['overview','Overview']]],
+  ['plan',    'Plan',     [['plan','Game Plan'],['weight','Weight'],['feed','Feed']]],
+  ['care',    'Care',     [['care','Daily'],['health','Health'],['meds','Meds'],['exercise','Exercise']]],
+  ['progress','Progress', [['media','Photos'],['measurements','Measure'],['shows','Shows']]],
+  ['records', 'Records',  [['pedigree','Pedigree'],['expenses','Expenses'],['notes','Notes'],['activity','History']]],
+];
+const groupForLeaf = leaf => ANIMAL_GROUPS.find(g => g[2].some(t => t[0]===leaf)) || ANIMAL_GROUPS[0];
 route('animal',(parts)=>{
   const id=parts[1]; const a=getAnimal(id);
   if(!a){ setView(emptyState(ICON.animals,'Animal not found','It may have been deleted.'),'animals'); return; }
@@ -1556,18 +1566,24 @@ route('animal',(parts)=>{
         <div class="msub">${esc(speciesName(a.species))} · ${esc(a.breed||'')} · ${esc(a.sex||'')}${a.earTag?' · Tag '+esc(a.earTag):''}</div>
       </div>
     </div>
-    <div class="tabbar" id="tabbar">${ANIMAL_TABS.map(([k,l])=>`<button class="tab ${tab===k?'active':''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div>
+    ${(()=>{ const grp=groupForLeaf(tab); const leaves=grp[2];
+      const groupBar=`<div class="tabbar" id="tabbar">${ANIMAL_GROUPS.map(g=>`<button class="tab ${g[0]===grp[0]?'active':''}" data-group="${g[0]}">${esc(g[1])}</button>`).join('')}</div>`;
+      const subBar=leaves.length>1?`<div class="subtabbar">${leaves.map(([k,l])=>`<button class="subtab ${tab===k?'active':''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div>`:'';
+      return groupBar+subBar; })()}
     <div id="tabBody" style="padding-top:14px"></div>`;
   v.append(hero);
   if(a.profileMediaId) Media.url(a.profileMediaId).then(u=>{ if(u){ const c=$('[data-cover]',hero); c.classList.remove('ph'); c.style.backgroundImage=`url(${u})`; c.innerHTML=''; }});
   $('[data-edit]',hero).onclick=()=>openAnimalForm(a.id);
   if($('[data-share]',hero)) $('[data-share]',hero).onclick=()=>openShareSheet(a.id);
   if($('[data-setphoto]',hero)) $('[data-setphoto]',hero).onclick=()=>uploadProfilePhoto(a.id);
+  // primary group → open the group's first leaf; secondary sub-tab → that leaf
+  $$('[data-group]',hero).forEach(b=>b.onclick=()=>{ const g=ANIMAL_GROUPS.find(x=>x[0]===b.dataset.group); go('/animal/'+id+'/'+g[2][0][0]); });
   $$('[data-tab]',hero).forEach(b=>b.onclick=()=>{ go('/animal/'+id+'/'+b.dataset.tab); });
-  // keep active tab visible
+  // keep the active group + sub-tab scrolled into view
   const at=$('.tab.active',hero); if(at) at.scrollIntoView({inline:'center',block:'nearest'});
+  const ast=$('.subtab.active',hero); if(ast) ast.scrollIntoView({inline:'center',block:'nearest'});
   const body=$('#tabBody',hero);
-  ({overview:tabOverview,weight:tabWeight,feed:tabFeed,care:tabCare,media:tabMedia,measurements:tabMeasure,health:tabHealth,meds:tabMeds,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
+  ({overview:tabOverview,plan:tabPlan,weight:tabWeight,feed:tabFeed,care:tabCare,media:tabMedia,measurements:tabMeasure,health:tabHealth,meds:tabMeds,exercise:tabExercise,shows:tabShows,pedigree:tabPedigree,expenses:tabExpenses,notes:tabNotes,activity:tabActivity}[tab]||tabOverview)(body,a);
 });
 
 /* ---------- OVERVIEW ---------- */
@@ -1721,6 +1737,42 @@ function weighInAnomaly(animalId, weight, date, excludeId){
     if(adg>ceil) return `That would need +${round(adg,1)} lb/day to reach the ${fmtShort(later.date)} weigh-in (${later.weight} lb) — is this weight right?`;
     if(adg< -0.6) return `That's higher than the next weigh-in on ${fmtShort(later.date)} (${later.weight} lb) — is the weight and date right?`; } }
   return null;
+}
+/* ---------- PLAN (per-animal Game Plan) ---------- */
+function tabPlan(box,a){
+  const wrap=el('div');
+  if(!coachEligible(a)){
+    wrap.innerHTML=`<div class="help">${ICON.target}<span>Set a target weight and show date to coach <b>${esc(a.name)}</b> to the ring — required daily gain, projected finish, and whether you're on pace, behind or getting heavy.</span></div>
+      <button class="btn primary block" data-setplan style="margin-top:12px">${ICON.target} Set a Game Plan</button>`;
+    box.append(wrap);
+    $('[data-setplan]',wrap).onclick=()=>openGamePlanSheet(a.id);
+    return;
+  }
+  const cs=coachStatus(a); const p=Calc.planStatus(a); const ts=Calc.targetState(a);
+  const advice=coachAdvice(a,cs); const marks=coachMilestones(a,cs); const upcoming=marks.filter(m=>m.future)[0];
+  wrap.innerHTML=`
+    <div class="card pad" style="border-color:${p.color}55">
+      <div style="display:flex;gap:14px;align-items:center">
+        <div style="flex:none">${ringSVG(cs.pct,p.color,cs.pct!=null?Math.round(cs.pct)+'%':'—','to goal')}</div>
+        <div style="flex:1;min-width:0">
+          <span class="pill" style="background:${p.color}22;color:${p.color};font-size:11px">${esc(p.label)}</span>
+          <div style="font-size:13px;color:var(--muted);margin-top:6px">${cs.cur!=null?cs.cur+' lb now':'no weight'} → <b style="color:var(--ink)">${cs.target} lb</b> by ${fmtShort(cs.tdate)}</div>
+          ${ts?`<div style="font-size:12.5px;color:var(--muted);margin-top:2px">${esc(ts.label)}</div>`:''}
+        </div>
+      </div>
+      <div class="grid g3" style="margin-top:12px">
+        <div class="stat"><div class="k">Need</div><div class="v tnum" style="font-size:20px">${cs.reqAdg!=null?cs.reqAdg:'—'}<small> lb/d</small></div></div>
+        <div class="stat"><div class="k">Recent</div><div class="v tnum" style="font-size:20px">${cs.recentAdg!=null?cs.recentAdg:(cs.actAdg!=null?cs.actAdg:'—')}<small> lb/d</small></div></div>
+        <div class="stat"><div class="k">Projected</div><div class="v tnum" style="font-size:20px">${cs.proj!=null?cs.proj:'—'}<small> lb</small></div></div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:12px"><button class="btn" data-edit style="flex:1">${ICON.edit} Edit game plan</button><button class="btn" data-weight style="flex:1">${ICON.weight} Weight</button></div>
+    ${advice.length?`<div class="section-title">Coach's read</div><div class="card pad" style="font-size:13.5px;line-height:1.6">${advice.map(t=>`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="color:${p.color};flex:none;width:16px;height:16px;margin-top:1px">${ICON.trend}</span><span>${esc(t)}</span></div>`).join('')}</div>`:''}
+    ${upcoming?`<div class="section-title">Next checkpoint</div><div class="card pad"><div style="display:flex;justify-content:space-between;font-size:13.5px"><span style="color:var(--muted);font-weight:700">${fmtDate(upcoming.date)}</span><span style="font-weight:800" class="tnum">aim ${upcoming.ideal} lb</span></div></div>`:''}
+    ${marks.length?`<div class="section-title">Pace checkpoints</div><div class="card pad">${marks.map(m=>{ const hit=m.actual!=null; const good=hit&&m.actual>=m.ideal-cs.tol; return `<div class="kv"><span class="k">${fmtShort(m.date)}${m.future?' <span style="color:var(--muted)">·upcoming</span>':''}</span><span class="v">aim ${m.ideal}${hit?` · <span style="color:${good?'var(--good)':'var(--bad)'}">${m.actual} lb</span>`:m.future?'':' · —'}</span></div>`; }).join('')}</div>`:''}`;
+  box.append(wrap);
+  $('[data-edit]',wrap).onclick=()=>openGamePlanSheet(a.id);
+  $('[data-weight]',wrap).onclick=()=>go('/animal/'+a.id+'/weight');
 }
 function tabWeight(box,a){
   const ws=weightsFor(a.id); const st=animalStats(a);
