@@ -4,7 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#3B1B6E">
-<title>Show Team</title>
+<title>Show Team — Run your entire show barn from one place</title>
+<meta name="description" content="Show Team is the daily operating system for show-livestock families — weights &amp; ADG, feed programs, medications &amp; withdrawal, game plans, shows, record books and team collaboration for show pigs, lambs, goats and cattle. iPhone, Android and web.">
+<link rel="canonical" href="https://showteam.app/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Show Team">
+<meta property="og:title" content="Show Team — Run your entire show barn from one place">
+<meta property="og:description" content="Weights, feed, meds, game plans, shows and record books for show pigs, lambs, goats and cattle. The daily operating system for serious show-livestock families.">
+<meta property="og:url" content="https://showteam.app/">
+<meta property="og:image" content="https://showteam.app/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Show Team — Run your entire show barn from one place">
+<meta name="twitter:description" content="Weights, feed, meds, game plans, shows and record books for show pigs, lambs, goats and cattle.">
+<meta name="twitter:image" content="https://showteam.app/icon-512.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -317,16 +329,170 @@ hr.soft{border:none;border-top:1px solid var(--line-2);margin:14px 0}
   .card{box-shadow:none;border:1px solid #ddd}.print-only{display:block!important}
 }
 .print-only{display:none}
+
+/* ===== Public marketing landing (homepage for new visitors + crawlers) ===== */
+body.app-booted #marketing{display:none!important}
+#marketing{color:var(--ink);background:#08060e;overflow-x:hidden}
+.mk-wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+.mk-nav{display:flex;align-items:center;gap:12px;padding:18px 0}
+.mk-nav img{width:38px;height:38px;border-radius:10px}
+.mk-nav .brand{font-weight:900;font-size:19px;letter-spacing:-.3px}
+.mk-nav .sp{flex:1}
+.mk-nav a.mklink{color:var(--ink-2);font-weight:700;font-size:14px;text-decoration:none;margin-right:6px}
+.mk-nav a.mklink:hover{color:#fff}
+.mk-btn{display:inline-block;background:linear-gradient(135deg,var(--purple-3),var(--purple));color:#fff;font-weight:800;font-size:15px;padding:11px 20px;border-radius:12px;text-decoration:none;box-shadow:0 8px 22px -6px rgba(124,58,237,.6);border:none;cursor:pointer}
+.mk-btn.ghost{background:rgba(255,255,255,.06);box-shadow:none;border:1px solid var(--line)}
+.mk-btn:hover{filter:brightness(1.07)}
+.mk-hero{position:relative;text-align:center;padding:56px 0 44px;
+  background:radial-gradient(60vw 40vh at 50% 0%,rgba(124,58,237,.34),transparent 60%),radial-gradient(50vw 40vh at 85% 30%,rgba(13,148,136,.28),transparent 62%)}
+.mk-eyebrow{font-size:12.5px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;color:#c9b8ff}
+.mk-hero h1{font-size:clamp(34px,6vw,60px);font-weight:900;letter-spacing:-.02em;line-height:1.03;margin:16px auto 0;max-width:16ch;
+  background:linear-gradient(100deg,#fff 40%,#d8ccff 70%,#fff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.mk-hero p.sub{font-size:clamp(16px,2.2vw,20px);color:var(--ink-2);max-width:52ch;margin:18px auto 0;line-height:1.55}
+.mk-cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px}
+.mk-plat{margin-top:16px;font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.1em}
+.mk-section{padding:44px 0}
+.mk-section h2{font-size:clamp(24px,3.4vw,34px);font-weight:900;letter-spacing:-.02em;text-align:center;margin-bottom:6px}
+.mk-section .lead{text-align:center;color:var(--ink-2);max-width:56ch;margin:0 auto 26px;font-size:15.5px;line-height:1.55}
+.mk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:820px){.mk-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.mk-grid{grid-template-columns:1fr}}
+.mk-card{background:linear-gradient(180deg,#141922,#10141c);border:1px solid var(--line);border-radius:16px;padding:20px;display:block;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s}
+.mk-card:hover{border-color:var(--purple-3);transform:translateY(-2px)}
+.mk-card .ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:rgba(124,58,237,.16);color:var(--teal-2);font-size:20px;margin-bottom:12px}
+.mk-card h3{font-size:17px;font-weight:800;margin-bottom:5px}
+.mk-card p{font-size:13.5px;color:var(--ink-2);line-height:1.5}
+.mk-species{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.mk-species a{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:10px 18px;font-weight:800;color:var(--ink);text-decoration:none;font-size:15px}
+.mk-species a:hover{border-color:var(--teal-2);color:#fff}
+.mk-final{text-align:center;background:radial-gradient(60vw 40vh at 50% 100%,rgba(13,148,136,.28),transparent 60%);padding:56px 0}
+.mk-final h2{margin-bottom:12px}
+.mk-foot{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.mk-foot a{color:var(--ink-2);text-decoration:none}.mk-foot a:hover{color:#fff}
+.mk-foot .sp{flex:1}
 </style>
 </head>
 <body>
+
+<!-- ===== Public marketing homepage: shown to new visitors & search engines.
+     Existing users, installed apps, and deep links boot straight into the app
+     (see the boot script at the bottom) so nothing about the app changes. ===== -->
+<div id="marketing">
+  <div class="mk-wrap">
+    <nav class="mk-nav">
+      <img src="icon-192.png" alt="Show Team app icon" width="38" height="38">
+      <span class="brand">Show Team</span>
+      <span class="sp"></span>
+      <a class="mklink" href="features/game-plan.html">Features</a>
+      <a class="mklink" href="privacy.html">Privacy</a>
+      <button class="mk-btn ghost" data-openapp type="button">Open app</button>
+    </nav>
+  </div>
+
+  <header class="mk-hero">
+    <div class="mk-wrap">
+      <div class="mk-eyebrow">Show-livestock management</div>
+      <h1>Run your entire show barn from one place</h1>
+      <p class="sub">Show Team is the daily operating system for serious show-livestock families — weights &amp; average daily gain, feed programs, medications &amp; withdrawal, game plans, shows and record books. It tells your whole barn what needs to happen today and whether every animal is on track for show day.</p>
+      <div class="mk-cta">
+        <button class="mk-btn" data-openapp type="button">Get started free</button>
+        <a class="mk-btn ghost" href="features/game-plan.html">See the features</a>
+      </div>
+      <div class="mk-plat">iPhone · Android · Web · Works offline in the barn</div>
+    </div>
+  </header>
+
+  <section class="mk-section mk-wrap">
+    <h2>Everything your barn needs, in your pocket</h2>
+    <p class="lead">Plan → Do → Track → Adjust → Show. Not a record-keeping app — a command center for the whole operation.</p>
+    <div class="mk-grid">
+      <a class="mk-card" href="features/weights.html"><div class="ic">⚖️</div><h3>Weights &amp; ADG</h3><p>One-tap weigh-ins with automatic average daily gain, projected show weight, and the gain you still need to hit target — with anomaly checks so a bad weigh-in can't skew the story.</p></a>
+      <a class="mk-card" href="features/feed.html"><div class="ic">🌾</div><h3>Feed &amp; Feed Room</h3><p>Versioned feed programs that never erase history, plus a barn feed room that estimates daily use, days of supply, and builds your shopping list before you run out.</p></a>
+      <a class="mk-card" href="features/game-plan.html"><div class="ic">🎯</div><h3>Game Plan</h3><p>Set a target weight and show date and Show Team coaches every animal to it — required daily gain, projected finish, and an on-plan / behind / heavy read at a glance.</p></a>
+      <a class="mk-card" href="features/show-management.html"><div class="ic">🏆</div><h3>Show Mode</h3><p>Each show is a hub: readiness snapshot, a reusable packing list, and feed-to-pack math that figures exactly how much feed to load from each animal's ration.</p></a>
+      <a class="mk-card" href="features/record-books.html"><div class="ic">📗</div><h3>Record Books</h3><p>A career achievement record plus a readiness score that tells a 4-H or FFA family exactly what's still missing before the book is due — printable / save-as-PDF.</p></a>
+      <a class="mk-card" href="features/teams.html"><div class="ic">👥</div><h3>Team &amp; coaches</h3><p>Owners, exhibitors, coaches and helpers — with animal-level access, a recommend → review → accept flow, and an auto-generated weekly brief for every helper.</p></a>
+    </div>
+  </section>
+
+  <section class="mk-section">
+    <div class="mk-wrap">
+      <h2>Built for every species you show</h2>
+      <p class="lead">Species-specific IDs and workflows for the whole trailer.</p>
+      <div class="mk-species">
+        <a href="for-show-pigs.html">🐖 Show pigs</a>
+        <a href="for-show-lambs.html">🐑 Show lambs</a>
+        <a href="for-show-goats.html">🐐 Show goats</a>
+        <a href="for-show-cattle.html">🐄 Show cattle</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="mk-section mk-wrap">
+    <h2>Why families run on Show Team</h2>
+    <div class="mk-grid">
+      <div class="mk-card" style="cursor:default"><div class="ic">📵</div><h3>Works in the barn</h3><p>Offline-capable and mobile-first — big touch targets and a daylight Barn Mode for bright, gloves-on chores with spotty signal.</p></div>
+      <a class="mk-card" href="features/expenses.html"><div class="ic">💵</div><h3>True cost of gain</h3><p>Buy feed in bulk once; cost flows into every animal automatically from the rations they eat, so you always know cost per pound of gain and net.</p></a>
+      <div class="mk-card" style="cursor:default"><div class="ic">💊</div><h3>Show-safe meds</h3><p>Log a medication and Show Team tracks its withdrawal window, warning you when a show falls inside it. It never suggests doses — you enter those from the label or your vet.</p></div>
+    </div>
+  </section>
+
+  <section class="mk-final">
+    <div class="mk-wrap">
+      <h2>Your whole barn, dialed in.</h2>
+      <p class="lead">Free to start. Add your family, coaches and helpers when you're ready.</p>
+      <div class="mk-cta"><button class="mk-btn" data-openapp type="button">Open Show Team</button></div>
+    </div>
+  </section>
+
+  <footer class="mk-wrap mk-foot">
+    <img src="favicon-32.png" alt="" width="20" height="20" style="border-radius:5px">
+    <span>Show Team · Show-livestock management</span>
+    <span class="sp"></span>
+    <a href="features/weights.html">Weights</a>
+    <a href="features/feed.html">Feed</a>
+    <a href="features/game-plan.html">Game Plan</a>
+    <a href="features/show-management.html">Shows</a>
+    <a href="features/record-books.html">Record books</a>
+    <a href="features/teams.html">Teams</a>
+    <a href="privacy.html">Privacy</a>
+  </footer>
+</div>
+
 <div id="app"></div>
 <div class="scrim" id="scrim"></div>
 <div id="toast"></div>
-<script src="config.js"></script>
-<script src="vendor/supabase.js"></script>
-<script src="vendor/qr.js"></script>
-<script src="calc.js"></script>
-<script src="app.js"></script>
+
+<script>
+/* Boot decision: existing users, installed (standalone) apps, and deep links
+   go straight into the app; brand-new visitors and search-engine crawlers get
+   the static marketing homepage above. Loading the app scripts only when
+   needed keeps the landing page fast and crawlable. */
+(function(){
+  function wantApp(){
+    try{
+      if(location.hash.indexOf('#/')===0) return true;                 // deep link
+      if(/[?&]app\b/.test(location.search)) return true;               // ?app
+      if(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true; // installed
+      if(navigator.standalone) return true;                            // iOS installed
+      if(localStorage.getItem('dfst_db_v2')) return true;              // returning user
+    }catch(e){}
+    return false;
+  }
+  function boot(){
+    document.body.classList.add('app-booted');
+    var mk=document.getElementById('marketing'); if(mk) mk.parentNode.removeChild(mk);
+    ['config.js','vendor/supabase.js','vendor/qr.js','calc.js','app.js'].forEach(function(src){
+      var s=document.createElement('script'); s.src=src; s.async=false; document.body.appendChild(s);
+    });
+  }
+  window.__bootShowTeam=boot;
+  if(wantApp()){ boot(); }
+  else {
+    document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('[data-openapp]'); if(t){ e.preventDefault(); boot(); } });
+    window.addEventListener('hashchange',function(){ if(location.hash.indexOf('#/')===0) boot(); });
+  }
+})();
+</script>
 </body>
 </html>
