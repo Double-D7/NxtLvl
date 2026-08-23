@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://showteam.app/sitemap.xml
