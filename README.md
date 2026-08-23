@@ -26,7 +26,7 @@ marked and removable any time from **More → Remove demo data**.
 
 | Area | What it does |
 |------|--------------|
-| **Dashboard** | Active-animal & species counts, weekly weigh-in progress, next-show countdown, "Today in the Barn" tasks, attention-needed alerts (weight/ADG/target), recent media & feed changes, team activity. **Any weight/ADG alert can be reviewed and muted with a written reason** (e.g. "ulcer that week — treated, back on gain") — the note stays on the record and the alert automatically re-checks the next time you log a weight. |
+| **Today** (home) | The barn command center. A compact **Barn Pulse** answers "are we on track?" in five seconds — how many animals are **On plan / Watch / Critical**, how many **need weighed**, **tasks today**, and **days to the next show** — each tappable straight to what needs attention. Below it: weekly weigh-in progress, next-show countdown, "Today in the Barn" tasks, attention-needed alerts (weight/ADG/target), recent media & feed changes, team activity. On-plan status is real plan math (projected vs. target), **not** "who's gaining fastest." **Any weight/ADG alert can be reviewed and muted with a written reason** (e.g. "ulcer that week — treated, back on gain") — the note stays on the record and the alert automatically re-checks the next time you log a weight. |
 | **Animals** | Unlimited animals with rich profiles, search (name/tag/notch/breeder/sire/dam), filters, and **saved views**. Species-specific ID fields (ear notch for swine, scrapie for sheep/goats, registration/brand for cattle, RFID). |
 | **Animal profile** | Tabs: Overview · Weight · Feed · Media · Measurements · Health · Exercise · Shows · Pedigree · Expenses · Notes · History — plus a combined **timeline** so you can see how an animal changed after a feed or management adjustment. |
 | **Weights** | One-tap stepper entry, automatic **average daily gain** (period + lifetime), projected show weight, ADG-needed-to-hit-target, and an interactive chart with target/projected lines and feed/show markers. Range toggle (7/30/90/season). |
@@ -97,6 +97,8 @@ upgraded later (e.g. to per-record tables) without touching any screen. See the
 
 - `index.html` — app shell + styles
 - `app.js` — the entire application (data layer, `Cloud` sync module, router, views)
+- `calc.js` — **the single authoritative calculation core** (`STCalc`): ADG variants (last-weigh / rolling / lifetime / feed-program), required ADG, projected weight, human target-date states, cost-completeness, and plan status. Pure (no DOM/DB) so it's unit-tested in isolation; app.js's `Calc` wrappers feed it data from `DB`.
+- `tests/calc.test.mjs` — dependency-free unit tests for the calc core (same-day / missing / edited / backdated / deleted weights, feed-program boundaries, timezone edges, future & past targets). Run with `npm test`.
 - `config.js` — Supabase keys (empty = local-only; fill in to enable cloud)
 - `vendor/supabase.js` — vendored Supabase JS client (offline-capable)
 - `supabase/schema.sql` + `supabase/SETUP.md` — one-time cloud setup

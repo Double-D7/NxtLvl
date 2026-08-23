@@ -1,0 +1,8 @@
+{
+  "name": "showteam",
+  "private": true,
+  "description": "Show Team — show-livestock management PWA. Pure calculation core is tested; the app itself is a no-build single-page PWA.",
+  "scripts": {
+    "test": "node tests/calc.test.mjs"
+  }
+}
