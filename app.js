@@ -11,7 +11,7 @@
 /* width/height are set explicitly so iOS Safari doesn't fall back to a giant
    default size for viewBox-only SVGs; CSS rules (.btn svg, .iconbtn svg, …)
    still override these where a specific size is needed. */
-const I = (p, o) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="${(o&&o.w)||2}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const I = (p, o) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="${(o&&o.w)||2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${p}</svg>`;
 const ICON = {
   dash:I('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
   animals:I('<path d="M4 14c0-3 2-5 4-5m8 0c2 0 4 2 4 5"/><circle cx="7.5" cy="8" r="1.6"/><circle cx="16.5" cy="8" r="1.6"/><path d="M9 18c0-2 1.4-3 3-3s3 1 3 3-1.4 3-3 3-3-1-3-3z"/><path d="M5 19c-1.2 0-2-1-1.6-2M19 19c1.2 0 2-1 1.6-2"/>'),
@@ -629,8 +629,9 @@ let sheetStack=[];
 function openSheet({title, body, foot, onClose}){
   const scrim=$('#scrim');
   const sheet=el('div','sheet');
+  sheet.setAttribute('role','dialog'); sheet.setAttribute('aria-modal','true'); sheet.setAttribute('aria-label', title||'Dialog'); sheet.tabIndex=-1;
   sheet.innerHTML =
-    `<div class="sheet-head"><div class="grip"></div><button class="x" data-close>${ICON.x}</button><h3>${esc(title)}</h3></div>`+
+    `<div class="sheet-head"><div class="grip"></div><button class="x" data-close aria-label="Close">${ICON.x}</button><h3>${esc(title)}</h3></div>`+
     `<div class="sheet-body"></div>`+
     (foot?`<div class="sheet-foot"></div>`:'');
   $('.sheet-body',sheet).append(typeof body==='string'?htmlToFrag(body):body);
@@ -639,8 +640,9 @@ function openSheet({title, body, foot, onClose}){
   const rec={sheet,onClose};
   sheetStack.push(rec);
   scrim.classList.add('show');
-  requestAnimationFrame(()=>sheet.classList.add('show'));
+  requestAnimationFrame(()=>{ sheet.classList.add('show'); try{ sheet.focus({preventScroll:true}); }catch(e){} });
   sheet.querySelector('[data-close]').onclick=()=>closeSheet();
+  sheet.addEventListener('keydown', e=>{ if(e.key==='Escape'){ e.stopPropagation(); closeSheet(); } });
   return sheet;
 }
 function closeSheet(all){
@@ -745,7 +747,7 @@ function renderChrome(activeTop){
           <button class="iconbtn sync-badge" id="hSync" aria-label="Sync status" style="display:none"><span class="sync-dot"></span></button>
           <button class="iconbtn" id="hSearch" aria-label="Search">${ICON.search}</button>
           <button class="iconbtn" id="hBell" aria-label="Alerts">${ICON.bell}</button>
-          <button class="avatar" id="hMe">${esc(initials(me().name))}</button>
+          <button class="avatar" id="hMe" aria-label="Account and more">${esc(initials(me().name))}</button>
         </div></div></header>
       <main id="view"></main>
       <nav class="bottomnav"></nav>`;
@@ -757,7 +759,7 @@ function renderChrome(activeTop){
   const brand=el('div','nav-brand',`<div class="nav-brand-logo">${brandImg()}</div><div class="nav-brand-name">${esc(DB.team.name)}</div>`);
   brand.onclick=()=>go('/dashboard'); nav.appendChild(brand);
   NAV_MAIN.forEach(([id,label,icon])=>{
-    if(id==='__add'){ const b=el('button','navitem fab',`<span class="fab-btn">${icon}</span><span class="navlabel">Add entry</span>`); b.onclick=()=>openQuickAdd(); nav.appendChild(b); return; }
+    if(id==='__add'){ const b=el('button','navitem fab',`<span class="fab-btn">${icon}</span><span class="navlabel">Add entry</span>`); b.setAttribute('aria-label','Add entry'); b.onclick=()=>openQuickAdd(); nav.appendChild(b); return; }
     const b=el('button','navitem'+(activeTop===id?' active':''),`${icon}<span>${label}</span>`); b.onclick=()=>go('/'+id); nav.appendChild(b);
   });
 }
@@ -1420,7 +1422,7 @@ route('dashboard', ()=>{
     const g=el('div','gallery'); wrap.append(g);
     recentMedia.forEach(m=>{ const cell=el('div','g'); const a=getAnimal(m.animalId);
       cell.innerHTML=`<div class="tag">${esc(a?a.name:'')}</div>`+(m.kind==='video'?`<div class="play">${ICON.video}</div>`:'');
-      Media.url(m.blobId).then(u=>{ if(u){ if(m.kind==='video'){ const vd=el('video'); vd.src=u; vd.muted=true; cell.prepend(vd);} else { const im=el('img'); im.src=u; cell.prepend(im);} } });
+      Media.url(m.blobId).then(u=>{ if(u){ if(m.kind==='video'){ const vd=el('video'); vd.src=u; vd.muted=true; vd.preload='none'; vd.playsInline=true; cell.prepend(vd);} else { const im=el('img'); im.loading='lazy'; im.decoding='async'; im.alt='Progress photo'; im.src=u; cell.prepend(im);} } });
       cell.onclick=()=>go('/animal/'+m.animalId+'/media'); g.append(cell); });
   }
 
@@ -1630,9 +1632,9 @@ route('animal',(parts)=>{
     <div class="animal-hero">
       <div class="cover ph" data-cover>${a.profileMediaId?'':spIcon(a.species)}</div>
       <div class="ov"></div>
-      <button class="iconbtn no-print" style="position:absolute;left:12px;top:calc(var(--safe-t) + 8px);z-index:3" onclick="history.length>1?history.back():go('/animals')">${ICON.back}</button>
-      <button class="iconbtn no-print" style="position:absolute;right:12px;top:calc(var(--safe-t) + 8px);z-index:3" data-edit>${ICON.edit}</button>
-      <button class="iconbtn no-print" style="position:absolute;right:58px;top:calc(var(--safe-t) + 8px);z-index:3" data-share>${ICON.share}</button>
+      <button class="iconbtn no-print" aria-label="Back" style="position:absolute;left:12px;top:calc(var(--safe-t) + 8px);z-index:3" onclick="history.length>1?history.back():go('/animals')">${ICON.back}</button>
+      <button class="iconbtn no-print" aria-label="Edit animal" style="position:absolute;right:12px;top:calc(var(--safe-t) + 8px);z-index:3" data-edit>${ICON.edit}</button>
+      <button class="iconbtn no-print" aria-label="Share animal" style="position:absolute;right:58px;top:calc(var(--safe-t) + 8px);z-index:3" data-share>${ICON.share}</button>
       ${can('addRecord')?`<button class="no-print" data-setphoto style="position:absolute;right:12px;bottom:12px;z-index:3;display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.42);color:#fff;border:1px solid rgba(255,255,255,.35);padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:700;backdrop-filter:blur(4px)"><span style="width:16px;height:16px">${ICON.camera}</span>${a.profileMediaId?'Change photo':'Add photo'}</button>`:''}
       <div class="meta">
         <div style="display:flex;gap:8px;margin-bottom:6px"><span class="pill ${STATUS_COLOR[a.status]||'gray'}">${esc(a.status)}</span>${a.archived?'<span class="pill gray">Archived</span>':''}${a.demo?'<span class="pill" style="background:rgba(255,255,255,.2);color:#fff">Demo</span>':''}</div>
@@ -2187,7 +2189,7 @@ function mediaCell(m,a,opts){ const cell=el('div','g'); const d=m.captured||m.da
   cell.innerHTML=`<div class="tag" style="top:auto;bottom:5px;left:5px;background:rgba(0,0,0,.68)">${esc(fmtShort(d))}</div>`+
     ((opts&&opts.showName&&a&&a.name)?`<div class="tag" style="max-width:78%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</div>`:(m.view&&m.view!=='Profile'?`<div class="tag" style="left:auto;right:5px;background:rgba(139,92,246,.85)">${esc(m.view)}</div>`:''))+
     (m.kind==='video'?`<div class="play">${ICON.video}</div>`:'');
-  Media.url(m.blobId).then(u=>{ if(!u)return; const e=m.kind==='video'?el('video'):el('img'); e.src=u; if(m.kind==='video')e.muted=true; cell.prepend(e); });
+  Media.url(m.blobId).then(u=>{ if(!u)return; const e=m.kind==='video'?el('video'):el('img'); e.src=u; if(m.kind==='video'){e.muted=true;e.preload='none';e.playsInline=true;} else {e.loading='lazy';e.decoding='async';e.alt=(a&&a.name?a.name+' progress photo':'Progress photo');} cell.prepend(e); });
   cell.onclick=()=>openMediaViewer(m,a); return cell; }
 /* weight recorded on or before a date (for growth-timeline context) */
 function weightNear(animalId, dateISO){ const ws=weightsFor(animalId); if(!ws.length)return null; let best=null; ws.forEach(w=>{ if(w.date<=dateISO)best=w; }); return best?+best.weight:(+ws[0].weight); }
@@ -2370,7 +2372,7 @@ function drawCompare(box,a,items){
   const paint=()=>{ const A=photos.find(m=>m.id===$('#cmpA',box).value), B=photos.find(m=>m.id===$('#cmpB',box).value);
     const ic=$('#cmpImgs',box); ic.innerHTML=''; [A,B].forEach((m,i)=>{ const c=el('div'); c.style.cssText='border-radius:12px;overflow:hidden;background:var(--line-2);aspect-ratio:3/4;position:relative';
       c.innerHTML=`<div class="tag" style="position:absolute;left:6px;top:6px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;z-index:2">${i?'AFTER':'BEFORE'} · ${fmtShort(m.captured||m.date)}</div>`;
-      Media.url(m.blobId).then(u=>{ if(u){const im=el('img');im.src=u;im.style.cssText='width:100%;height:100%;object-fit:cover';c.prepend(im);} }); ic.append(c); });
+      Media.url(m.blobId).then(u=>{ if(u){const im=el('img');im.loading='lazy';im.decoding='async';im.alt='Progress photo';im.src=u;im.style.cssText='width:100%;height:100%;object-fit:cover';c.prepend(im);} }); ic.append(c); });
     const days=daysBetween(A.captured||A.date,B.captured||B.date);
     const wA=A.contextWeight!=null?+A.contextWeight:weightNear(a.id,A.captured||A.date), wB=B.contextWeight!=null?+B.contextWeight:weightNear(a.id,B.captured||B.date);
     const dw=(wA!=null&&wB!=null)?round(wB-wA,1):null; const adg=(dw!=null&&Math.abs(days)>0)?round(dw/Math.abs(days),2):null;

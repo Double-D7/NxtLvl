@@ -42,6 +42,10 @@ html,body{margin:0;padding:0}
 body{font-family:var(--sans);color:var(--ink);background:var(--bg);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none}
 .tnum{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+/* Keyboard-visible focus for accessibility (mouse/touch users don't see it) */
+:focus-visible{outline:2px solid var(--teal-2);outline-offset:2px;border-radius:6px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--teal-2);outline-offset:2px}
+.sheet:focus{outline:none}
 input,select,textarea{font-family:inherit;font-size:16px}
 a{color:var(--purple-3);text-decoration:none}
 h1,h2,h3,h4{margin:0;line-height:1.2}
@@ -465,7 +469,7 @@ body.app-booted #marketing{display:none!important}
 
 <div id="app"></div>
 <div class="scrim" id="scrim"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 /* Boot decision: existing users, installed (standalone) apps, and deep links
