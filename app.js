@@ -487,6 +487,23 @@ function feedProgramCost(f){ const d=feedProgramDays(f); return (feedDailyCost(f
 function feedCostForAnimal(id){ return feedFor(id).reduce((s,f)=>s+feedProgramCost(f),0); }
 // bedding cost attributed to one animal (per-animal, per-pen split, or barn=none)
 function beddingUseCost(b){ const pc=productCost(b.productId).perUnit; return pc!=null?(+b.qty||0)*pc:0; }
+/* Feed Room consumption: estimate daily lb used of each feed product across
+   every active animal's CURRENT ration. Only lb-convertible units count
+   (a "scoop" can't be turned into pounds without a density), so scoop/cup
+   supplements simply won't show a days-of-supply estimate. */
+function feedUsagePerDay(){ const usage={};
+  activeAnimals().forEach(a=>{ const cf=currentFeed(a.id); if(!cf)return;
+    (cf.meals||[]).forEach(m=>(m.items||[]).forEach(it=>{ if(!it.product)return;
+      const lb=toLb(it.amount, it.unit||'lb'); if(lb==null||!(lb>0))return;
+      const k=it.product.trim().toLowerCase(); usage[k]=(usage[k]||0)+lb; })); });
+  return usage; }
+const productUsagePerDay = p => feedUsagePerDay()[(p.product||'').trim().toLowerCase()]||0;
+function productSupply(p, usageMap){ const usage = usageMap ? (usageMap[(p.product||'').trim().toLowerCase()]||0) : productUsagePerDay(p);
+  const onHand = (p.onHand===''||p.onHand==null)?null:+p.onHand;
+  const bagSize = +p.bagSize||0;
+  return { usage, onHand,
+    daysLeft: (onHand!=null && usage>0) ? onHand/usage : null,
+    bags: (onHand!=null && bagSize>0) ? onHand/bagSize : null }; }
 function beddingCostForAnimal(id){ const a=getAnimal(id); if(!a)return 0; let sum=0;
   (DB.bedding||[]).forEach(b=>{ const c=beddingUseCost(b); if(!c)return;
     if(b.scope==='animal'&&b.animalId===id) sum+=c;
@@ -4212,7 +4229,7 @@ route('more',()=>{
       ${moreRow('medications',ICON.pill,'Medications')}
       ${moreRow('helpers',ICON.team,'Helpers')}
       ${moreRow('__breeds',ICON.dna,'Species & breeds')}
-      ${moreRow('costs',ICON.receipt,'Feed & bedding costs')}
+      ${moreRow('costs',ICON.receipt,'Feed Room — inventory & costs')}
       ${moreRow('__notif',ICON.bell,'Notifications')}
       ${moreRow('__settings',ICON.settings,'Team settings')}
     </div>
@@ -4718,8 +4735,10 @@ route('costs',()=>{
     const totFeedCost=active.reduce((s,a)=>s+feedCostForAnimal(a.id),0);
     const totGain=active.reduce((s,a)=>{const st=animalStats(a);return s+(st.gainTotal>0?st.gainTotal:0);},0);
     const cogFeed=totGain>0?totFeedCost/totGain:null;
-    wrap.innerHTML=`${pageHeader('Feed & bedding costs')}
-      <div class="help" style="margin-bottom:12px">${ICON.info}<span>Log what you <b>buy in bulk</b> and the app works out a cost per pound, then flows it into each animal automatically from the rations they're on — no need to hand-enter feed expenses.</span></div>
+    const usageMap=feedUsagePerDay();
+    const shopCount=feeds.filter(p=>{ const s=productSupply(p,usageMap); const lowByReorder=(p.reorder!=null&&p.reorder!=='')&&(+p.onHand||0)<=(+p.reorder||0); return (s.daysLeft!=null&&s.daysLeft<=14)||lowByReorder; }).length;
+    wrap.innerHTML=`${pageHeader('Feed Room', null, `<button class="btn primary sm" id="shopList">${ICON.receipt} Shopping${shopCount?` · ${shopCount}`:''}</button>`)}
+      <div class="help" style="margin-bottom:12px">${ICON.info}<span>Your barn's feed room. Log what you <b>buy in bulk</b> for automatic cost-per-pound, set what's <b>on hand</b>, and the app estimates <b>daily use</b> from active rations and <b>how many days each feed will last</b>.</span></div>
       <div class="grid g3">
         <div class="stat"><div class="k">Feed bought</div><div class="v tnum" style="font-size:18px">${money(feedSpend)}</div></div>
         <div class="stat"><div class="k">Bedding bought</div><div class="v tnum" style="font-size:18px">${money(bedSpend)}</div></div>
@@ -4732,8 +4751,15 @@ route('costs',()=>{
     // feed products
     const fl=$('#feedList',wrap);
     if(!feeds.length) fl.innerHTML='<div class="empty" style="padding:14px">No feed products yet. Add one, then log a bulk purchase to set its cost per pound.</div>';
-    else { const L=el('div','list'); feeds.forEach(p=>{ const pc=productCost(p.id); const low=(+p.onHand||0)<=(+p.reorder||0)&&(p.reorder!=null&&p.reorder!==''); const li=el('div','li');
-      li.innerHTML=`<div class="thumb" style="color:var(--teal-3)">${ICON.sack}</div><div class="main"><div class="t1">${esc(p.product)}${low?' <span class="pill warn" style="font-size:9px">low</span>':''}</div><div class="t2">${esc(p.brand||'')}${pc.perUnit!=null?' · '+money(pc.perUnit)+'/lb':' · no price yet'}${p.onHand?' · '+p.onHand+' lb on hand':''}</div></div><div class="r"><b class="tnum">${pc.totalCost?money(pc.totalCost):''}</b></div>`;
+    else { const L=el('div','list'); feeds.forEach(p=>{ const pc=productCost(p.id); const s=productSupply(p,usageMap);
+      const lowByReorder=(p.reorder!=null&&p.reorder!=='')&&(+p.onHand||0)<=(+p.reorder||0);
+      const out = s.daysLeft!=null && s.daysLeft<3;
+      const low = out || lowByReorder || (s.daysLeft!=null && s.daysLeft<=7);
+      const badge = out?' <span class="pill bad" style="font-size:9px">out soon</span>':(low?' <span class="pill warn" style="font-size:9px">low</span>':'');
+      const onHandStr = p.onHand!=null&&p.onHand!==''? p.onHand+' lb on hand'+(s.bags!=null?` (~${fracStr(round(s.bags,1))} bag${round(s.bags,1)===1?'':'s'})`:'') : '';
+      const supplyStr = s.usage>0 ? `${round(s.usage,1)} lb/day`+(s.daysLeft!=null?` · ~${Math.round(s.daysLeft)} days left`:'') : '';
+      const li=el('div','li');
+      li.innerHTML=`<div class="thumb" style="color:var(--teal-3)">${ICON.sack}</div><div class="main"><div class="t1">${esc(p.product)}${badge}</div><div class="t2">${[esc(p.brand||''), pc.perUnit!=null?money(pc.perUnit)+'/lb':'no price yet', onHandStr, supplyStr].filter(Boolean).join(' · ')}</div></div><div class="r"><b class="tnum">${pc.totalCost?money(pc.totalCost):''}</b></div>`;
       li.onclick=()=>openProductSheet(p.id); L.append(li); }); fl.append(L); }
     // bedding products
     const bl=$('#bedList',wrap);
@@ -4748,12 +4774,51 @@ route('costs',()=>{
       const who=b.scope==='animal'?(getAnimal(b.animalId)||{}).name||'animal':b.scope==='pen'?(b.pen||'Pen'):'Barn (overhead)';
       const li=el('div','li'); li.innerHTML=`<div class="thumb" style="color:var(--purple-3)">${ICON.shavings}</div><div class="main"><div class="t1">${b.qty} ${esc(p?p.unit||'bag':'bag')} · ${esc(who)}</div><div class="t2">${esc(p?p.product:'')} · ${fmtDate(b.date)}</div></div><div class="r"><b class="tnum">${c?money(c):''}</b></div>`;
       li.onclick=()=>openBeddingUseSheet(b.id); L.append(li); }); bu.append(L); }
+    if($('#shopList',wrap))$('#shopList',wrap).onclick=()=>openShoppingList(14);
     $('#addFeedP',wrap).onclick=()=>openProductSheet(null,'feed');
     $('#addBedP',wrap).onclick=()=>openProductSheet(null,'bedding');
     $('#logBed',wrap).onclick=()=>{ if(!beds.length){ toast('Add a bedding product first','bad'); openProductSheet(null,'bedding'); return; } openBeddingUseSheet(); };
   };
   window.__costsRedraw=draw; draw();
 });
+/* Shopping list: feed projected to run out within `days`, or below its reorder
+   point, with a suggested amount to buy (covering ~30 days). */
+function shoppingCandidates(days){ const usageMap=feedUsagePerDay(); const cover=30; const out=[];
+  feedProducts().forEach(p=>{ const s=productSupply(p,usageMap);
+    const lowByReorder=(p.reorder!=null&&p.reorder!=='')&&(+p.onHand||0)<=(+p.reorder||0);
+    const runningOut = s.daysLeft!=null && s.daysLeft<=days;
+    if(!runningOut && !lowByReorder) return;
+    const onHand=s.onHand||0; const needLb = s.usage>0 ? Math.max(0, s.usage*cover - onHand) : null;
+    const bagSize=+p.bagSize||0; const bags = (needLb!=null && bagSize>0) ? Math.ceil(needLb/bagSize) : null;
+    out.push({ p, s, needLb, bags, reason: runningOut && s.daysLeft!=null ? `~${Math.round(s.daysLeft)} days left` : 'below reorder point' }); });
+  return out.sort((a,b)=>((a.s.daysLeft==null?1e9:a.s.daysLeft)-(b.s.daysLeft==null?1e9:b.s.daysLeft))); }
+function shoppingListText(days){
+  const items=shoppingCandidates(days);
+  const lines=[`${DB.team.name} — Feed shopping list`, `Projected within ${days} days · ${new Date().toLocaleDateString()}`, ''];
+  if(!items.length){ lines.push('Nothing running low — all feeds have more than '+days+' days of supply.'); return lines.join('\n')+'\n'; }
+  items.forEach(({p,s,needLb,bags})=>{
+    let buy = bags!=null ? `buy ~${bags} bag${bags===1?'':'s'}` : (needLb!=null&&needLb>0?`buy ~${Math.round(needLb)} lb`:'restock');
+    lines.push(`• ${p.product}${p.brand?' ('+p.brand+')':''} — ${buy}`);
+    lines.push(`   ${p.onHand!=null&&p.onHand!==''?p.onHand+' lb on hand':'on hand not set'}${s.usage>0?` · ${round(s.usage,1)} lb/day${s.daysLeft!=null?` · ~${Math.round(s.daysLeft)} days left`:''}`:''}`);
+  });
+  return lines.join('\n')+'\n';
+}
+function openShoppingList(days){ days=days||14;
+  const body=el('div');
+  const render=()=>{ body.innerHTML=`
+    <div class="help">${ICON.info}<span>Feeds projected to run out within the window below (from estimated daily use) or already below their reorder point. Buy amounts cover about 30 days. Adjust <b>on hand</b> anytime in a product.</span></div>
+    <div class="field"><label>Run-out window (days)</label><input class="control" type="number" inputmode="numeric" id="slDays" value="${days}"></div>
+    <textarea class="control" id="slText" style="min-height:240px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.5;white-space:pre">${esc(shoppingListText(days))}</textarea>`;
+    $('#slDays',body).onchange=()=>{ days=Math.max(1,+$('#slDays',body).value||14); $('#slText',body).value=shoppingListText(days); };
+  };
+  render();
+  const foot=el('div'); foot.innerHTML=`<button class="btn" data-copy style="flex:1">${ICON.copy} Copy</button><button class="btn primary" data-share style="flex:1">${ICON.share} Share</button>`;
+  const sh=openSheet({title:'Shopping list',body,foot});
+  const txt=()=>$('#slText',body).value;
+  const copy=async()=>{ try{ await navigator.clipboard.writeText(txt()); toast('Copied','good'); }catch(e){ const ta=$('#slText',body); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} toast('Copied','good'); } };
+  $('[data-copy]',sh).onclick=copy;
+  $('[data-share]',sh).onclick=async()=>{ const t=txt(); if(navigator.share){ try{ await navigator.share({text:t}); }catch(e){} } else copy(); };
+}
 function openProductSheet(id, category){
   const p=id?{...(DB.inventory||[]).find(x=>x.id===id)}:{product:'',brand:'',category:category||'feed',unit:category==='bedding'?'bag':'lb',onHand:'',reorder:''};
   const isBed=p.category==='bedding';
@@ -4767,6 +4832,7 @@ function openProductSheet(id, category){
         <div class="field" style="flex:1"><label>${isBed?'Unit':'Base unit'}</label><select class="control" id="pUnit">${(isBed?BEDDING_UNITS:['lb']).map(u=>`<option ${p.unit===u?'selected':''}>${u}</option>`).join('')}</select></div></div>
       <div class="field-row"><div class="field" style="flex:1"><label>On hand (${isBed?(p.unit||'bag'):'lb'})</label><input class="control" type="number" inputmode="decimal" id="pOnHand" value="${p.onHand??''}"></div>
         <div class="field" style="flex:1"><label>Reorder at</label><input class="control" type="number" inputmode="decimal" id="pReorder" value="${p.reorder??''}"></div></div>
+      ${!isBed?`<div class="field"><label>Bag size (lb) <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">— for “X bags on hand” &amp; shopping math</span></label><input class="control" type="number" inputmode="decimal" id="pBagSize" value="${p.bagSize??''}" placeholder="e.g. 50"></div>`:''}
       ${id?`<div class="card pad" style="background:var(--line-2);border:none;margin-bottom:10px"><div style="display:flex;justify-content:space-around;text-align:center"><div><div style="font-size:11px;color:var(--muted);font-weight:700">COST / ${isBed?(p.unit||'BAG').toUpperCase():'LB'}</div><div style="font-weight:800;font-size:17px" class="tnum">${pc.perUnit!=null?money(pc.perUnit):'—'}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">TOTAL SPENT</div><div style="font-weight:800;font-size:17px" class="tnum">${money(pc.totalCost)}</div></div><div><div style="font-size:11px;color:var(--muted);font-weight:700">PURCHASED</div><div style="font-weight:800;font-size:17px" class="tnum">${round(pc.totalQty,0)} ${isBed?(p.unit||'bag'):'lb'}</div></div></div></div>
       <div class="section-title" style="margin-top:4px">Purchase lots <button class="more" id="addLot">+ Bulk buy</button></div>
       <div id="lotList"></div>`:'<div class="help">'+ICON.info+'<span>Save the product, then add your bulk purchases to set a cost per '+(isBed?(p.unit||'bag'):'pound')+'.</span></div>'}`;
@@ -4782,6 +4848,7 @@ function openProductSheet(id, category){
   const foot=el('div'); foot.innerHTML=`${id?`<button class="btn danger" data-del>${ICON.trash}</button>`:''}<button class="btn primary" data-save style="flex:1">${id?'Save product':'Add product'}</button>`;
   const sh=openSheet({title:id?'Edit product':(isBed?'New bedding product':'New feed product'),body,foot});
   $('[data-save]',sh).onclick=()=>{ const data={product:$('#pName',body).value.trim(),brand:$('#pBrand',body).value.trim(),category:p.category,unit:$('#pUnit',body).value,onHand:$('#pOnHand',body).value===''?null:+$('#pOnHand',body).value,reorder:$('#pReorder',body).value===''?null:+$('#pReorder',body).value};
+    if($('#pBagSize',body)) data.bagSize = $('#pBagSize',body).value===''?null:+$('#pBagSize',body).value;
     if(!data.product){toast('Name the product','bad');return;}
     if(id){Object.assign((DB.inventory).find(x=>x.id===id),data);}else{const nid=uid('inv');DB.inventory.push(stamp({id:nid,...data}));} save(); toast('Saved','good');
     if(!id){ closeSheet(); openProductSheet((DB.inventory[DB.inventory.length-1]).id); } // reopen to add lots
