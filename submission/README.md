@@ -8,24 +8,30 @@ Everything you need to submit Show Team to the App Store, in one folder.
 
 ## What's inside
 ```
-ShowTeam-AppStore/
+submission/
 ├── README.md                     ← you are here
-├── App-Store-Listing.md          ← all listing copy (name, subtitle, description, keywords, review notes)
-├── Submission-Checklist.md       ← step-by-step submission walkthrough
-└── screenshots/
-    └── ios-6.7-inch/             ← 6 screenshots, 1290×2796, upload in numbered order
-        ├── 01-today.png
-        ├── 02-game-plan.png
-        ├── 03-barn-mode.png
-        ├── 04-feed-room.png
-        ├── 05-coach-scorecard.png
-        └── 06-show-ready.png
+│
+├── App-Store-Listing.md          ← iOS listing copy (name, subtitle, description, keywords, review notes)
+├── Submission-Checklist.md       ← iOS step-by-step walkthrough
+├── screenshots/ios-6.7-inch/     ← 6 iOS screenshots, 1290×2796, numbered order
+│
+└── google-play/                  ← Android kit
+    ├── Play-Store-Listing.md         ← Play listing copy (short + full description)
+    ├── Play-Submission-Checklist.md  ← Play step-by-step walkthrough
+    ├── graphics/                     ← app icon 512×512 + feature graphic 1024×500
+    └── screenshots/phone/            ← 6 Play screenshots, 1440×2796 (Play-safe ratio)
 ```
 
 ## Start here
+**For the App Store (iOS):**
 1. Open **Submission-Checklist.md** and work top to bottom.
-2. Copy fields from **App-Store-Listing.md** into App Store Connect as you go.
-3. Upload the screenshots from **screenshots/ios-6.7-inch/** in numbered order.
+2. Copy fields from **App-Store-Listing.md** into App Store Connect.
+3. Upload screenshots from **screenshots/ios-6.7-inch/** in numbered order.
+
+**For Google Play (Android):**
+1. Open **google-play/Play-Submission-Checklist.md**.
+2. Copy fields from **google-play/Play-Store-Listing.md** into the Play Console.
+3. Upload graphics + screenshots from **google-play/**.
 
 ## Two things still needed from you
 - A **demo account** (`demo@showteam.app` + password) with sample data — biggest cause of rejection for apps with a login.
