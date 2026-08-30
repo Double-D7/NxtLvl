@@ -2,7 +2,7 @@
   "name": "Show Team",
   "short_name": "Show Team",
   "description": "Show livestock management — animals, weights, feed history, progress media and shows.",
-  "start_url": ".",
+  "start_url": "./?app=1",
   "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
