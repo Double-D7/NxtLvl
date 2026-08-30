@@ -71,6 +71,13 @@ screenshots; you have 6.
 
 ---
 
+## App access (reviewer login — required because the app has a login)
+Provide these under **Policy → App content → App access → All or some functionality is restricted**:
+- Email: demo@showteam.app
+- Password: ShowTeam#Demo2026
+
+See `../demo-account/README.md` for how the demo account is built.
+
 ## Categorization & contact
 - App or game: **App**
 - Category: **Lifestyle** (or Productivity)

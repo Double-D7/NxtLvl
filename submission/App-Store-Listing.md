@@ -74,7 +74,7 @@ Show Team is a livestock-management app for youth/family show operations (4-H / 
 
 Demo account:
 Email: demo@showteam.app
-Password: [SET THIS BEFORE SUBMITTING]
+Password: ShowTeam#Demo2026
 
 Notes for review:
 - Login is email + password only. Sign in with Apple is not offered because the app does not use any third-party social login (Guideline 4.8 does not apply).
