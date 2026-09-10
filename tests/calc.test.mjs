@@ -114,5 +114,38 @@ eq('plan: target today still evaluates (dLeft 0 is a live plan)',
   C.planStatus({ curW: 312, startW: 60, startD: '2026-04-01', targetW: 315, targetD: today, todayISO: today, rangeLow: 305, rangeHigh: 325 }).state,
   'onplan');
 
+/* ---------- hairScore / hairReviewFlags (Denver Hair & Hide) ---------- */
+// all 5s, perfect hydration, no problems → 100
+eq('hair: perfect coat → 100',
+  C.hairScore({ hair: { density: 5, length: 5, softness: 5, shine: 5, evenness: 5 }, skin: { hydration: 5 } }).score, 100);
+// all 1s → 0
+eq('hair: worst coat → 0',
+  C.hairScore({ hair: { density: 1, length: 1, softness: 1, shine: 1, evenness: 1 }, skin: { hydration: 1 } }).score, 0);
+// all 3s → midpoint 50 (3 maps to 50 on both coat and skin)
+eq('hair: all 3s → 50',
+  C.hairScore({ hair: { density: 3, length: 3, softness: 3, shine: 3, evenness: 3 }, skin: { hydration: 3 } }).score, 50);
+// nothing quantifiable recorded → null (no bogus number)
+eq('hair: empty → null', C.hairScore({}), null);
+eq('hair: only qualitative flags → null', C.hairScore({ flaking: 'severe', scratching: true }), null);
+// coat-only (no hydration) still scores off the coat side
+eq('hair: coat only, no skin → coat score',
+  C.hairScore({ hair: { density: 5, length: 5, softness: 5, shine: 5, evenness: 5 } }).score, 100);
+// a partial coat (missing ratings ignored) averages what's present
+eq('hair: partial coat averaged',
+  C.hairScore({ hair: { density: 5, length: 1 } }).score, 50); // (100+0)/2
+// penalties pull a good coat down and never below 0
+ok('hair: severe problems penalize a strong coat',
+  C.hairScore({ hair: { density: 5, length: 5, softness: 5, shine: 5, evenness: 5 }, skin: { hydration: 5 }, flaking: 'severe', redness: 'severe' }).score < 100);
+eq('hair: penalties clamp at 0',
+  C.hairScore({ hair: { density: 1, length: 1, softness: 1, shine: 1, evenness: 1 }, skin: { hydration: 1 }, lesions: true, parasites: true, hairLoss: 'heavy' }).score, 0);
+// review flags: moderate/severe skin, hair loss, or any boolean concern
+eq('hair review: clean → no flags', C.hairReviewFlags({ flaking: 'mild', hairLoss: 'none' }), []);
+eq('hair review: moderate flaking flags', C.hairReviewNeeded({ flaking: 'moderate' }), true);
+eq('hair review: heavy hair loss flags', C.hairReviewNeeded({ hairLoss: 'heavy' }), true);
+eq('hair review: parasites flag', C.hairReviewNeeded({ parasites: true }), true);
+eq('hair review: scratching flag', C.hairReviewNeeded({ scratching: true }), true);
+ok('hair review: score carries the review bool',
+  C.hairScore({ hair: { density: 4 }, parasites: true }).review === true);
+
 console.log(`\ncalc.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

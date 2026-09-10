@@ -157,10 +157,68 @@
     return { state: 'onplan', label: 'On plan' };
   }
 
+  /* ---- Hair & Hide program: coat-quality score + review flag ----
+     A weekly Hair/Hide inspection is a HUMAN read (like the scorecard) — the app
+     never grades an animal on its own. hairScore just rolls the coach's own 1-5
+     ratings into a single 0-100 trend number so progress is visible over a season.
+       • coat = mean of the five 1-5 coat ratings (density,length,softness,shine,
+         evenness), mapped 1→0 / 5→100. Missing ratings are ignored.
+       • skin = hydration (1-5) mapped the same way.
+       • raw   = 0.7·coat + 0.3·skin  (falls back to whichever side was assessed).
+       • penalties subtract for recorded skin/coat problems so a long but
+         unhealthy coat can't post a top score.
+     Returns null when nothing quantifiable was recorded (no bogus number). */
+  const HAIR_KEYS = ['density', 'length', 'softness', 'shine', 'evenness'];
+  const SEV3 = { none: 0, mild: 3, moderate: 7, severe: 12 };   // flaking/redness/irritation
+  const LOSS = { none: 0, mild: 3, moderate: 8, heavy: 15 };    // hair loss / shedding
+  const clamp100 = n => Math.max(0, Math.min(100, n));
+  const map5to100 = v => { v = num(v); return v == null ? null : ((Math.max(1, Math.min(5, v)) - 1) / 4) * 100; };
+  const sev = (map, v) => (v == null ? 0 : (map[String(v).toLowerCase()] || 0));
+
+  // Which recorded findings warrant a human "review this hide" flag — never a
+  // diagnosis, just a prompt to look closer (skin disease, parasites, nutrition…).
+  function hairReviewFlags(insp) {
+    insp = insp || {};
+    const out = [];
+    const bad = v => v != null && ['moderate', 'severe'].includes(String(v).toLowerCase());
+    if (bad(insp.flaking)) out.push('flaking');
+    if (bad(insp.redness)) out.push('redness');
+    if (bad(insp.irritation)) out.push('irritation');
+    if (insp.hairLoss != null && ['moderate', 'heavy'].includes(String(insp.hairLoss).toLowerCase())) out.push('hair loss');
+    if (insp.scratching === true) out.push('scratching');
+    if (insp.lesions === true) out.push('lesions');
+    if (insp.parasites === true) out.push('parasite concern');
+    return out;
+  }
+  const hairReviewNeeded = insp => hairReviewFlags(insp).length > 0;
+
+  function hairScore(insp) {
+    insp = insp || {};
+    const hair = insp.hair || {};
+    const coatVals = HAIR_KEYS.map(k => map5to100(hair[k])).filter(v => v != null);
+    const coat = coatVals.length ? coatVals.reduce((s, v) => s + v, 0) / coatVals.length : null;
+    const skin = map5to100((insp.skin && insp.skin.hydration) != null ? insp.skin.hydration : insp.hydration);
+    let base;
+    if (coat != null && skin != null) base = 0.7 * coat + 0.3 * skin;
+    else if (coat != null) base = coat;
+    else if (skin != null) base = skin;
+    else return null;
+    const penalty = sev(SEV3, insp.flaking) + sev(SEV3, insp.redness) + sev(SEV3, insp.irritation)
+      + sev(LOSS, insp.hairLoss) + (insp.scratching === true ? 5 : 0)
+      + (insp.lesions === true ? 8 : 0) + (insp.parasites === true ? 8 : 0);
+    const flags = hairReviewFlags(insp);
+    return {
+      score: Math.round(clamp100(base - penalty)),
+      coat: coat == null ? null : round(coat), skin: skin == null ? null : round(skin),
+      penalty, review: flags.length > 0, flags,
+    };
+  }
+
   return {
     DAY, isISO, parseD, round, daysBetween, normWeights,
     lastWeighAdg, rollingAdg, lifetimeAdg, programAdg,
     requiredAdg, projectedWeight, targetState,
     feedCostCompleteness, costPerLbGain, planStatus, PLAN_DEFAULTS,
+    hairScore, hairReviewNeeded, hairReviewFlags, HAIR_KEYS,
   };
 });

@@ -29,6 +29,13 @@ jobs:
         with:
           enablement: true
 
+      # Keep non-site files out of the public deploy. These are useful in the
+      # repo (submission kits, tests, DB schema, dev scripts) but must not be
+      # served at showteam.app — the submission kit in particular contains the
+      # demo-account password. Runs on the ephemeral checkout only.
+      - name: Prune non-site files from the Pages artifact
+        run: rm -rf submission tests scripts supabase README.md package.json package-lock.json
+
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
