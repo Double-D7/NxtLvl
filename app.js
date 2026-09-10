@@ -273,7 +273,7 @@ function blankDB(){
     health:[], shows:[], entries:[], tasks:[], notes:[], expenses:[], income:[],
     relatives:[], recs:[], activity:[], savedViews:[], shares:[], inventory:[],
     layovers:[], care:[], helpers:[], events:[], purchases:[], bedding:[], milestones:{},
-    meds:[], medLog:[], alertAcks:{}, fedLog:{}, evals:[],
+    meds:[], medLog:[], alertAcks:{}, fedLog:{}, evals:[], programs:[], inspections:[],
     notifPrefs:{ weightDue:true, missingPhoto:true, upcomingShow:true, health:true, advisor:true, mentions:true,
       quietOn:false, quietStart:'21:00', quietEnd:'06:00' },
     // Configurable plan-status thresholds (lb). Drives On-Plan classification.
@@ -408,6 +408,9 @@ const Calc = {
   },
   // Feed cost with an explicit completeness signal (never implies certainty).
   feedCost(f){ const dc=feedDailyCost(f); const cc=STCalc.feedCostCompleteness(dc.cost, dc.uncosted.length); return { ...cc, cost:dc.cost, uncosted:dc.uncosted }; },
+  // Hair & Hide coat score (pure) — a coach's own ratings rolled to 0-100.
+  hairScore(insp){ return STCalc.hairScore(insp); },
+  hairReviewFlags(insp){ return STCalc.hairReviewFlags(insp); },
 };
 function weightAlerts(a){
   const s=animalStats(a); const out=[];
@@ -4389,6 +4392,7 @@ route('more',()=>{
     <div class="list">
       ${moreRow('team',ICON.team,'Team & members')}
       ${moreRow('coach',ICON.target,'Game Plan')}
+      ${moreRow('programs',ICON.check,'Prep Programs — Hair &amp; Hide')}
       ${moreRow('records',ICON.medal,'Record Book')}
       ${moreRow('season',ICON.trend,'Season Review')}
       ${moreRow('reports',ICON.reports,'Reports & analytics')}
@@ -5235,6 +5239,311 @@ function openBeddingUseSheet(id){
     const p=(DB.inventory||[]).find(x=>x.id===data.productId); if(p&&!id){ p.onHand=Math.max(0,(+p.onHand||0)-qty); }
     save(); closeSheet(); toast('Bedding logged','good'); if(window.__costsRedraw)window.__costsRedraw(); };
   if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete','Remove this bedding entry?','Delete',true)){ DB.bedding=DB.bedding.filter(x=>x.id!==id); save(); closeSheet(); if(window.__costsRedraw)window.__costsRedraw(); } };
+}
+
+/* ===================================================================
+   PREP PROGRAMS — a named, dated, phased routine applied to a set of
+   animals. Reuses existing primitives: the routine becomes recurring
+   TASKS (so it flows into Today + Barn Mode), the daily supplement is
+   folded into each animal's AM/PM FEED meals, and the weekly Hair/Hide
+   check is a structured INSPECTION scored by the pure calc core.
+   Nothing here diagnoses — problem findings only FLAG a hide for review.
+   =================================================================== */
+const PROGRAM_TEMPLATES = {
+  hairhide: {
+    key:'hairhide', name:'Hair & Hide', icon:'✂️',
+    subtitle:'Maximum healthy hair + a clean, hydrated hide into show day',
+    species:'swine', defaultDurationDays:131, washDay:6 /*Sat*/,
+    goal:'Maximum healthy hair density and length while maintaining exceptionally clean, hydrated, smooth skin.',
+    supplement:{ product:'Melatonin-Free Yeti', amount:0.5, unit:'Tbsp' },
+    dailyAM:{ title:'AM — skin & hair check + clean, dry bedding' },
+    dailyPM:{ title:'PM — dry brush + Pig Shag' },
+    nonNegotiables:[
+      'Consistency beats intensity — ½ Tbsp Yeti every AM + ½ Tbsp every PM.',
+      'Protect the hide — a water rinse is NOT a shampoo; don’t strip natural oils.',
+      'Protect the hair — no routine body clipping.',
+      'Don’t chase problems with products — irritated skin gets evaluated, not covered up.',
+      'Final 10-day lockout — no untested products.',
+      'Show rules override the program — only NWSS-permitted grooming products at the show.',
+    ],
+    routine:{
+      am:['Feed prescribed ration (Yeti is folded into the AM feed)','Confirm Yeti is thoroughly mixed in','Quick skin/hair check — dandruff, redness, rubbing, hair loss','Bedding clean and dry; remove wet/dirty bedding'],
+      pm:['Feed prescribed ration (Yeti folded into the PM feed)','Dry brush 5–10 min, working out dirt/dead skin','Brush hair back/down with its natural lay','Plain-water rinse only if dirty/dusty','Apply Pig Shag down to the skin, final brush, leave it in','Check bedding before leaving'],
+      wash:['Dry brush thoroughly','Wet completely, apply mild swine shampoo','Work down to the hide, then rinse extremely thoroughly','Inspect exposed skin while wet','Partial dry → Pig Shag → brush','Fresh, dry bedding'],
+      showday:['Check NWSS grooming/product rules FIRST','Remove manure/dirt; water rinse only if necessary','Dry thoroughly, brush the coat','Clean up face/ears/tail if needed','Only NWSS-permitted products; final brush with the natural lay'],
+    },
+  },
+};
+const inspectionsFor = (animalId, programId) => (DB.inspections||[])
+  .filter(x=>x.animalId===animalId && (!programId||x.programId===programId))
+  .sort((a,b)=>(a.date||'')<(b.date||'')?-1:1);
+const activePrograms = () => (DB.programs||[]).filter(p=>p.status!=='archived');
+const programsForAnimal = id => activePrograms().filter(p=>(p.animalIds||[]).includes(id));
+const getProgram = id => (DB.programs||[]).find(p=>p.id===id);
+
+function computePhases(startISO, showISO){
+  const D=showISO, lastDay=addDaysISO(D,-1);
+  const p=[
+    {key:'foundation', name:'Foundation', objective:'Establish healthy skin and a consistent daily groom.', start:startISO, end:addDaysISO(startISO,34)},
+    {key:'growth', name:'Maximum Growth', objective:'Grow and preserve as much healthy hair as possible.', start:addDaysISO(startISO,35), end:addDaysISO(D,-50)},
+    {key:'hairhide', name:'Hair + Hide', objective:'Keep the hair — now protect the skin underneath it.', start:addDaysISO(D,-49), end:addDaysISO(D,-19)},
+    {key:'prep', name:'Denver Prep', objective:'Individual fitting evaluation — don’t change the program automatically.', start:addDaysISO(D,-18), end:addDaysISO(D,-11)},
+    {key:'final10', name:'Final 10 Days', objective:'Shift from growing to PROTECTING. Lockout — no new products.', start:addDaysISO(D,-10), end:lastDay},
+  ];
+  let prevEnd=null;
+  p.forEach(ph=>{ if(ph.start<startISO)ph.start=startISO; if(ph.end>lastDay)ph.end=lastDay;
+    if(prevEnd && ph.start<=prevEnd) ph.start=addDaysISO(prevEnd,1);
+    if(ph.end<ph.start)ph.end=ph.start; prevEnd=ph.end; });
+  return p;
+}
+function programPhaseOn(program, iso){
+  if(!program) return null;
+  if(iso<program.startDate) return {key:'pending', name:'Not started', objective:''};
+  if(program.showDate && iso>program.showDate) return {key:'done', name:'Program complete', objective:''};
+  if(program.showDate && iso===program.showDate) return {key:'show', name:'Show day', objective:'Only NWSS-permitted products enter the ring.'};
+  return (program.phases||[]).find(p=>iso>=p.start&&iso<=p.end) || {key:'active', name:'Active', objective:''};
+}
+function nextWeekdayISO(fromISO, weekday){ let d=fromISO,g=0; while(g++<7){ if(new Date(d+'T00:00:00').getDay()===weekday) return d; d=addDaysISO(d,1); } return fromISO; }
+function monthlyDatesOnDay(startISO, endISO, dom){ const out=[]; let y=+startISO.slice(0,4), m=+startISO.slice(5,7);
+  for(let i=0;i<24;i++){ const iso=`${y}-${String(m).padStart(2,'0')}-${String(dom).padStart(2,'0')}`;
+    if(iso>=startISO && iso<=endISO) out.push(iso); if(iso>endISO && iso.slice(5)!==startISO.slice(5)) break;
+    m++; if(m>12){m=1;y++;} }
+  return out; }
+function injectSupplement(animalId, tpl, programId){
+  const sup=tpl.supplement; if(!sup) return;
+  let cf=currentFeed(animalId);
+  if(!cf){ cf=stamp({id:uid('f'), animalId, name:'Base ration', objective:'Growth', startDate:todayISO(), endDate:null,
+    meals:[{time:'AM',items:[]},{time:'PM',items:[]}], by:DB.currentUserId, fromProgram:programId}); DB.feed.push(cf); }
+  const wantAM=/\bam\b|morning/i, wantPM=/\bpm\b|evening|night/i;
+  const addTo=meal=>{ if(!meal)return; meal.items=meal.items||[];
+    if(meal.items.some(it=>it.fromProgram===programId && it.product===sup.product)) return;
+    meal.items.push({product:sup.product, amount:sup.amount, unit:sup.unit, fromProgram:programId}); };
+  let am=(cf.meals||[]).find(m=>wantAM.test(m.time||'')) || cf.meals[0];
+  let pm=(cf.meals||[]).find(m=>wantPM.test(m.time||''));
+  if(!pm) pm=(cf.meals||[]).slice().reverse().find(m=>m!==am)||null;
+  addTo(am); if(pm && pm!==am) addTo(pm);
+  touch(cf);
+}
+function addProgramTask(programId, animalIds, title, dateISO, recur, time, extra){
+  DB.tasks.push(stamp(Object.assign({ id:uid('t'), title, animalIds:[...animalIds], date:dateISO,
+    recur:recur||null, time:time||'', priority:(extra&&extra.priority)||'Normal', programId }, extra||{})));
+}
+function applyProgramTemplate(tplKey, animalIds, startISO, showISO){
+  const tpl=PROGRAM_TEMPLATES[tplKey]; if(!tpl || !animalIds.length) return null;
+  const program=stamp({ id:uid('prog'), key:tplKey, name:tpl.name, subtitle:tpl.subtitle, goal:tpl.goal,
+    nonNegotiables:tpl.nonNegotiables.slice(), routine:tpl.routine, animalIds:[...animalIds],
+    startDate:startISO, showDate:showISO||null, phases:showISO?computePhases(startISO,showISO):[], status:'active', by:DB.currentUserId });
+  DB.programs.push(program);
+  animalIds.forEach(id=>injectSupplement(id, tpl, program.id));
+  addProgramTask(program.id, animalIds, tpl.dailyAM.title, startISO, 'daily', 'AM');
+  addProgramTask(program.id, animalIds, tpl.dailyPM.title, startISO, 'daily', 'PM');
+  addProgramTask(program.id, animalIds, 'Wash day — mild shampoo', nextWeekdayISO(startISO, tpl.washDay==null?6:tpl.washDay), 'weekly', '', {washPrompt:true});
+  addProgramTask(program.id, animalIds, 'Hair/Hide inspection', nextWeekdayISO(startISO,0), 'weekly', '', {inspectionPrompt:true});
+  if(showISO){
+    monthlyDatesOnDay(startISO, showISO, 10).forEach(d=>addProgramTask(program.id, animalIds, 'Monthly hair & hide photos', d, null, '', {photoPrompt:true}));
+    addProgramTask(program.id, animalIds, 'Denver fitting review', addDaysISO(showISO,-14), null, '', {fittingPrompt:true, priority:'High'});
+    addProgramTask(program.id, animalIds, 'Final thorough wash (48h out)', addDaysISO(showISO,-2), null, '', {priority:'High'});
+    addProgramTask(program.id, animalIds, '24h check — preserve, no deep clean', addDaysISO(showISO,-1), null, '', {priority:'High'});
+    addProgramTask(program.id, animalIds, 'Show-day grooming — check NWSS rules first', showISO, null, '', {priority:'High'});
+  }
+  logAct('program','Started program: '+tpl.name);
+  save(); return program;
+}
+function removeProgram(id){
+  DB.programs=(DB.programs||[]).filter(p=>p.id!==id);
+  DB.tasks=(DB.tasks||[]).filter(t=>t.programId!==id);
+  (DB.feed||[]).forEach(f=>(f.meals||[]).forEach(m=>{ m.items=(m.items||[]).filter(it=>it.fromProgram!==id); }));
+  DB.feed=(DB.feed||[]).filter(f=>!(f.fromProgram===id && (f.meals||[]).every(m=>!(m.items||[]).length)));
+  save();
+}
+function ensureReviewTask(animalId, programId, flags){
+  const a=getAnimal(animalId); const title='⚠️ Hair/Hide review — '+((a&&a.name)||'animal');
+  const open=(DB.tasks||[]).find(t=>t.programId===programId && t.reviewFor===animalId && !taskDoneOn(t,todayISO()));
+  if(open) return;
+  DB.tasks.push(stamp({ id:uid('t'), title, animalIds:[animalId], date:todayISO(), priority:'High',
+    programId, reviewFor:animalId, note:'Flagged: '+flags.join(', ')+'. Look closer — skin disease, parasites, irritation or nutrition, not just more product.' }));
+}
+/* tiny 0-100 sparkline from an animal's hair scores over time */
+function hairSparkline(insps, w, h){ w=w||220; h=h||46;
+  const pts=insps.map(i=>i.score).filter(s=>s!=null);
+  if(pts.length<2) return '';
+  const max=100, min=0, n=pts.length;
+  const xy=pts.map((s,i)=>[ Math.round(i/(n-1)*(w-6))+3, Math.round(h-3-((s-min)/(max-min))*(h-6)) ]);
+  const d=xy.map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block"><path d="${d}" fill="none" stroke="var(--purple-3)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${xy.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="2.4" fill="var(--purple-3)"/>`).join('')}</svg>`;
+}
+
+const HAIR_5 = ['density','length','softness','shine','evenness'];
+const SEV3_OPTS = ['none','mild','moderate','severe'];
+const LOSS_OPTS = ['none','mild','moderate','heavy'];
+function openInspectionSheet(programId, animalId, inspId){
+  if(!can('addRecord')&&!can('comment')){ toast('Your role can’t add inspections','bad'); return; }
+  const editing=!!inspId;
+  const e = editing ? {...(DB.inspections||[]).find(x=>x.id===inspId)}
+    : { id:uid('insp'), programId, animalId, date:todayISO(), by:DB.currentUserId,
+        hair:{}, skin:{}, hairLoss:'none', flaking:'none', redness:'none', irritation:'none',
+        scratching:false, lesions:false, parasites:false, note:'' };
+  e.hair=e.hair||{}; e.skin=e.skin||{};
+  const rate5 = (label,val,onk)=>`<div class="field"><label>${label}</label><select class="control" data-k="${onk}">${['','1','2','3','4','5'].map(o=>`<option value="${o}" ${String(val==null?'':val)===o?'selected':''}>${o===''?'—':o}</option>`).join('')}</select></div>`;
+  const sev = (label,val,onk,opts)=>`<div class="field"><label>${label}</label><select class="control" data-k="${onk}">${opts.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o[0].toUpperCase()+o.slice(1)}</option>`).join('')}</select></div>`;
+  const yn = (label,val,onk)=>`<label class="ynrow" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line-2)"><span style="font-weight:600">${label}</span><input type="checkbox" data-k="${onk}" ${val?'checked':''} style="width:20px;height:20px"></label>`;
+  const body=el('div');
+  body.innerHTML=`
+    <div class="help">${ICON.info}<span>Your read on <b>${esc((getAnimal(animalId)||{}).name||'')}</b>’s coat and hide. The app rolls your 1–5 ratings into a 0–100 <b>Hair Score</b> to trend — it never grades the animal itself.</span></div>
+    <div class="field"><label>Date</label><input class="control" type="date" data-k="date" value="${e.date}"></div>
+    <div class="section-title" style="margin-top:6px">Hair · 1 (poor) – 5 (excellent)</div>
+    <div class="grid g2" style="gap:8px">${HAIR_5.map(k=>rate5(k[0].toUpperCase()+k.slice(1), e.hair[k], 'hair.'+k)).join('')}</div>
+    ${sev('Hair loss / shedding', e.hairLoss||'none','hairLoss',LOSS_OPTS)}
+    <div class="section-title" style="margin-top:6px">Skin</div>
+    ${rate5('Hydration · 1–5', e.skin.hydration, 'skin.hydration')}
+    <div class="grid g2" style="gap:8px">
+      ${sev('Flaking', e.flaking||'none','flaking',SEV3_OPTS)}
+      ${sev('Redness', e.redness||'none','redness',SEV3_OPTS)}
+      ${sev('Irritation', e.irritation||'none','irritation',SEV3_OPTS)}
+    </div>
+    <div class="section-title" style="margin-top:6px">Concerns</div>
+    <div class="card pad" style="padding-top:0;padding-bottom:0">
+      ${yn('Scratching / rubbing', e.scratching,'scratching')}
+      ${yn('Lesions / sores', e.lesions,'lesions')}
+      ${yn('External parasite concern', e.parasites,'parasites')}
+    </div>
+    <div class="field" style="margin-top:10px"><label>Notes</label><textarea class="control" data-k="note" rows="2" placeholder="What you saw; add close-up photos in the Media tab.">${esc(e.note||'')}</textarea></div>
+    <div id="inspScore" style="margin-top:6px"></div>`;
+  const collect=()=>{ $$('[data-k]',body).forEach(inp=>{ const k=inp.dataset.k; const isChk=inp.type==='checkbox';
+      let v = isChk?inp.checked : inp.value; if(!isChk && /^(hair\.|skin\.)/.test(k)) v = v===''?null:+v;
+      if(k.includes('.')){ const [a,b]=k.split('.'); e[a]=e[a]||{}; e[a][b]=v; } else e[k]=v; }); };
+  const drawScore=()=>{ collect(); const r=Calc.hairScore(e); const box=$('#inspScore',body); if(!box)return;
+    box.innerHTML = r ? `<div class="card pad" style="display:flex;align-items:center;gap:12px"><div style="font-size:30px;font-weight:900;color:var(--purple-3);line-height:1">${r.score}</div><div style="flex:1"><div style="font-weight:700;font-size:13px">Hair Score${r.penalty?` · −${r.penalty} for findings`:''}</div>${r.review?`<div style="font-size:12px;color:var(--warn);font-weight:700;margin-top:2px">⚠️ Flags a hide review: ${esc(r.flags.join(', '))}</div>`:`<div style="font-size:12px;color:var(--muted);margin-top:2px">No review flags</div>`}</div></div>`
+      : `<div class="help">${ICON.info}<span>Rate at least one hair trait or hydration to get a Hair Score.</span></div>`; };
+  $$('[data-k]',body).forEach(inp=>inp.addEventListener('change',drawScore));
+  drawScore();
+  const foot=el('div'); foot.innerHTML=`${editing?`<button class="btn ghost" data-del style="color:var(--bad)">${ICON.trash}</button>`:''}<button class="btn ghost" data-cancel>Cancel</button><button class="btn primary" data-save>${editing?'Save':'Add inspection'}</button>`;
+  const sh=openSheet({title:editing?'Edit inspection':'Hair/Hide inspection', body, foot});
+  $('[data-cancel]',sh).onclick=()=>closeSheet();
+  if($('[data-del]',sh))$('[data-del]',sh).onclick=async()=>{ if(await confirmSheet('Delete inspection','Remove this inspection?','Delete',true)){ DB.inspections=(DB.inspections||[]).filter(x=>x.id!==inspId); save(); closeSheet(); render(); } };
+  $('[data-save]',sh).onclick=()=>{ collect(); const r=Calc.hairScore(e); e.score=r?r.score:null; e.review=!!(r&&r.review); e.flags=r?r.flags:[];
+    if(editing){ Object.assign((DB.inspections||[]).find(x=>x.id===inspId), stamp(e)); }
+    else { DB.inspections=DB.inspections||[]; DB.inspections.push(stamp(e)); }
+    if(e.review) ensureReviewTask(animalId, programId, e.flags);
+    save(); closeSheet(); toast(e.review?'Saved — flagged for review':'Inspection saved', e.review?'warn':'good'); render();
+  };
+}
+
+/* ---- Programs list ---- */
+route('programs',()=>{
+  const v=setView('','more'); const wrap=el('div');
+  const progs=activePrograms();
+  wrap.innerHTML=`${pageHeader('Prep Programs')}
+    <div class="help">${ICON.info}<span>A dated, phased routine for a set of animals. The daily supplement folds into feed, the routine shows up in <b>Today</b> &amp; <b>Barn Mode</b>, and a weekly Hair/Hide inspection trends a 0–100 score.</span></div>
+    <button class="btn primary block" id="newProg" style="margin:4px 0 12px">${ICON.plus} New program</button>
+    <div id="progList"></div>`;
+  v.append(wrap);
+  $('#newProg',wrap).onclick=openNewProgram;
+  const list=$('#progList',wrap);
+  if(!progs.length){ list.innerHTML=emptyState(ICON.target,'No programs yet','Start a Hair &amp; Hide program to run a season-long routine across your animals.'); return; }
+  progs.forEach(p=>{ const ph=programPhaseOn(p,todayISO()); const ts=p.showDate?STCalc.targetState(todayISO(),p.showDate):null;
+    const card=el('button','card pad'); card.style.cssText='display:block;width:100%;text-align:left;margin-bottom:10px';
+    card.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
+        <div><div style="font-weight:800;font-size:16px">${esc(p.name)}</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${(p.animalIds||[]).filter(isActiveAnimalId).length} animal${(p.animalIds||[]).filter(isActiveAnimalId).length===1?'':'s'} · ${esc(ph.name)}</div></div>
+        <div style="text-align:right">${ts?`<div style="font-weight:800;color:var(--purple-3)">${ts.days>0?ts.days:0}</div><div style="font-size:11px;color:var(--muted)">days to show</div>`:''}</div>
+      </div>`;
+    card.onclick=()=>go('/program/'+p.id); list.append(card); });
+});
+
+function openNewProgram(){
+  if(!can('addRecord')){ toast('Your role can’t start a program','bad'); return; }
+  const tplKeys=Object.keys(PROGRAM_TEMPLATES); const tplKey=tplKeys[0]; const tpl=PROGRAM_TEMPLATES[tplKey];
+  const pool=activeAnimals().filter(a=>!tpl.species || a.species===tpl.species);
+  const sel=new Set(); const start=todayISO(); const show=addDaysISO(start, tpl.defaultDurationDays);
+  const st={ start, show };
+  const body=el('div');
+  body.innerHTML=`
+    <div class="help">${ICON.info}<span><b>${esc(tpl.name)}</b> — ${esc(tpl.subtitle)}. Adds ½ Tbsp ${esc(tpl.supplement.product)} to each animal’s AM &amp; PM feed and builds the full routine.</span></div>
+    <div class="field-row"><div class="field" style="flex:1"><label>Start date</label><input class="control" type="date" id="pStart" value="${st.start}"></div>
+      <div class="field" style="flex:1"><label>Show day</label><input class="control" type="date" id="pShow" value="${st.show}"></div></div>
+    <div class="section-title">Animals</div>
+    <div id="pAnimals" class="list"></div>`;
+  const draw=()=>{ const box=$('#pAnimals',body); box.innerHTML='';
+    if(!pool.length){ box.innerHTML=emptyState(ICON.animals,'No eligible animals','Add swine first.'); return; }
+    pool.forEach(a=>{ const li=el('label','li'); li.style.cursor='pointer';
+      li.innerHTML=`<div class="main"><div class="t1">${esc(a.name)}</div><div class="t2">${esc(speciesName(a.species))}${a.penLocation?' · '+esc(a.penLocation):''}</div></div><input type="checkbox" data-a="${a.id}" ${sel.has(a.id)?'checked':''} style="width:20px;height:20px">`;
+      box.append(li); }); };
+  draw();
+  const foot=el('div'); foot.innerHTML=`<button class="btn ghost" data-cancel>Cancel</button><button class="btn primary" data-save>Start program</button>`;
+  const sh=openSheet({title:'New program', body, foot});
+  body.addEventListener('change',ev=>{ const cb=ev.target.closest('[data-a]'); if(cb){ if(cb.checked)sel.add(cb.dataset.a); else sel.delete(cb.dataset.a); } });
+  $('[data-cancel]',sh).onclick=()=>closeSheet();
+  $('[data-save]',sh).onclick=()=>{ const s=$('#pStart',body).value, d=$('#pShow',body).value;
+    if(!sel.size){ toast('Pick at least one animal','bad'); return; }
+    if(!s){ toast('Set a start date','bad'); return; }
+    if(d && d<=s){ toast('Show day must be after the start','bad'); return; }
+    const prog=applyProgramTemplate(tplKey, [...sel], s, d||null);
+    closeSheet(); if(prog){ toast('Program started','good'); go('/program/'+prog.id); } };
+}
+
+/* ---- Program detail ---- */
+route('program',(parts)=>{
+  const p=getProgram(parts[1]);
+  if(!p){ setView(emptyState(ICON.target,'Program not found','This program may have been removed.'),'more'); return; }
+  const v=setView('','more'); const wrap=el('div'); const today=todayISO();
+  const ph=programPhaseOn(p,today); const animals=(p.animalIds||[]).map(getAnimal).filter(a=>a&&!a.archived);
+  const ts=p.showDate?STCalc.targetState(today,p.showDate):null;
+  wrap.innerHTML=`${pageHeader(p.name,'/programs',`<button class="btn sm" id="progEdit">${ICON.settings}</button>`)}
+    <div class="card pad" style="background:linear-gradient(135deg,var(--purple-1),transparent)">
+      <div style="font-size:12.5px;color:var(--muted)">${p.startDate?fmtShort(p.startDate):''}${p.showDate?' → '+fmtShort(p.showDate):''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:end;gap:10px;margin-top:4px">
+        <div><div style="font-weight:900;font-size:18px;color:var(--purple-3)">${esc(ph.name)}</div>${ph.objective?`<div style="font-size:12.5px;color:var(--muted);margin-top:2px">${esc(ph.objective)}</div>`:''}</div>
+        ${ts?`<div style="text-align:right"><div style="font-weight:900;font-size:22px">${ts.days>0?ts.days:0}</div><div style="font-size:11px;color:var(--muted)">days to show</div></div>`:''}
+      </div>
+    </div>
+    <div class="card pad" style="border:1px solid var(--warn);margin-top:10px">
+      <div style="font-weight:800;font-size:13px;margin-bottom:6px">Non-negotiables</div>
+      <ol style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.5;color:var(--ink-2)">${p.nonNegotiables.map(n=>`<li>${esc(n)}</li>`).join('')}</ol>
+    </div>
+    ${p.goal?`<div class="help" style="margin-top:10px">${ICON.target}<span>${esc(p.goal)}</span></div>`:''}
+    <div class="section-title">Animals · Hair Score</div>
+    <div id="progAnimals"></div>
+    <div class="section-title">Phases</div>
+    <div id="progPhases" class="list"></div>
+    <div class="section-title">Daily routine</div>
+    <div id="progRoutine"></div>
+    <div style="margin-top:16px"><button class="btn block" id="progRemove" style="color:var(--bad)">${ICON.trash} Remove program</button></div>`;
+  v.append(wrap);
+  if($('#progEdit',wrap)) $('#progEdit',wrap).onclick=()=>toast('Edit the routine tasks in Calendar; remove & restart to change dates','');
+  // per-animal hair score cards
+  const ab=$('#progAnimals',wrap);
+  if(!animals.length){ ab.innerHTML=emptyState(ICON.animals,'No animals','This program has no active animals.'); }
+  animals.forEach(a=>{ const insps=inspectionsFor(a.id,p.id); const last=insps[insps.length-1];
+    const card=el('div','card pad'); card.style.marginBottom='10px';
+    card.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div><div style="font-weight:800">${esc(a.name)}</div><div style="font-size:12px;color:var(--muted)">${insps.length?insps.length+' inspection'+(insps.length===1?'':'s'):'No inspections yet'}${last?' · last '+fmtShort(last.date):''}</div></div>
+        <div style="text-align:right">${last&&last.score!=null?`<div style="font-size:26px;font-weight:900;color:var(--purple-3);line-height:1">${last.score}</div><div style="font-size:11px;color:var(--muted)">Hair Score</div>`:''}</div>
+      </div>
+      ${insps.length>=2?`<div style="margin-top:8px">${hairSparkline(insps)}</div>`:''}
+      ${last&&last.review?`<div style="font-size:12px;color:var(--warn);font-weight:700;margin-top:6px">⚠️ Review flagged: ${esc((last.flags||[]).join(', '))}</div>`:''}
+      <div class="btn-row" style="margin-top:10px"><button class="btn sm primary" data-insp="${a.id}" style="flex:1">${ICON.plus} New inspection</button>${insps.length?`<button class="btn sm" data-hist="${a.id}">History</button>`:''}</div>`;
+    $('[data-insp]',card).onclick=()=>openInspectionSheet(p.id, a.id);
+    if($('[data-hist]',card)) $('[data-hist]',card).onclick=()=>openInspectionHistory(p.id, a.id);
+    ab.append(card); });
+  // phases
+  const pb=$('#progPhases',wrap);
+  (p.phases||[]).forEach(x=>{ const cur=today>=x.start&&today<=x.end; const li=el('div','li');
+    li.innerHTML=`<div class="main"><div class="t1" style="${cur?'color:var(--purple-3);font-weight:800':''}">${esc(x.name)}${cur?' · now':''}</div><div class="t2">${fmtShort(x.start)} – ${fmtShort(x.end)}</div></div>`;
+    pb.append(li); });
+  if(!(p.phases||[]).length) pb.innerHTML=`<div class="t2" style="color:var(--muted);padding:6px">Set a show day to build the phase timeline.</div>`;
+  // routine reference
+  const rb=$('#progRoutine',wrap); const R=p.routine||{};
+  const sec=(t,arr)=>arr&&arr.length?`<div class="card pad" style="margin-bottom:8px"><div style="font-weight:800;font-size:13px;margin-bottom:4px">${t}</div><ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.5;color:var(--ink-2)">${arr.map(s=>`<li>${esc(s)}</li>`).join('')}</ul></div>`:'';
+  rb.innerHTML = sec('AM',R.am)+sec('PM',R.pm)+sec('Wash day (7–10 days)',R.wash)+sec('Show day',R.showday);
+  $('#progRemove',wrap).onclick=async()=>{ if(await confirmSheet('Remove program',`Remove “${p.name}”? This deletes its routine tasks and removes the ${esc((PROGRAM_TEMPLATES[p.key]&&PROGRAM_TEMPLATES[p.key].supplement.product)||'supplement')} from feed. Inspections you’ve logged are kept.`,'Remove',true)){ removeProgram(p.id); go('/programs'); } };
+});
+function openInspectionHistory(programId, animalId){
+  const insps=inspectionsFor(animalId, programId).slice().reverse();
+  const body=el('div');
+  body.innerHTML=insps.map(e=>`<button class="li" data-e="${e.id}" style="width:100%;text-align:left"><div class="main"><div class="t1">${fmtShort(e.date)}${e.score!=null?' · Score '+e.score:''}</div><div class="t2">${e.review?'<span style="color:var(--warn)">⚠️ '+esc((e.flags||[]).join(', '))+'</span>':'No flags'}${e.note?' · '+esc(e.note):''}</div></div>${ICON.chev}</button>`).join('')||emptyState(ICON.info,'No inspections','');
+  const sh=openSheet({title:(getAnimal(animalId)||{}).name+' · inspections', body});
+  $$('[data-e]',body).forEach(b=>b.onclick=()=>{ closeSheet(); openInspectionSheet(programId, animalId, b.dataset.e); });
 }
 
 /* ===================================================================
