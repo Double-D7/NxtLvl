@@ -1042,7 +1042,10 @@ let loginMode='signin'; // 'signin' | 'signup'
 function renderLogin(){
   const cloud = Cloud.enabled;
   const existing = DB.users.length;
-  const isSignup = !cloud ? !existing : loginMode==='signup';
+  // A link from the invitation email (?invite=<email>) opens straight into
+  // "Create account" with the address pre-filled.
+  const inviteEmail = (()=>{ try{ return cloud ? (new URLSearchParams(location.search).get('invite')||'').trim() : ''; }catch(_){ return ''; } })();
+  const isSignup = !cloud ? !existing : (loginMode==='signup' || !!inviteEmail);
   // only show a social button for providers actually enabled in Supabase (config.js)
   const providers = (cloud && window.DFST_CONFIG && Array.isArray(window.DFST_CONFIG.oauthProviders)) ? window.DFST_CONFIG.oauthProviders : [];
   const oauthHTML = providers.length ? `<div class="oauth">${providers.map(p=>`<button class="btn block" data-oauth="${esc(p)}">${p==='apple'?aicon():gicon()} Continue with ${esc(p.charAt(0).toUpperCase()+p.slice(1))}</button>`).join('')}</div><div class="orline">OR</div>` : '';
@@ -1050,9 +1053,10 @@ function renderLogin(){
     <div class="logo">${brandImg()}</div>
     <h1>Show Team</h1><div class="tag">Show livestock, dialed in.</div>
     <div class="card">
+      ${inviteEmail?`<div class="help" style="margin:0 0 12px"><span>You've been invited to join a team — create your account below to accept.</span></div>`:''}
       ${oauthHTML}
       ${isSignup?`<div class="field"><label>Name</label><input class="control" id="lgName" placeholder="Your name" value="${cloud?'':esc(me().name||'')}"></div>`:''}
-      <div class="field"><label>Email</label><input class="control" id="lgEmail" type="email" placeholder="you@example.com" value="${(!cloud&&!existing)?'david.devitt@fortressds.com':''}"></div>
+      <div class="field"><label>Email</label><input class="control" id="lgEmail" type="email" placeholder="you@example.com" value="${inviteEmail?esc(inviteEmail):((!cloud&&!existing)?'david.devitt@fortressds.com':'')}"></div>
       <div class="field"><label>Password</label><input class="control" id="lgPass" type="password" placeholder="••••••••"></div>
       <button class="btn primary block" id="lgGo" style="margin-top:4px">${isSignup?'Create account':'Sign in'}</button>
       ${cloud?`<div style="text-align:center;margin-top:12px;font-size:12.5px;color:var(--muted);font-weight:600">
@@ -4342,7 +4346,13 @@ function openInvite(){ const body=el('div');
   $('[data-save]',sh).onclick=async()=>{ const e=$('#ivEmail',body).value.trim(); if(!e){toast('Enter email','bad');return;}
     const role=$('#ivRole',body).value;
     DB.users.push({id:'pending_'+e.toLowerCase(),name:$('#ivName',body).value.trim()||e.split('@')[0],email:e,role,invited:true,verified:false}); logAct('team','Invited '+e);
-    if(Cloud.enabled && Cloud.teamId){ try{ const {error}=await Cloud.sb.from('team_invites').upsert({ team_id:Cloud.teamId, email:e.toLowerCase(), role }, {onConflict:'team_id,email'}); if(error)throw error; save(); closeSheet(); toast('Invite sent — they can sign up with '+e,'good'); render(); }
+    if(Cloud.enabled && Cloud.teamId){ try{ const {error}=await Cloud.sb.from('team_invites').upsert({ team_id:Cloud.teamId, email:e.toLowerCase(), role }, {onConflict:'team_id,email'}); if(error)throw error; save(); closeSheet();
+        // Fire the branded invitation email (best-effort — the invite already
+        // works via self-signup even if email sending isn't set up yet).
+        try{ const {error:fnErr}=await Cloud.sb.functions.invoke('send-invite',{ body:{ email:e.toLowerCase(), role, teamId:Cloud.teamId, appUrl:appBaseURL() } });
+          if(fnErr) throw fnErr; toast('Invitation emailed to '+e,'good'); }
+        catch(mailErr){ toast('Invite saved — they can sign up with '+e+'. (Email not sent: set up in supabase/INVITE_SETUP.md)',''); }
+        render(); }
       catch(err){ save(); closeSheet(); toast('Saved locally; invite sync failed: '+err.message,'bad'); render(); } }
     else { save(); closeSheet(); toast('Invite added (connect cloud to send)','good'); render(); }
   };
