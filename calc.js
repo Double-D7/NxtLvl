@@ -214,11 +214,30 @@
     };
   }
 
+  /* ---- Entitlement (billing) — pure decision core ----
+     Given whether billing gating is turned on, whether this team is a grandfathered
+     Founding team, and its current paid tier, decide what the team may do. While
+     gating is OFF (pre-monetization), everyone is Pro and unlimited — so adding the
+     call-sites changes nothing until the flag flips. */
+  function entitlement(o) {
+    o = o || {};
+    const enabled = !!o.enabled;
+    const founding = !!o.founding;
+    const tier = o.tier || 'free';
+    const pro = !enabled ? true : (founding || tier === 'pro');
+    return {
+      pro, founding,
+      animalLimit: pro ? null : 1,     // null = unlimited
+      gatingActive: enabled && !pro,   // true only when a non-Pro team is actually limited
+    };
+  }
+
   return {
     DAY, isISO, parseD, round, daysBetween, normWeights,
     lastWeighAdg, rollingAdg, lifetimeAdg, programAdg,
     requiredAdg, projectedWeight, targetState,
     feedCostCompleteness, costPerLbGain, planStatus, PLAN_DEFAULTS,
     hairScore, hairReviewNeeded, hairReviewFlags, HAIR_KEYS,
+    entitlement,
   };
 });
