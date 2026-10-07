@@ -42,8 +42,9 @@ show-livestock families manage their program.
 
 Value ladder in one line: **Free = "track my animal." Pro = "run my whole program with my team."**
 
-### Founding Families — launch-only offer
-- Early adopters lock in at **$49 / year for life.**
+### Founding Families — launch-only offer (LOCKED)
+- Anyone who joins during the **90-day Founding Season** is grandfathered with **Pro comped free
+  for life** (chosen over a paid $49/yr founding tier for maximum goodwill and the simplest build).
 - Creates urgency, rewards the first believers, seeds the core community and feedback loop.
 - These families become evangelists.
 
@@ -61,10 +62,11 @@ Value ladder in one line: **Free = "track my animal." Pro = "run my whole progra
 - No billing code, no added App Review risk → submit immediately.
 - Start gathering users, testimonials, and feedback while interest is hot.
 
-### Phase 2 — Monetize (fast-follow, a few weeks out)
-- Build the paywall + **StoreKit (iOS) + Play Billing (Android)** + an entitlement check.
+### Phase 2 — Monetize (fast-follow, after the 90-day Founding Season)
+- Build the paywall + billing (via RevenueCat → StoreKit / Play Billing / web) + entitlement check.
+  See `PHASE2-BILLING-SPEC.md`.
 - Flip on Pro ($79/yr, $9.99/mo), the 14-day trial, and the 1-animal free tier.
-- **Grandfather every Founding-Season user into $49/yr for life.**
+- **Grandfather every Founding-Season team into Pro, comped free for life.**
 - The "get in now before it's paid" angle *helps* launch marketing.
 
 We lose nothing by waiting a few weeks to charge, de-risk the submission, and convert a warm,
@@ -78,7 +80,8 @@ grateful base instead of cold-charging strangers on day one.
 - **Price testing**: $79 vs $89/yr, trial length (7 vs 14 days), free-tier limit (1 vs 2 animals).
 
 ## Decision log
-- 2026-10-07: **LOCKED.** Launch-free "Founding Season" first, monetize as fast-follow.
-  Hero price **$79/yr** (or **$9.99/mo**), priced per family, **1-animal free tier**,
-  **Founding Families $49/yr for life**. Signed off by David Devitt. These are the numbers
-  Phase 2 billing will implement.
+- 2026-10-07: **LOCKED** (signed off by David Devitt). Launch-free **90-day Founding Season**
+  first, monetize as fast-follow. Hero price **$79/yr** (or **$9.99/mo**), priced per family,
+  **1-animal free tier**, **14-day trial**, web billing via **RevenueCat Web Billing**.
+  **Founding Families: Pro comped free for life** (chosen over a paid $49/yr founding tier).
+  These are the numbers Phase 2 billing will implement.

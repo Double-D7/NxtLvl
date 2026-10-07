@@ -103,14 +103,14 @@ Maps to features that already exist, so Pro is real value, not artificial crippl
 > single device, 1 animal**; cloud + team is a headline Pro reason.
 
 ## 6. Grandfathering — Founding Families
-- Define a **launch cutoff timestamp**. Every team created before it is flagged `founding:true`.
+- Define a **launch cutoff timestamp = 90 days after public launch**. Every team created before
+  it is flagged `founding:true`.
 - Founding teams get a **permanent Pro entitlement override** (independent of RevenueCat), honored
   by the same `isPro()` check.
-- **Two ways to honor "$49/yr for life"** — decision needed:
-  1. **Comp them (simplest):** founding teams are Pro for free (or free first year). Cheapest to
-     build, maximal goodwill, zero store-product complexity. Recommended for MVP.
-  2. **Charge $49 (cleaner economically):** a dedicated `pro_annual_founding` store product shown
-     *only* to founding teams via a RevenueCat "offering." More setup; real revenue from day one.
+- **Honor = comped free for life (LOCKED):** founding teams are Pro at no charge, permanently —
+  chosen over a paid $49/yr founding tier for maximum goodwill and the simplest build (no extra
+  store product, no RevenueCat offering targeting the cohort). Implemented purely as the
+  `founding` flag → `isPro()` returns true.
 - The **reviewer demo team** is force-flagged Pro so App Review sees every feature.
 
 ## 7. Data model changes (additive, migration-safe)
@@ -193,13 +193,14 @@ store review + sandbox testing, not code.
 - **Client-only gating is bypassable:** add server-side checks on the few things that cost us
   (animal count), so a tampered client can't silently get Pro features that touch the backend.
 
-## 14. Decisions needed before building
-1. **Free/Pro line** (Section 5) — confirm, especially cloud-on-free or not.
-2. **Founding honor** (Section 6) — comp free vs $49 founding product. *(Rec: comp for MVP.)*
-3. **Trial length** — 14 days assumed; 7 is an option to test.
-4. **Web billing** — RevenueCat Web Billing (unified) vs raw Stripe (simpler, but separate
-   entitlement to reconcile). *(Rec: RevenueCat Web Billing.)*
-5. **Timing** — how long to run the free Founding Season before flipping gating on.
+## 14. Decisions — LOCKED (2026-10-07, David Devitt)
+1. **Free/Pro line** — confirmed as in Section 5: free = 1 animal, single-device/local; cloud +
+   team + every premium module = Pro.
+2. **Founding honor** — **comp Founding-Season teams free for life** (not a paid $49 tier).
+3. **Trial length** — **14 days**.
+4. **Web billing** — **RevenueCat Web Billing** (unified entitlement across web + iOS + Android).
+5. **Timing** — **90-day Founding Season** (free, everything unlocked) before gating is switched on.
+   The founding cutoff timestamp = 90 days after public launch.
 
 ## 15. Not in scope for Phase 2 (later)
 School/chapter multi-family plans; promo codes/coupons; annual "show-year" campaigns; referral
