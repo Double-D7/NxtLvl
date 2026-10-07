@@ -17,7 +17,7 @@ Work top to bottom. Nothing here needs code changes — it's all account setup a
 - [ ] New App → Platform: iOS, Name: **Show Team**, primary language, Bundle ID, SKU
 - [ ] Paste all fields from `App-Store-Listing.md`
 - [ ] Upload the 6 screenshots from `screenshots/ios-6.7-inch/` in numbered order
-- [ ] Upload a 1024×1024 App Icon (no alpha, no rounded corners — Apple rounds it)
+- [ ] Upload the **1024×1024 App Icon** — provided at `submission/app-icon-1024.png` (RGB, no alpha, square; Apple rounds it)
 - [ ] Category: Primary = Lifestyle (or Productivity), Secondary = Utilities
 - [ ] Age rating questionnaire → likely 4+
 - [ ] Price: Free, or your chosen tier

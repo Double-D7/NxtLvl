@@ -265,7 +265,8 @@ function blankDB(){
   return {
     version:2, createdAt:nowISO(), updatedAt:nowISO(), setupComplete:false, seeded:false,
     team:{ name:'Show Team', subtitle:'Show Livestock Management', logo:null,
-           colors:{purple:'#4C1D95', teal:'#0D9488'}, weighDay:0 /*Sun*/ },
+           colors:{purple:'#4C1D95', teal:'#0D9488'}, weighDay:0 /*Sun*/,
+           founding:false, entitlement:{ tier:'free', status:null, renewsAt:null, source:null, updatedAt:null } },
     users:[], currentUserId:null,
     species: SPECIES_DEFS.map(s=>({...s})),
     breeds: [],
@@ -412,6 +413,43 @@ const Calc = {
   hairScore(insp){ return STCalc.hairScore(insp); },
   hairReviewFlags(insp){ return STCalc.hairReviewFlags(insp); },
 };
+
+/* ===================================================================
+   BILLING / ENTITLEMENT (Phase 2, Step 1 plumbing)
+   The gating scaffold for Show Team Pro. While BILLING.ENABLED is false
+   (the free Founding Season), isPro() is true for everyone and every
+   gate() passes through — so these call-sites change nothing yet. When
+   billing goes live we flip ENABLED on, set FOUNDING_CUTOFF, and ship
+   the real paywall + RevenueCat flows (see submission/PHASE2-BILLING-SPEC.md).
+   =================================================================== */
+const BILLING = {
+  ENABLED: false,          // master switch — flip to true when Pro launches
+  FOUNDING_CUTOFF: null,   // ISO date = public-launch + 90d; null = Founding Season open (all current teams are founding)
+};
+const Entitlement = {
+  _state(){ const t=(DB&&DB.team)||{}; const ent=t.entitlement||{};
+    return STCalc.entitlement({ enabled:BILLING.ENABLED, founding:!!t.founding, tier:ent.tier||'free' }); },
+  isPro(){ return this._state().pro; },
+  isFounding(){ return !!(DB&&DB.team&&DB.team.founding); },
+  gatingActive(){ return this._state().gatingActive; },
+  animalLimit(){ const l=this._state().animalLimit; return l==null?Infinity:l; },
+  // Gate a premium entry point. Returns true if allowed; otherwise shows the
+  // paywall and returns false. Always true while billing is disabled.
+  gate(feature){ if(this.isPro()) return true; openPaywall(feature); return false; },
+  // Flag the team as a Founding family if it was created within the founding
+  // window. Runs once per boot; never un-flags. A no-op once already founding.
+  reconcileFounding(){ if(!DB||!DB.team || DB.team.founding) return;
+    const created = DB.team.createdAt || DB.createdAt || null;
+    const cutoff = BILLING.FOUNDING_CUTOFF;
+    if(cutoff==null || (created && created.slice(0,10) <= cutoff)){ DB.team.founding=true; touch(DB.team); save(true); } },
+};
+// Step-1 stub. Unreachable while BILLING.ENABLED is false; replaced by the real
+// branded paywall + purchase/restore flows in Phase 2.
+function openPaywall(feature){
+  const body=el('div');
+  body.innerHTML=`<div class="help">${ICON.info}<span><b>Show Team Pro</b> unlocks this. Pro is coming soon — everything is free during the Founding Season.</span></div>`;
+  openSheet({title:'Show Team Pro', body});
+}
 function weightAlerts(a){
   const s=animalStats(a); const out=[];
   const ws=weightsFor(a.id);
@@ -840,6 +878,7 @@ const Cloud = {
     if(!DB.breeds || !DB.breeds.length) seedBreeds(DB);
     save(true);
     this.applying=false;
+    Entitlement.reconcileFounding();   // flag this team Founding if within the window
     save(); // push reconciled membership back up
     this.subscribe();
   },
@@ -969,6 +1008,7 @@ async function boot(){
         if(t.recur && (t.doneDates||[]).length){ t.doneDates.forEach(d=>t.progress[d]=[...t.animalIds]); }
         else if(!t.recur && t.done){ t.progress[t.date]=[...t.animalIds]; } } });
     save(true); }
+  Entitlement.reconcileFounding();
   if(Cloud.init()){
     try{
       const s=await Cloud.session();
@@ -1557,6 +1597,7 @@ function openFilterSheet(state,draw){
 function sexOptions(sp){ return {swine:['Barrow','Gilt','Boar','Sow'],sheep:['Wether','Ewe','Ram'],goat:['Wether','Doe','Buck'],cattle:['Steer','Heifer','Bull','Cow']}[sp]||['Male','Female']; }
 function openAnimalForm(id){
   if(!can(id?'edit':'addAnimal')){ toast('Your role can’t do that','bad'); return; }
+  if(!id && activeAnimals().length >= Entitlement.animalLimit()){ openPaywall('animals'); return; }
   const a = id?{...getAnimal(id)}:{ species:'swine', status:'Prospect', sex:'', season:String(new Date().getFullYear()), marketBreeding:'Market' };
   a.helperIds = [...(a.helperIds||[])];
   const body=el('div');
@@ -2097,6 +2138,7 @@ const scoreCats = () => (DB.settings&&Array.isArray(DB.settings.scoreCats)&&DB.s
 const evalsFor = id => (DB.evals||[]).filter(e=>e.animalId===id).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1);
 function evalAvg(e){ const vals=Object.values((e&&e.scores)||{}).map(Number).filter(v=>isFinite(v)&&v>0); return vals.length?round(vals.reduce((s,v)=>s+v,0)/vals.length,1):null; }
 function tabScorecard(box,a){
+  if(!Entitlement.gate('scorecard')) return;
   const evs=evalsFor(a.id); const cats=scoreCats(); const wrap=el('div');
   wrap.innerHTML=`<div class="help">${ICON.info}<span>A coach's eye over time. Score <b>${esc(a.name)}</b> on the traits that matter, add notes, and watch each one improve. Scores are a human coach's read — the app never auto-grades.</span></div>
     <div class="btn-row" style="margin:0 0 4px"><button class="btn primary" data-new style="flex:2">${ICON.plus} New evaluation</button><button class="btn" data-cats style="flex:1">${ICON.settings} Traits</button></div>`;
@@ -4336,7 +4378,7 @@ route('team',()=>{
   if(!recs.length)rc.innerHTML='<div class="empty" style="padding:14px">No coach recommendations yet.</div>';
   else recs.forEach(r=>rc.append(renderRecCard(r)));
 });
-function openInvite(){ const body=el('div');
+function openInvite(){ if(!Entitlement.gate('team')) return; const body=el('div');
   body.innerHTML=`<div class="field"><label>Email</label><input class="control" id="ivEmail" type="email" placeholder="name@example.com"></div>
     <div class="field"><label>Name</label><input class="control" id="ivName" placeholder="Optional"></div>
     <div class="field"><label>Role</label><select class="control" id="ivRole">${['Administrator','Editor','Contributor','Viewer','Advisor'].map(r=>`<option>${r}</option>`).join('')}</select></div>
@@ -4979,6 +5021,7 @@ function seasonReview(a){ const id=a.id; const st=animalStats(a);
   return {st, progRows, rated, bestGain, feedCost, bedCost, otherExp, investment, income, net:income-investment, gain, costPerLb, shows, best, bestShow, bestProgram, recs};
 }
 route('season',(parts,q)=>{
+  if(!Entitlement.gate('season')) return;
   const animalId=(parts&&parts[1])||(q&&q.get('animal')); const a=animalId?getAnimal(animalId):null;
   const v=setView('','more'); const wrap=el('div'); v.append(wrap);
   if(!a){
@@ -5066,6 +5109,7 @@ function printRecordBook(animalId){
    FEED & BEDDING COSTS — the management screens for the costing model.
    =================================================================== */
 route('costs',()=>{
+  if(!Entitlement.gate('feedroom')) return;
   const v=setView('','more'); const wrap=el('div'); v.append(wrap);
   const draw=()=>{
     const feeds=feedProducts(), beds=beddingProducts();
@@ -5441,6 +5485,7 @@ function openInspectionSheet(programId, animalId, inspId){
 
 /* ---- Programs list ---- */
 route('programs',()=>{
+  if(!Entitlement.gate('programs')) return;
   const v=setView('','more'); const wrap=el('div');
   const progs=activePrograms();
   wrap.innerHTML=`${pageHeader('Prep Programs')}
@@ -5494,6 +5539,7 @@ function openNewProgram(){
 
 /* ---- Program detail ---- */
 route('program',(parts)=>{
+  if(!Entitlement.gate('programs')) return;
   const p=getProgram(parts[1]);
   if(!p){ setView(emptyState(ICON.target,'Program not found','This program may have been removed.'),'more'); return; }
   const v=setView('','more'); const wrap=el('div'); const today=todayISO();

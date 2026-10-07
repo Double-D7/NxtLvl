@@ -147,5 +147,17 @@ eq('hair review: scratching flag', C.hairReviewNeeded({ scratching: true }), tru
 ok('hair review: score carries the review bool',
   C.hairScore({ hair: { density: 4 }, parasites: true }).review === true);
 
+/* ---------- entitlement (billing gating) ---------- */
+// gating OFF → everyone is Pro and unlimited, regardless of tier/founding
+eq('ent: disabled → pro, unlimited', C.entitlement({ enabled: false, tier: 'free' }), { pro: true, founding: false, animalLimit: null, gatingActive: false });
+eq('ent: disabled ignores free tier', C.entitlement({ enabled: false, founding: false, tier: 'free' }).pro, true);
+// gating ON
+eq('ent: enabled + free → not pro, limit 1', C.entitlement({ enabled: true, tier: 'free' }), { pro: false, founding: false, animalLimit: 1, gatingActive: true });
+eq('ent: enabled + pro tier → pro, unlimited', C.entitlement({ enabled: true, tier: 'pro' }).pro, true);
+eq('ent: enabled + founding → pro, unlimited', C.entitlement({ enabled: true, founding: true, tier: 'free' }).pro, true);
+eq('ent: founding is unlimited', C.entitlement({ enabled: true, founding: true }).animalLimit, null);
+eq('ent: free team is limited to 1', C.entitlement({ enabled: true, tier: 'free' }).animalLimit, 1);
+eq('ent: gatingActive only when a non-pro team is actually limited', C.entitlement({ enabled: true, tier: 'pro' }).gatingActive, false);
+
 console.log(`\ncalc.test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
