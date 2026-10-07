@@ -78,6 +78,7 @@ grateful base instead of cold-charging strangers on day one.
 - **Price testing**: $79 vs $89/yr, trial length (7 vs 14 days), free-tier limit (1 vs 2 animals).
 
 ## Decision log
-- 2026-10-07: Chose launch-free "Founding Season" first, monetize as fast-follow. Hero price
-  $79/yr (or $9.99/mo), per family, 1-animal free tier, Founding Families $49/yr for life.
-  _(Pending: David's final sign-off on the exact numbers before Phase 2 build.)_
+- 2026-10-07: **LOCKED.** Launch-free "Founding Season" first, monetize as fast-follow.
+  Hero price **$79/yr** (or **$9.99/mo**), priced per family, **1-animal free tier**,
+  **Founding Families $49/yr for life**. Signed off by David Devitt. These are the numbers
+  Phase 2 billing will implement.
