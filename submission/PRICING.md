@@ -43,10 +43,11 @@ show-livestock families manage their program.
 Value ladder in one line: **Free = "track my animal." Pro = "run my whole program with my team."**
 
 ### Founding Families — launch-only offer (LOCKED)
-- Anyone who joins during the **90-day Founding Season** is grandfathered with **Pro comped free
-  for life** (chosen over a paid $49/yr founding tier for maximum goodwill and the simplest build).
+- Anyone who joins during the **90-day Founding Season** locks in **$49/yr for life** — a real
+  paid plan at a permanently discounted rate (vs the standard $79/yr), honored for as long as
+  they keep the subscription active.
 - Creates urgency, rewards the first believers, seeds the core community and feedback loop.
-- These families become evangelists.
+- These families become evangelists — and paying ones, so there's revenue from day one of Phase 2.
 
 ## The money math (be clear-eyed)
 - Apple/Google take **15%** (small-business rate, under $1M/yr). $79 → you net ~**$67**.
@@ -66,7 +67,7 @@ Value ladder in one line: **Free = "track my animal." Pro = "run my whole progra
 - Build the paywall + billing (via RevenueCat → StoreKit / Play Billing / web) + entitlement check.
   See `PHASE2-BILLING-SPEC.md`.
 - Flip on Pro ($79/yr, $9.99/mo), the 14-day trial, and the 1-animal free tier.
-- **Grandfather every Founding-Season team into Pro, comped free for life.**
+- **Grandfather every Founding-Season team into the $49/yr-for-life founding rate.**
 - The "get in now before it's paid" angle *helps* launch marketing.
 
 We lose nothing by waiting a few weeks to charge, de-risk the submission, and convert a warm,
@@ -83,5 +84,6 @@ grateful base instead of cold-charging strangers on day one.
 - 2026-10-07: **LOCKED** (signed off by David Devitt). Launch-free **90-day Founding Season**
   first, monetize as fast-follow. Hero price **$79/yr** (or **$9.99/mo**), priced per family,
   **1-animal free tier**, **14-day trial**, web billing via **RevenueCat Web Billing**.
-  **Founding Families: Pro comped free for life** (chosen over a paid $49/yr founding tier).
+  **Founding Families: $49/yr for life** for anyone who joins in the 90-day window (a paid
+  founding tier at a locked discount, not a free comp).
   These are the numbers Phase 2 billing will implement.

@@ -105,12 +105,16 @@ Maps to features that already exist, so Pro is real value, not artificial crippl
 ## 6. Grandfathering — Founding Families
 - Define a **launch cutoff timestamp = 90 days after public launch**. Every team created before
   it is flagged `founding:true`.
-- Founding teams get a **permanent Pro entitlement override** (independent of RevenueCat), honored
-  by the same `isPro()` check.
-- **Honor = comped free for life (LOCKED):** founding teams are Pro at no charge, permanently —
-  chosen over a paid $49/yr founding tier for maximum goodwill and the simplest build (no extra
-  store product, no RevenueCat offering targeting the cohort). Implemented purely as the
-  `founding` flag → `isPro()` returns true.
+- **Honor = $49/yr for life (LOCKED):** founding teams pay a real, permanently discounted annual
+  plan ($49 vs the standard $79), not a free comp. Implementation:
+  - A dedicated store subscription product **`pro_annual_founding` ($49/yr)** in App Store Connect
+    and Play Console, surfaced through a RevenueCat **"founding" offering**.
+  - The paywall shows the founding offering **only** to teams flagged `founding:true` (and the
+    standard $79/$9.99 offering to everyone else). The `founding` flag travels on the team doc, so
+    every member and device sees the right price.
+  - Entitlement granted is the same `pro`; only the price/product differs. If a founding team ever
+    lets the subscription lapse, they can re-subscribe at the founding price as long as the flag
+    stands (it's tied to the team, "for life").
 - The **reviewer demo team** is force-flagged Pro so App Review sees every feature.
 
 ## 7. Data model changes (additive, migration-safe)
@@ -143,12 +147,12 @@ A branded in-app paywall (matches the dark/purple identity):
 
 ## 10. Store configuration (products)
 - **App Store Connect:** auto-renewable subscription group "Show Team Pro" with
-  `pro_monthly` ($9.99/mo) and `pro_annual` ($79/yr), 14-day free-trial introductory offer on
-  annual. Fill subscription metadata + review screenshot.
-- **Google Play Console:** subscription `pro` with monthly + annual base plans, 14-day free
-  trial offer.
-- **RevenueCat:** one entitlement `pro`; offerings mapping the above; (optional) a founding
-  offering; web billing enabled.
+  `pro_monthly` ($9.99/mo), `pro_annual` ($79/yr), and `pro_annual_founding` ($49/yr); 14-day
+  free-trial introductory offer on the annual plans. Fill subscription metadata + review screenshot.
+- **Google Play Console:** subscription `pro` with monthly, annual, and founding-annual base
+  plans, 14-day free trial offer.
+- **RevenueCat:** one entitlement `pro`; a **standard offering** ($79/$9.99) for everyone and a
+  **founding offering** ($49/yr) surfaced only to `founding:true` teams; web billing enabled.
 - **Small-business program:** enroll in Apple's (15% vs 30%) and Google's equivalent.
 
 ## 11. Build order (sub-phases of Phase 2)
@@ -196,7 +200,9 @@ store review + sandbox testing, not code.
 ## 14. Decisions — LOCKED (2026-10-07, David Devitt)
 1. **Free/Pro line** — confirmed as in Section 5: free = 1 animal, single-device/local; cloud +
    team + every premium module = Pro.
-2. **Founding honor** — **comp Founding-Season teams free for life** (not a paid $49 tier).
+2. **Founding honor** — **$49/yr for life** for teams that join in the 90-day Founding Season: a
+   real paid plan at a locked discount (dedicated `pro_annual_founding` product + RevenueCat
+   founding offering shown only to `founding:true` teams), not a free comp.
 3. **Trial length** — **14 days**.
 4. **Web billing** — **RevenueCat Web Billing** (unified entitlement across web + iOS + Android).
 5. **Timing** — **90-day Founding Season** (free, everything unlocked) before gating is switched on.
